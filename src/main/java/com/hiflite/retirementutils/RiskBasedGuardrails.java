@@ -44,6 +44,7 @@ public class RiskBasedGuardrails {
                 if (p <= 0) {
                     survived = false;
                     break;
+
                 }
             }
             if (survived) success++;
