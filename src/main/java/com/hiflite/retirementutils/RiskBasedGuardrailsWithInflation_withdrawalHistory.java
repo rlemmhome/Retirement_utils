@@ -6,7 +6,7 @@ import java.util.random.RandomGenerator;
 public class RiskBasedGuardrailsWithInflation_withdrawalHistory {
 
     // Simulation parameters
-    static final int NUM_SIMULATIONS = 100000;
+    static final int NUM_SIMULATIONS = 10000;
     static final int RETIREMENT_YEARS = 30;
     static final double REAL_MEAN_RETURN = 0.067;
     static final double REAL_VOLATILITY = 0.15;

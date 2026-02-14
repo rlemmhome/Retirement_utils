@@ -32,8 +32,10 @@ public class RiskBasedGuardrails_OngoingAdjustments {
         double currentRealSpending = 61000;    // your spending right now (today's $)
 
         System.out.println("\ncalculating sustainable spending and guardrails...\n");
-        RiskBasedGuardrailsWithInflation.main(args);
+        double upperNewRealSpending = RiskBasedGuardrailsWithInflation.driver();
+
         System.out.println("\ncalculating ongoing adjustments...\n");
-        RiskBasedGuardrailsWithInflation.ongoingAdjustments(currentPortfolio, currentRealSpending);
+        // RiskBasedGuardrailsWithInflation.ongoingAdjustments(currentPortfolio, currentRealSpending);
+        RiskBasedGuardrailsWithInflation.ongoingAdjustments(currentPortfolio, upperNewRealSpending);
     }
 }
