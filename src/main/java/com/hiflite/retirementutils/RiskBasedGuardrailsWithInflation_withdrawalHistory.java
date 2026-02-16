@@ -13,8 +13,8 @@ public class RiskBasedGuardrailsWithInflation_withdrawalHistory {
     static final double INFLATION_MEAN = 0.035;
     static final double INFLATION_VOL = 0.015;
     static final double TARGET_POS = 0.90;
-    static final double UPPER_POS = 0.99;
-    static final double LOWER_POS = 0.82;
+    static final double UPPER_POS = 0.95;
+    static final double LOWER_POS = 0.85;
 
     public static void main(String[] args) {
         double initialPortfolio = 1_500_000;

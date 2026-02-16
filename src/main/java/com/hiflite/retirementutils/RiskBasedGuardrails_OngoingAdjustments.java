@@ -28,11 +28,13 @@ public class RiskBasedGuardrails_OngoingAdjustments {
 
     public static void main(String[] args) {
         // Example ongoing check/adjust logic (run this each period with current data)
-        double currentPortfolio = 1525000;   // update this every time
-        double currentRealSpending = 61000;    // your spending right now (today's $)
+        double currentPortfolio = 1500000;   // update this every time
+        double currentRealSpending = 72000;    // your spending right now (today's $)
+
+        RiskBasedGuardrailsWithInflation theDriver = new RiskBasedGuardrailsWithInflation();
 
         System.out.println("\ncalculating sustainable spending and guardrails...\n");
-        double upperNewRealSpending = RiskBasedGuardrailsWithInflation.driver();
+        double upperNewRealSpending = theDriver.driver(currentPortfolio);
 
         System.out.println("\ncalculating ongoing adjustments...\n");
 

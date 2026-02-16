@@ -1,14 +1,14 @@
 package com.hiflite.retirementutils;
 
+import com.hiflite.utils.TimingUtils;
+
 import java.text.DecimalFormat;
-import java.text.NumberFormat;
-import java.util.Locale;
 import java.util.random.RandomGenerator;
 
 public class RiskBasedGuardrailsWithInflation {
 
     // Simulation parameters
-    static final int NUM_SIMULATIONS = 100000;
+    static final int NUM_SIMULATIONS = 100_000;
     static final int RETIREMENT_YEARS = 30;
     static final double REAL_MEAN_RETURN = 0.067;      // real expected annual return
     static final double REAL_VOLATILITY = 0.15;       // real volatility
@@ -21,16 +21,25 @@ public class RiskBasedGuardrailsWithInflation {
     static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("#,##0");
 
     public static void main(String[] args) {
-        RiskBasedGuardrailsWithInflation.driver();
-        return;
+        double initialPortfolio = 1500000.0;
+
+        RiskBasedGuardrailsWithInflation theDriver = new RiskBasedGuardrailsWithInflation();
+        theDriver.driver(initialPortfolio);
     }
 
-    public static double driver() {
-        double initialPortfolio = 1500000;
+    public double driver(double initialPortfolio) {
+        //initialPortfolio = 1500000;
         // Find initial real spending (in today's dollars) that hits target PoS
+
+        TimingUtils timingUtils = new TimingUtils();
+        timingUtils.timerStart();
         double initialRealSpending = findRealSpendingForPoS(initialPortfolio, TARGET_POS);
+
         System.out.printf("\nInitial sustainable spending: $%.0f/year ; $%.0f/month ; pct of portfolio %.3f%%  (%.0f%% PoS)\n",
                 initialRealSpending, initialRealSpending / 12.0, initialRealSpending / initialPortfolio * 100.0, TARGET_POS * 100);
+
+        timingUtils.reportElapsedTime();
+        System.out.println();
 
         // Upper guardrail example
         double upperPortfolio = findPortfolioForPoS(initialRealSpending, UPPER_POS);
@@ -38,11 +47,21 @@ public class RiskBasedGuardrailsWithInflation {
         System.out.printf("Upper guardrail: If portfolio ≥ $%.0f → increase real spending to $%.0f/year ; $%.0f/month  (%.0f%% PoS)\n",
                 upperPortfolio, upperNewRealSpending, upperNewRealSpending / 12.0, UPPER_POS * 100);
 
+        timingUtils.reportElapsedTime();
+        System.out.println();
+
         // Lower guardrail example
         double lowerPortfolio = findPortfolioForPoS(initialRealSpending, LOWER_POS);
         double lowerNewRealSpending = findRealSpendingForPoS(lowerPortfolio, TARGET_POS);
         System.out.printf("Lower guardrail: If portfolio ≤ $%.0f → decrease real spending to $%.0f/year ; $%.0f/month  (%.0f%% PoS)\n",
                 lowerPortfolio, lowerNewRealSpending, lowerNewRealSpending / 12.0, LOWER_POS * 100);
+
+        timingUtils.reportElapsedTime();
+        System.out.println();
+
+        timingUtils.timerStop();
+        timingUtils.reportTotalElapsedTime();
+
         return initialRealSpending;
     }
 
@@ -149,13 +168,12 @@ public class RiskBasedGuardrailsWithInflation {
             System.out.println("No adjustment — keep spending at: " + DECIMAL_FORMAT.format(currentRealSpending));
         }
 
-        System.out.printf("\nWe pay attention to the next numbers only when we've had to make an adjustment due to hitting a guardrail.\n");
+        System.out.println("\nWe pay attention to the next numbers only when we've had to make an adjustment due to hitting a guardrail.\n");
         System.out.println("At that time, enter in the new current 'initialPortfolio' in the driver(), change the number of years, and re-run.\n");
         System.out.printf("newTargetSpending: %s ; upperGuardrailPortfolio: %s ; lowerGuardrailPortfolio: %s\n"
                 , DECIMAL_FORMAT.format(newTargetSpending), DECIMAL_FORMAT.format(upperGuardrailPortfolio)
                 , DECIMAL_FORMAT.format(lowerGuardrailPortfolio));
 
         // After any change, you would re-compute guardrails again for the NEXT period
-        return;
     }
 }

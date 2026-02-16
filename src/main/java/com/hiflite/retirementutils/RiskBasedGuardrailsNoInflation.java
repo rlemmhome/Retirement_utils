@@ -3,7 +3,7 @@ package com.hiflite.retirementutils;
 
 import java.util.random.RandomGenerator;
 
-public class RiskBasedGuardrails {
+public class RiskBasedGuardrailsNoInflation {
 
     // Simulation parameters
     static final int NUM_SIMULATIONS = 100000;

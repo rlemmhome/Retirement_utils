@@ -666,3 +666,59 @@ If no → Note the refreshed guardrail numbers (they might shift slightly due to
 Add other incomes (e.g., Social Security) or variable spending curves to the code for more realism—let me know if you want that extension.
 
 This approach keeps the guardrails "unmodified" most of the time while allowing adaptive recalibration when needed, which is exactly what makes it more modern/flexible than rigid rules like 4%. If you share specifics (e.g., your age, portfolio, or if you want code tweaks for quarterly logic), I can simulate an example.
+
+
+
+----------------------------------------------------
+
+Me: do I adjust the sustainable spending for inflation (CPI) quarterly, annually? when, if ever, do I adjust for inflation? Do I just let the portfolio and sustainable spending change, without adding inflation into them?
+
+---------------------------------
+
+Sustainable spending in this risk-based guardrails model (as implemented in the code and inspired by Income Lab/Kitses approaches) is always expressed and calculated in real terms—meaning in today's purchasing power dollars, net of inflation. This is a deliberate design choice to make planning intuitive and focused on lifestyle maintenance rather than nominal figures that erode over time. Here's how inflation fits into the picture, addressing your questions step by step.
+Do You Adjust Sustainable Spending for Inflation (CPI) Quarterly, Annually, or at All?
+
+No, you do not manually adjust the sustainable spending figure itself for inflation on a quarterly, annual, or any fixed schedule. The "sustainable spending" output from the model (e.g., "$48,000/year" from running the code) is already a real-dollar amount that represents what you can spend sustainably in current dollars, assuming future withdrawals will be adjusted for inflation as it occurs.
+Instead, inflation is handled automatically and implicitly in two key ways:
+In your actual withdrawals: Each year (or quarter, if you prefer), you take the current real sustainable spending amount and inflate it by the realized CPI (or your chosen inflation measure) to get the nominal dollar withdrawal for that period. For example:
+Year 1: Sustainable real spending = $50,000 → Withdraw $50,000 (assuming 0% inflation at start).
+Year 2: If CPI was 3% last year, withdraw $50,000 × 1.03 = $51,500 (nominal).
+This keeps your purchasing power constant, matching the "inflation-adjusted" logic in the code's simulation loop (where currentSpending *= (1 + inflation) each year).
+
+In the portfolio and model re-runs: Your portfolio value is tracked nominally (it grows with nominal returns, which include expected inflation via the INFLATION_MEAN parameter). When you re-run the model quarterly with your updated nominal portfolio, the new sustainable spending output is automatically in today's real dollars—reflecting any cumulative inflation that's already happened (e.g., higher nominal portfolio might support higher real spending if markets outpaced inflation).
+
+Timing of inflation adjustments:
+For withdrawals: Adjust nominally whenever you take money out (e.g., monthly, quarterly, or annually) based on recent CPI data. Use official sources like the U.S. Bureau of Labor Statistics CPI-U index for accuracy. Many retirees do this annually (e.g., at year-start, using prior year's average CPI), but quarterly is fine if you want more precision—it's up to your preference and cash flow needs.
+For the model: No separate "inflation add" step. Just input your current nominal portfolio when re-running (as discussed), and the output handles it.
+
+
+When, If Ever, Do You Adjust for Inflation?
+
+You always adjust your actual withdrawals for inflation (as described above) to maintain real spending power—this is the core of safe withdrawal strategies like the 4% rule or guardrails.
+But you never need to manually inflate the sustainable spending figure from the model. Letting the portfolio evolve nominally (with market returns + inflation baked in) and re-running the model periodically naturally incorporates inflation effects:
+If inflation has been higher than expected, your nominal portfolio might grow less in real terms → model outputs lower real sustainable spending on re-run → potentially triggers a lower guardrail if severe.
+If lower than expected, the opposite happens.
+
+Only adjust the real sustainable spending level itself when:
+You hit a guardrail (as previously explained: partial reset to new target).
+During a full annual review (e.g., if assumptions change, like updating INFLATION_MEAN based on recent trends).
+
+
+Do You Just Let the Portfolio and Sustainable Spending Change Without Adding Inflation?
+
+Yes, essentially—but with the nuance that inflation is already modeled and accounted for without extra steps:
+Portfolio: Let it change nominally through natural growth/decay (investments + dividends - withdrawals). No need to "deflate" it back to real terms; input it as-is when re-running.
+Sustainable spending: This stays as your fixed real target until a guardrail hit or review. It "changes" only when you recalculate it via re-run, which implicitly reflects inflation's impact on the portfolio's purchasing power.
+
+This avoids double-counting or complexity: The code's Monte Carlo already simulates random inflation paths, so your plan is stress-tested against inflation risk without manual tweaks.
+
+In practice, for your quarterly check-ins:
+
+Re-run with current nominal portfolio and remaining years.
+Use the fresh real sustainable spending output only for monitoring (e.g., "If I adjusted today, it would be $X").
+Stick to your existing real spending for withdrawals (plus nominal CPI bump), unless a guardrail is triggered.
+
+If inflation spikes unexpectedly (e.g., >5%), consider an ad-hoc review to tighten belts proactively, but the guardrails are there to catch that via PoS drops. Let me know your typical CPI source or if you'd like code mods to use real-time CPI data!
+
+
+
