@@ -10,13 +10,13 @@ public class RiskBasedGuardrailsWithInflation {
     // Simulation parameters
     static final int NUM_SIMULATIONS = 100_000;
     static final int RETIREMENT_YEARS = 30;
-    static final double REAL_MEAN_RETURN = 0.067;      // real expected annual return
-    static final double REAL_VOLATILITY = 0.15;       // real volatility
-    static final double INFLATION_MEAN = 0.035;       // expected annual inflation
-    static final double INFLATION_VOL = 0.015;        // inflation volatility (typical ~1-2%)
+    static final double REAL_MEAN_RETURN = 0.064;      // real expected annual return (orig 0.067 ; new 0.064)
+    static final double REAL_VOLATILITY = 0.1089;      // real volatility - Std Dev (orig 0.15 ; mine 0.1089)
+    static final double INFLATION_MEAN = 0.0379;       // expected annual inflation (orig 0.025 ; mine 0.0379)
+    static final double INFLATION_VOL = 0.0273;        // inflation volatility - Std Dev(typical ~1-2%)  (orig 0.015 ; mine 0.0273)
     static final double TARGET_POS = 0.90;
-    static final double UPPER_POS = 0.95;
-    static final double LOWER_POS = 0.85;
+    static final double UPPER_POS = 0.99;
+    static final double LOWER_POS = 0.82;
 
     static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("#,##0");
 
@@ -38,7 +38,7 @@ public class RiskBasedGuardrailsWithInflation {
         System.out.printf("\nInitial sustainable spending: $%.0f/year ; $%.0f/month ; pct of portfolio %.3f%%  (%.0f%% PoS)\n",
                 initialRealSpending, initialRealSpending / 12.0, initialRealSpending / initialPortfolio * 100.0, TARGET_POS * 100);
 
-        timingUtils.reportElapsedTime();
+//        timingUtils.reportElapsedTime();
         System.out.println();
 
         // Upper guardrail example
@@ -47,7 +47,7 @@ public class RiskBasedGuardrailsWithInflation {
         System.out.printf("Upper guardrail: If portfolio ≥ $%.0f → increase real spending to $%.0f/year ; $%.0f/month  (%.0f%% PoS)\n",
                 upperPortfolio, upperNewRealSpending, upperNewRealSpending / 12.0, UPPER_POS * 100);
 
-        timingUtils.reportElapsedTime();
+//        timingUtils.reportElapsedTime();
         System.out.println();
 
         // Lower guardrail example
@@ -56,7 +56,7 @@ public class RiskBasedGuardrailsWithInflation {
         System.out.printf("Lower guardrail: If portfolio ≤ $%.0f → decrease real spending to $%.0f/year ; $%.0f/month  (%.0f%% PoS)\n",
                 lowerPortfolio, lowerNewRealSpending, lowerNewRealSpending / 12.0, LOWER_POS * 100);
 
-        timingUtils.reportElapsedTime();
+//        timingUtils.reportElapsedTime();
         System.out.println();
 
         timingUtils.timerStop();
