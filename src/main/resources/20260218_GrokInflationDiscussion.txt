@@ -1,0 +1,39 @@
+Me : what are the updated 2026 projections?
+
+===========================================
+
+### Updated 2026 Projections for Key Economic and Market Parameters
+
+Based on the latest capital market assumptions (CMAs) from major financial institutions (as of late 2025/early 2026 reports), here are updated projections relevant to your retirement modeling code. These are forward-looking 10-year estimates for U.S.-focused assets, drawing from sources like J.P. Morgan, PGIM, BNY Mellon, Schwab, Northern Trust, Verus, and others. I've focused on parameters matching your code: real mean return (for equities or a balanced portfolio), real volatility (standard deviation), inflation mean, and inflation volatility.
+
+Projections vary by firm due to different methodologies (e.g., some emphasize AI productivity gains, while others factor in tariffs and fiscal risks). I've averaged key figures where possible for a balanced view, assuming a moderately aggressive portfolio (e.g., 60-80% equities, given your code's 15% volatility aligning with stock-heavy mixes). All returns are annualized and geometric unless noted; real returns are nominal minus expected inflation.
+
+#### Key Updates and Suggested Code Values
+- **Inflation Mean (INFLATION_MEAN)**: Most firms project U.S. CPI settling around the Fed's 2% target but with persistent pressures (e.g., from tariffs, wages, and supply chains) keeping it slightly higher. Average: ~2.5%.
+  - Suggested: Keep at `0.025` or update to `0.024` (Schwab's view).
+- **Inflation Volatility (INFLATION_VOL)**: Rarely specified explicitly, but historical data and implied risks (e.g., trade frictions) suggest year-to-year variability of 1-2%. No major changes from your current value.
+  - Suggested: Keep at `0.015` (1.5%).
+- **Real Mean Return (REAL_MEAN_RETURN)**: Your code's 7% real is optimistic compared to 2026 outlooks, which reflect high valuations depressing future equity returns. For U.S. large-cap equities: Nominal ~6.0-6.8% (average 6.3%), real ~3.5-4.3% (average 3.8%). For a 60/40 stock-bond portfolio: Nominal ~6.0-6.5% (average 6.2%), real ~3.5-4.0% (average 3.7%).
+  - Suggested: Update to `0.038` for equity-heavy (real 3.8%) or `0.037` for balanced (if your vol implies 60/40).
+- **Real Volatility (REAL_VOLATILITY)**: Aligns well with historical/forward estimates for equities (15-16%). For bonds: ~5%; for 60/40: ~11%.
+  - Suggested: Keep at `0.15` (15%) if equity-focused; lower to `0.11` (11%) for balanced.
+
+#### Detailed Projections by Asset Class and Source
+Here's a table summarizing 10-year forward projections (nominal unless noted as real). I've included arithmetic/geometric where available (geometric is more relevant for compounding in your Monte Carlo). Volatilities are standard deviations.
+
+| Parameter / Asset Class | J.P. Morgan | PGIM | BNY Mellon | Schwab | Northern Trust | Verus | Average / Notes |
+|-------------------------|-------------|------|------------|--------|----------------|-------|-----------------|
+| **U.S. Inflation Mean** | 2.5% | 2.5% | ~2.5% (implied) | 2.4% | ~2.0% (nearing targets) | 2.7% | **2.5%**; Higher than pre-2020 norms due to fiscal and trade risks. No specific volatility updates; assume your 1.5% holds. |
+| **U.S. Large-Cap Equities (Nominal Return)** | 6.7% (geometric) | 5.2% | 7.6% | 5.9% | 6.8% (arithmetic/geometric) | 6.5% arithmetic / 5.4% geometric | **6.3% geometric**; Real: ~3.8% (after 2.5% inflation). Lower than historical (e.g., 10%) due to high valuations. |
+| **U.S. Aggregate Bonds (Nominal Return)** | ~5.0% (implied from Treasuries/credit) | 4.7% | 4.3% | 4.8% | 5.0% (arithmetic/geometric) | 4.8% arithmetic / 4.7% geometric | **4.8% geometric**; Real: ~2.3%. Supported by elevated yields and expected rate normalization. |
+| **60/40 Portfolio (60% Equities / 40% Bonds, Nominal Return)** | 6.4% (geometric) | N/A | N/A | N/A | ~6.3% (implied) | 6.3% arithmetic / 5.7% geometric | **6.2% geometric**; Real: ~3.7%. Steady but below historical averages. |
+| **Volatility (Std Dev)** | Not specified | Not specified | Not specified | Not specified | Not specified | Equities: 15.5%; Bonds: 4.9%; 60/40: 11.0% | **15% for equities** (matches your code); 11% for 60/40. No real-specific vol; use nominal as proxy. |
+
+#### Key Themes from 2026 Reports
+- **Optimism on Bonds**: Higher starting yields (post-rate hikes) boost fixed income outlooks, making them more attractive for diversification.
+- **Cautious on Equities**: AI productivity could lift growth (e.g., BNY's upside), but high valuations, tariffs, and slowing GDP (average ~1.9-2.0%) cap returns.
+- **Inflation Risks**: Persistent above 2% (e.g., Verus's 2.7%) due to protectionism; volatility could rise if policies escalate.
+- **Real vs. Nominal**: All sources provide nominal returns; real = nominal - inflation. Your code models real returns directly, so subtract the inflation mean for updates.
+- **Sources of Variation**: Firms like BNY (higher returns) emphasize global/AI gains; Schwab/PGIM (lower) stress valuations. Use an average for conservatism.
+
+If your portfolio is 100% equities, use the ~3.8% real return; for balanced, ~3.7%. To run the code with these, simply update the static finals (e.g., `REAL_MEAN_RETURN = 0.038;`). Let me know your exact asset allocation or if you want me to simulate outputs with these values!

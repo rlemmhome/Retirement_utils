@@ -1,4 +1,4 @@
-package com.hiflite.retirementutils;
+package com.hiflite.riskbasedguardrailsgrok;
 
 import com.hiflite.utils.TimingUtils;
 
@@ -10,10 +10,14 @@ public class RiskBasedGuardrailsWithInflation {
     // Simulation parameters
     static final int NUM_SIMULATIONS = 100_000;
     static final int RETIREMENT_YEARS = 30;
+
+    // see 20260218_GrokInflationDiscussion for means and std devs... my stddevs are calc'ed from 1966 through 2025
+    // 1996-2025 mean return is 9.44, mean inflation is 0.0379
     static final double REAL_MEAN_RETURN = 0.064;      // real expected annual return (orig 0.067 ; new 0.064)
-    static final double REAL_VOLATILITY = 0.1089;      // real volatility - Std Dev (orig 0.15 ; mine 0.1089)
-    static final double INFLATION_MEAN = 0.0379;       // expected annual inflation (orig 0.025 ; mine 0.0379)
-    static final double INFLATION_VOL = 0.0273;        // inflation volatility - Std Dev(typical ~1-2%)  (orig 0.015 ; mine 0.0273)
+    static final double REAL_VOLATILITY = 0.1089;      // real volatility - Std Dev (orig 0.15 ; mine 0.1089) ... see
+    static final double INFLATION_MEAN = 0.025;       // expected annual inflation (orig 0.025 ; mine 0.0379)
+    static final double INFLATION_VOL = 0.015;        // inflation volatility - Std Dev(typical ~1-2%)  (orig 0.015 ; mine 0.0273)
+
     static final double TARGET_POS = 0.90;
     static final double UPPER_POS = 0.99;
     static final double LOWER_POS = 0.82;
