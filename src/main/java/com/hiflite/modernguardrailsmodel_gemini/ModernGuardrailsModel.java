@@ -1,18 +1,18 @@
-package com.hiflite.modernguardrailsmodelgemini;
+package com.hiflite.modernguardrailsmodel_gemini;
 
 import java.util.Random;
 
 public class ModernGuardrailsModel {
 
     // --- Configurable Constants ---
-    private static final int NUM_SIMULATIONS = 5000;
-    private static final double TARGET_RISK = 0.20;       // 20% Target
-    private static final double LOWER_GUARDRAIL = 0.40;   // 40% Trigger Cut
-    private static final double UPPER_GUARDRAIL = 0.10;   // 10% Trigger Raise
+    private static final int NUM_SIMULATIONS = 100000;
+    private static final double TARGET_RISK = 0.15;       // 20% Target
+    private static final double LOWER_GUARDRAIL = 0.20;   // 40% Trigger Cut
+    private static final double UPPER_GUARDRAIL = 0.05;   // 10% Trigger Raise
 
-    private static final double MEAN_RETURN = 0.07;       // 7% Avg
-    private static final double STD_DEV = 0.12;           // 12% Volatility
-    private static final double AVG_INFLATION = 0.03;     // 3% Inflation
+    private static final double MEAN_RETURN = 0.039;       // 7% Nominal is Avg (what JPM gives is Nominal return,; we must adjust for inflation)
+    private static final double STD_DEV = 0.1089;           // 12% Volatility
+    private static final double AVG_INFLATION = 0.025;     // 3% Inflation
 
     private static final double INITIAL_PORTFOLIO = 1_500_000.0;
     private static final int RETIREMENT_LENGTH = 30;
@@ -23,7 +23,7 @@ public class ModernGuardrailsModel {
     private static final int SORR_YEARS = 2;              // Market crash duration
     private static final double SORR_RETURN = -0.15;      // -15% return during crash
 
-    private static final Random RANDOM = new Random();
+    private static final Random RANDOM = new Random(System.currentTimeMillis());
 
     public static void main(String[] args) {
         double portfolio = INITIAL_PORTFOLIO;
