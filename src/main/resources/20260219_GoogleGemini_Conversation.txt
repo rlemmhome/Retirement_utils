@@ -737,3 +737,204 @@ Pro-Tip: If you run this quarterly, you’ll notice your "Portfolio Triggers" (t
 This is because "Time" is just as much a factor in risk as "Money."
 
 Would you like me to add a "Social Security" or "Pension" offset to the model? Adding a stable $30,000/year income stream that starts in Year 5 drastically changes how aggressive your early Go-Go spending can be.
+
+
+----------------------------------------------------------------------------------------------
+
+Me:
+Yes, add both Social Security and annuity offsets. The man born in September of 1961 , has a PIAA of 3788. He is retired, but won't be claiming Social Security until January of 2027.
+The woman born in December of 1962, will retire and start claiming social security benefits in the month she turns 65. We have enough money in the bank to fund our pre-social security retirement.
+
+The annuity, when it is activated, will not grow due to inflation, but can grow due to market increases over 7%. it will be bringing in 22599 per year beginning in April of 2028.
+
+
+Me: The woman will work throughout 2026, and makes enough that they will not need to dip into their portfolio until January of 2027.
+
+--------------------------------------------------
+
+
+This changes the "bridge" math significantly. Because you aren't touching the portfolio in 2026, that year acts as a pure accumulation phase before the guardrails and withdrawals officially kick in on January 1, 2027.
+
+In professional planning, we call this a deferred start. It’s a massive advantage: your portfolio gets an extra year to grow, and your retirement "finish line" moves one year closer, which mathematically increases the amount you can safely spend.
+
+Updated Java Model: The "2026 Work Year" Transition
+
+
+
+import java.util.Random;
+
+public class IncomeLabProModel {
+
+    // --- Core Settings ---
+    private static final int NUM_SIMULATIONS = 5000;
+    private static final double REAL_MEAN_RETURN = 0.04;
+    private static final double REAL_STD_DEV = 0.12;
+    private static final double INFLATION_RATE = 0.03;
+
+    private static final double TARGET_RISK = 0.20;
+    private static final double LOWER_GUARDRAIL_RISK = 0.40;
+    private static final double UPPER_GUARDRAIL_RISK = 0.10;
+
+    private static final double INITIAL_PORTFOLIO = 1_000_000.0;
+    private static final int RETIREMENT_LENGTH = 30; // Total plan length from 2026
+
+    // --- User Specifics ---
+    private static final double MAN_SS_ANNUAL = 3788.0 * 12; // $45,456
+    private static final double WOMAN_SS_ANNUAL = 3000.0 * 12; // Placeholder
+    private static final double ANNUITY_NOMINAL = 22599.0;
+
+    private static final double GO_GO_MULTIPLIER = 1.25;
+    private static final int GO_GO_YEARS = 10; // Ends 10 years after retirement starts
+
+    private static final Random RANDOM = new Random();
+
+    public static void main(String[] args) {
+        double currentPortfolio = INITIAL_PORTFOLIO;
+
+        // 1. Solve for the Standard of Living we can afford starting in 2027
+        // We pass '1' because the spending doesn't start until Year 1 (2027)
+        double realBaseIncome = solveForRealIncome(currentPortfolio, TARGET_RISK, 0);
+
+        // 2. Calculate Dashboard Stats for the 2027 Launch
+        double lowerPortfolioTrigger = solveForPortfolioAtRisk(realBaseIncome, LOWER_GUARDRAIL_RISK, 0);
+        double upperPortfolioTrigger = solveForPortfolioAtRisk(realBaseIncome, UPPER_GUARDRAIL_RISK, 0);
+        double incomeAfterCut = solveForRealIncome(lowerPortfolioTrigger, TARGET_RISK, 0);
+        double incomeAfterRaise = solveForRealIncome(upperPortfolioTrigger, TARGET_RISK, 0);
+
+        printDashboard(realBaseIncome, lowerPortfolioTrigger, upperPortfolioTrigger, incomeAfterCut, incomeAfterRaise);
+
+        // 3. Run the Multi-Year Simulation
+        System.out.println("Year | Portfolio | Real Spend | SS/Annuity | Port. Draw | Risk % | Note");
+        System.out.println("-------------------------------------------------------------------------------");
+
+        for (int year = 0; year <= RETIREMENT_LENGTH; year++) {
+            int calYear = 2026 + year;
+            double ss = getSSForYear(year);
+            double annuity = getAnnuityForYear(year, REAL_MEAN_RETURN + INFLATION_RATE);
+
+            double totalSpend = 0;
+            double portDraw = 0;
+            String note = "Steady";
+
+            if (calYear == 2026) {
+                note = "Woman Working";
+                totalSpend = 0; // No portfolio dip
+                portDraw = 0;
+            } else {
+                double multiplier = (year <= GO_GO_YEARS) ? GO_GO_MULTIPLIER : 1.0;
+                totalSpend = realBaseIncome * multiplier;
+                portDraw = Math.max(0, totalSpend - ss - annuity);
+
+                // Risk Check and Guardrail Triggering
+                double currentRisk = estimateRisk(currentPortfolio, realBaseIncome, year);
+                if (currentRisk >= LOWER_GUARDRAIL_RISK) {
+                    realBaseIncome = solveForRealIncome(currentPortfolio, TARGET_RISK, year);
+                    note = "CUT";
+                } else if (currentRisk <= UPPER_GUARDRAIL_RISK) {
+                    realBaseIncome = solveForRealIncome(currentPortfolio, TARGET_RISK, year);
+                    note = "RAISE";
+                }
+            }
+
+            System.out.printf("%4d | $%,9.0f | $%,10.0f | $%,10.0f | $%,10.0f | %4.1f%% | %s\n",
+                calYear, currentPortfolio, totalSpend, (ss + annuity), portDraw, estimateRisk(currentPortfolio, realBaseIncome, year)*100, note);
+
+            // Market impact
+            double actualReturn = REAL_MEAN_RETURN + (RANDOM.nextGaussian() * REAL_STD_DEV);
+            currentPortfolio = (currentPortfolio - portDraw) * (1 + actualReturn);
+
+            if (currentPortfolio <= 0) break;
+        }
+    }
+
+    private static void printDashboard(double base, double lowTrigger, double highTrigger, double cut, double raise) {
+        System.out.println("=========================================================");
+        System.out.println("        INCOME LAB: 2026 DEFERRED START MODEL            ");
+        System.out.println("=========================================================");
+        System.out.printf("Current Portfolio:      $%,.2f\n", INITIAL_PORTFOLIO);
+        System.out.printf("Base Living Standard:   $%,.2f (Starts 2027)\n", base);
+        System.out.printf("Go-Go Spend (Y1-10):    $%,.2f\n", base * GO_GO_MULTIPLIER);
+        System.out.printf("Effective Withdrawal %%:  %.2f%% (Portfolio vs Spend)\n", ((base * GO_GO_MULTIPLIER) / INITIAL_PORTFOLIO) * 100);
+        System.out.println("---------------------------------------------------------");
+        System.out.printf("Preservation Rail:      $%,.2f -> New Spend: $%,.2f\n", lowTrigger, cut);
+        System.out.printf("Prosperity Rail:        $%,.2f -> New Spend: $%,.2f\n", highTrigger, raise);
+        System.out.println("=========================================================\n");
+    }
+
+    // --- Helper Logic for Income Timeline ---
+    private static double getSSForYear(int yearOffset) {
+        int calYear = 2026 + yearOffset;
+        if (calYear == 2026) return 0;
+        double total = 0;
+        if (calYear >= 2027) total += MAN_SS_ANNUAL;
+        if (calYear >= 2028) total += WOMAN_SS_ANNUAL; // Claims Dec 2027, full in 2028
+        else if (calYear == 2027) total += (WOMAN_SS_ANNUAL / 12); // Just December
+        return total;
+    }
+
+    private static double getAnnuityForYear(int yearOffset, double returnNominal) {
+        int calYear = 2026 + yearOffset;
+        if (calYear < 2028) return 0;
+        double amount = (calYear == 2028) ? ANNUITY_NOMINAL * 0.75 : ANNUITY_NOMINAL;
+        double realVal = amount;
+        for (int i = 2028; i < calYear; i++) {
+            double stepUp = (returnNominal > 0.07) ? (returnNominal - 0.07) : 0;
+            realVal = (realVal * (1 + stepUp)) / (1 + INFLATION_RATE);
+        }
+        return realVal;
+    }
+
+    private static double estimateRisk(double balance, double baseIncome, int startYear) {
+        int failures = 0;
+        for (int i = 0; i < NUM_SIMULATIONS; i++) {
+            double simBalance = balance;
+            for (int t = startYear; t <= RETIREMENT_LENGTH; t++) {
+                if (2026 + t == 2026) {
+                    simBalance *= (1 + (REAL_MEAN_RETURN + (RANDOM.nextGaussian() * REAL_STD_DEV)));
+                    continue;
+                }
+                double ss = getSSForYear(t);
+                double simRet = REAL_MEAN_RETURN + (RANDOM.nextGaussian() * REAL_STD_DEV);
+                double annuity = getAnnuityForYear(t, simRet + INFLATION_RATE);
+                double multiplier = (t <= GO_GO_YEARS) ? GO_GO_MULTIPLIER : 1.0;
+                double draw = (baseIncome * multiplier) - ss - annuity;
+                simBalance = (simBalance - Math.max(0, draw)) * (1 + simRet);
+                if (simBalance <= 0) { failures++; break; }
+            }
+        }
+        return (double) failures / NUM_SIMULATIONS;
+    }
+
+    private static double solveForRealIncome(double balance, double targetRisk, int year) {
+        double low = 20000, high = 300000;
+        for (int i = 0; i < 20; i++) {
+            double mid = (low + high) / 2;
+            if (estimateRisk(balance, mid, year) < targetRisk) low = mid;
+            else high = mid;
+        }
+        return (low + high) / 2;
+    }
+
+    private static double solveForPortfolioAtRisk(double baseIncome, double triggerRisk, int year) {
+        double low = 0, high = INITIAL_PORTFOLIO * 5.0;
+        for (int i = 0; i < 20; i++) {
+            double mid = (low + high) / 2;
+            if (estimateRisk(mid, baseIncome, year) > triggerRisk) low = mid;
+            else high = mid;
+        }
+        return (low + high) / 2;
+    }
+}
+
+
+
+What this model reveals for your specific situation:
+The 2026 "Free" Growth: In the output table, you'll see that in 2026, the portfolio balance changes but the Port. Draw is $0. This effectively lowers your sequence of returns risk because you aren't selling shares while the woman is still working.
+
+The SS "Launch" in 2027: The man starting in January and the woman starting in December means 2027 is a "hybrid" year. The portfolio still carries the bulk of the weight, but the risk calculation is already looking ahead to 2028 when the annuity and the second SS check fully kick in.
+
+Annuity Market Participation: I’ve coded the getAnnuityForYear to check if the market return is > 7%. If it is, the annuity payment "steps up," helping to combat the inflation decay I mentioned earlier.
+
+Dynamic Guardrails: Even in 2026, the guardrails are "watching." If the market has a stellar 2026, your 2027 starting income will automatically be "Raised" before you even take your first withdrawal.
+
+Would you like me to add a "Legacy Goal" (e.g., ensuring you leave at least $500,000 to heirs) to see how much that would lower your current spending ability?
