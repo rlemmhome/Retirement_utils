@@ -1,9 +1,9 @@
 package com.hiflite.utils;
 
+import org.apache.commons.lang3.time.DurationFormatUtils;
+
 import java.time.Duration;
 import java.time.Instant;
-
-import org.apache.commons.lang3.time.DurationFormatUtils;
 
 public class TimingUtils {
 
@@ -17,8 +17,9 @@ public class TimingUtils {
         instantStart = Instant.now();
     }
 
-    public void timerStop() {
+    public TimingUtils timerStop() {
         instantStop = Instant.now();
+        return this;
     }
 
     public TimingUtils reset() {
@@ -41,9 +42,10 @@ public class TimingUtils {
     }
 
     public void reportTotalElapsedTime() {
+        timerStop();
         Duration duration = getTotalTimeElapsed();
 
-        System.out.printf("total time : %02d:%02d:%02d.%03d%n", duration.toHoursPart(),  duration.toMinutesPart(), duration.toSecondsPart(), duration.toNanosPart());
+        System.out.printf("total time : %02d:%02d:%02d.%03d%n", duration.toHoursPart(),  duration.toMinutesPart(), duration.toSecondsPart(), duration.toMillisPart());
     }
 
 }
