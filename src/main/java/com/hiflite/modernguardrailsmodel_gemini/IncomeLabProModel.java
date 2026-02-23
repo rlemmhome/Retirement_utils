@@ -24,7 +24,7 @@ public class IncomeLabProModel {
     private static final double WOMAN_SS_ANNUAL = 3377.0 * 12; //
     private static final double ANNUITY_NOMINAL = 22599.0;
 
-    private static final double GO_GO_MULTIPLIER = 1.25;   //spend 25% more in the go-go years
+    private static final double GO_GO_MULTIPLIER = 1.125;   //spend 25% more in the go-go years
     private static final int GO_GO_YEARS = 10;             // 10 years in the gogo period
 
 
