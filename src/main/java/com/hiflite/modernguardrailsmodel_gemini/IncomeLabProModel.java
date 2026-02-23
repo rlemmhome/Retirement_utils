@@ -1,6 +1,8 @@
 package com.hiflite.modernguardrailsmodel_gemini;
 
-import java.util.Random;
+import com.hiflite.utils.TimingUtils;
+
+import java.util.random.RandomGenerator;
 
 public class IncomeLabProModel {
 
@@ -26,16 +28,18 @@ public class IncomeLabProModel {
     private static final int GO_GO_YEARS = 10;             // 10 years in the gogo period
 
 
-
-
-    private static final Random RANDOM = new Random(System.currentTimeMillis());
+    private static final RandomGenerator RANDOM = RandomGenerator.getDefault();
 
     public static void main(String[] args) {
+
+        TimingUtils timingUtils = new TimingUtils();
+        timingUtils.timerStart();
+
         double currentPortfolio = INITIAL_PORTFOLIO;
 
         // 1. Solve for the Standard of Living we can afford starting in 2027
         // We pass '1' because the spending doesn't start until Year 1 (2027)
-        double realBaseIncome = solveForRealIncome(currentPortfolio, TARGET_RISK, 0);
+        double realBaseIncome = solveForRealIncome(currentPortfolio, TARGET_RISK, 1);
 
         // 2. Calculate Dashboard Stats for the 2027 Launch
         double lowerPortfolioTrigger = solveForPortfolioAtRisk(realBaseIncome, LOWER_GUARDRAIL_RISK, 0);
@@ -87,6 +91,8 @@ public class IncomeLabProModel {
 
             if (currentPortfolio <= 0) break;
         }
+
+        timingUtils.reportTotalElapsedTime();
     }
 
     private static void printDashboard(double base, double lowTrigger, double highTrigger, double cut, double raise) {
