@@ -20,6 +20,7 @@ public class IncomeLabProModel {
     private static final int RETIREMENT_LENGTH = 30; // Total plan length from 2026
 
     // --- User Specifics ---
+
     private static final double MAN_SS_ANNUAL = 3367.0 * 12; //
     private static final double WOMAN_SS_ANNUAL = 3377.0 * 12; //
     private static final double ANNUITY_NOMINAL = 22599.0;
