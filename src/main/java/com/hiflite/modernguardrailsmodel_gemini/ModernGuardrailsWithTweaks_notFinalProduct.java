@@ -2,7 +2,7 @@ package com.hiflite.modernguardrailsmodel_gemini;
 
 import java.util.Random;
 
-public class ModernGuardrailsWithTweaks {
+public class ModernGuardrailsWithTweaks_notFinalProduct {
 
         // --- Configuration ---
         private static final int NUM_SIMULATIONS = 100000;

@@ -2,27 +2,27 @@ package com.hiflite.montecarlo_excel;
 
 public class YearlyData {
 
-    private long yearNumber = 0L;
-    private long year = 0;
-    private long bobAgeInSeptember = 65;
+    private long yearNumber                            = 0L;
+    private long year                                  = 0;
+    private long bobAgeInSeptember                     = 65;
 
-    private double startingPortfolioBalance = 1_500_000.0;
-    private double withdrawalAmtBeforeGuardrail = 75_000.0;
-    private double withdrawalPctBeforeGuardrail = 0.0;
-    private double withdrawalAmtAfterGuardrail = 0.0;
-    private double withdrawalPctAfterGuardrail = 0.0;
+    private double startingPortfolioBalance            = 1_500_000.0;
+    private double withdrawalAmtBeforeGuardrail        = 75_000.0;
+    private double withdrawalPctBeforeGuardrail        = 0.0;
+    private double withdrawalAmtAfterGuardrail         = 0.0;
+    private double withdrawalPctAfterGuardrail         = 0.0;
     private double portfolioGrowth = 0.0;
-    private double endingPortfolioBeforeInflation = 1_500_000.0;
+    private double endingPortfolioBeforeInflation      = 1_500_000.0;
     private long upper_withdrawalRateGuardrailUsed_bad = 0;
 
-    private double inflationRateAvg = 0.0379;
-    private double investReturnAvg = 0.0670;
-    private double withdrawalEqualsThisAmtIn2026 = 75_000.0;
+    private double inflationRateAvg                    = 0.0379;
+    private double investReturnAvg                     = 0.0670;
+    private double withdrawalEqualsThisAmtIn2026       = 75_000.0;
 
-    private double inflationFactor = 1.00;
-    private double endPortfolioIncludesInflation = 1_500_000.0;
-    private long portfolioDroppedBelowWarning = 0;
-    private double endPortfolioIn2025Dollars = 1_500_000.0;
+    private double inflationFactor                     = 1.00;
+    private double endPortfolioIncludesInflation       = 1_500_000.0;
+    private long portfolioDroppedBelowWarning          = 0;
+    private double endPortfolioIn2025Dollars           = 1_500_000.0;
 
     public long getYearNumber() {
         return yearNumber;

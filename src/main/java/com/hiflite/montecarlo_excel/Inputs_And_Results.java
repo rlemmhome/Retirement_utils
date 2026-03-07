@@ -11,18 +11,16 @@ public class Inputs_And_Results {
     public static final double UPPER_GUARDRAIL_PCT     = STARTING_WITHDRAWAL_PCT * (1.0 + GUARDRAIL_MOVEMENT_PCT);
 
     public static final double INFLATION_AVG           = 0.067;
-
-
     public static final double INFLATION_STDDEV        = 0.1089;
 
     public static final double portfolio_warning_at    = 250_000;
 
-    private long run_counter                      = 0;
-    private long no_decrease_in_withdrawal_needed = 0;
-    private long failure_counter                  = 0;
-    private long success_counter                  = 0;
-    private long portfolio_warning                = 0;
-    private boolean first_run = true;
+    private long run_counter                           = 0;
+    private long no_decrease_in_withdrawal_needed      = 0;
+    private long failure_counter                       = 0;
+    private long success_counter                       = 0;
+    private long portfolio_warning                     = 0;
+    private boolean first_run                          = true;
 
     private double min_ending_portfolio_in_2026_dollars = 999_999_999;
 
