@@ -1,5 +1,7 @@
 package com.hiflite.montecarlo_excel;
 
+import org.apache.commons.lang3.builder.ToStringStyle;
+
 public class YearlyData {
 
     private long yearNumber                            = 0L;
@@ -166,5 +168,29 @@ public class YearlyData {
 
     public void setEndPortfolioIn2025Dollars(double endPortfolioIn2025Dollars) {
         this.endPortfolioIn2025Dollars = endPortfolioIn2025Dollars;
+    }
+
+    @Override
+    public String toString() {
+        return new org.apache.commons.lang3.builder.ToStringBuilder(this, ToStringStyle.JSON_STYLE)
+                .append("yearNumber", yearNumber)
+                .append("year", year)
+                .append("bobAgeInSeptember", bobAgeInSeptember)
+                .append("startingPortfolioBalance", startingPortfolioBalance)
+                .append("withdrawalAmtBeforeGuardrail", withdrawalAmtBeforeGuardrail)
+                .append("withdrawalPctBeforeGuardrail", withdrawalPctBeforeGuardrail)
+                .append("withdrawalAmtAfterGuardrail", withdrawalAmtAfterGuardrail)
+                .append("withdrawalPctAfterGuardrail", withdrawalPctAfterGuardrail)
+                .append("portfolioGrowth", portfolioGrowth)
+                .append("endingPortfolioBeforeInflation", endingPortfolioBeforeInflation)
+                .append("upper_withdrawalRateGuardrailUsed_bad", upper_withdrawalRateGuardrailUsed_bad)
+                .append("inflationRateAvg", inflationRateAvg)
+                .append("investReturnAvg", investReturnAvg)
+                .append("withdrawalEqualsThisAmtIn2026", withdrawalEqualsThisAmtIn2026)
+                .append("inflationFactor", inflationFactor)
+                .append("endPortfolioIncludesInflation", endPortfolioIncludesInflation)
+                .append("portfolioDroppedBelowWarning", portfolioDroppedBelowWarning)
+                .append("endPortfolioIn2025Dollars", endPortfolioIn2025Dollars)
+                .toString();
     }
 }
