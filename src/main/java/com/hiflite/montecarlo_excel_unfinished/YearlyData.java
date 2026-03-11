@@ -1,4 +1,4 @@
-package com.hiflite.montecarlo_excel;
+package com.hiflite.montecarlo_excel_unfinished;
 
 import org.apache.commons.lang3.builder.ToStringStyle;
 
@@ -13,8 +13,8 @@ public class YearlyData {
     private double withdrawalPctBeforeGuardrail        = 0.0;
     private double withdrawalAmtAfterGuardrail         = 0.0;
     private double withdrawalPctAfterGuardrail         = 0.0;
-    private double portfolioGrowth = 0.0;
-    private double endingPortfolioBeforeInflation      = 1_500_000.0;
+    private double portfolioGrowth                     = 0.0;
+    private double endPortfolioBalBeforeInflation      = 1_500_000.0;
     private long upper_withdrawalRateGuardrailUsed_bad = 0;
 
     private double inflationRateAvg                    = 0.0379;
@@ -22,9 +22,9 @@ public class YearlyData {
     private double withdrawalEqualsThisAmtIn2026       = 75_000.0;
 
     private double inflationFactor                     = 1.00;
-    private double endPortfolioIncludesInflation       = 1_500_000.0;
-    private long portfolioDroppedBelowWarning          = 0;
-    private double endPortfolioIn2025Dollars           = 1_500_000.0;
+    private double endPortfolioBalInclInflation        = 1_500_000.0;
+    private long   portfolioDroppedBelowWarning        = 0;
+    private double endPortfolioBalIn2025Dollars        = 1_500_000.0;
 
     public long getYearNumber() {
         return yearNumber;
@@ -98,12 +98,12 @@ public class YearlyData {
         this.portfolioGrowth = portfolioGrowth;
     }
 
-    public double getEndingPortfolioBeforeInflation() {
-        return endingPortfolioBeforeInflation;
+    public double getEndPortfolioBalBeforeInflation() {
+        return endPortfolioBalBeforeInflation;
     }
 
-    public void setEndingPortfolioBeforeInflation(double endingPortfolioBeforeInflation) {
-        this.endingPortfolioBeforeInflation = endingPortfolioBeforeInflation;
+    public void setEndPortfolioBalBeforeInflation(double endPortfolioBalBeforeInflation) {
+        this.endPortfolioBalBeforeInflation = endPortfolioBalBeforeInflation;
     }
 
     public long getUpper_withdrawalRateGuardrailUsed_bad() {
@@ -146,12 +146,12 @@ public class YearlyData {
         this.inflationFactor = inflationFactor;
     }
 
-    public double getEndPortfolioIncludesInflation() {
-        return endPortfolioIncludesInflation;
+    public double getEndPortfolioBalInclInflation() {
+        return endPortfolioBalInclInflation;
     }
 
-    public void setEndPortfolioIncludesInflation(double endPortfolioIncludesInflation) {
-        this.endPortfolioIncludesInflation = endPortfolioIncludesInflation;
+    public void setEndPortfolioBalInclInflation(double endPortfolioBalInclInflation) {
+        this.endPortfolioBalInclInflation = endPortfolioBalInclInflation;
     }
 
     public long getPortfolioDroppedBelowWarning() {
@@ -162,12 +162,12 @@ public class YearlyData {
         this.portfolioDroppedBelowWarning = portfolioDroppedBelowWarning;
     }
 
-    public double getEndPortfolioIn2025Dollars() {
-        return endPortfolioIn2025Dollars;
+    public double getEndPortfolioBalIn2025Dollars() {
+        return endPortfolioBalIn2025Dollars;
     }
 
-    public void setEndPortfolioIn2025Dollars(double endPortfolioIn2025Dollars) {
-        this.endPortfolioIn2025Dollars = endPortfolioIn2025Dollars;
+    public void setEndPortfolioBalIn2025Dollars(double endPortfolioBalIn2025Dollars) {
+        this.endPortfolioBalIn2025Dollars = endPortfolioBalIn2025Dollars;
     }
 
     @Override
@@ -182,15 +182,87 @@ public class YearlyData {
                 .append("withdrawalAmtAfterGuardrail", withdrawalAmtAfterGuardrail)
                 .append("withdrawalPctAfterGuardrail", withdrawalPctAfterGuardrail)
                 .append("portfolioGrowth", portfolioGrowth)
-                .append("endingPortfolioBeforeInflation", endingPortfolioBeforeInflation)
+                .append("endingPortfolioBeforeInflation", endPortfolioBalBeforeInflation)
                 .append("upper_withdrawalRateGuardrailUsed_bad", upper_withdrawalRateGuardrailUsed_bad)
                 .append("inflationRateAvg", inflationRateAvg)
                 .append("investReturnAvg", investReturnAvg)
                 .append("withdrawalEqualsThisAmtIn2026", withdrawalEqualsThisAmtIn2026)
                 .append("inflationFactor", inflationFactor)
-                .append("endPortfolioIncludesInflation", endPortfolioIncludesInflation)
+                .append("endPortfolioIncludesInflation", endPortfolioBalInclInflation)
                 .append("portfolioDroppedBelowWarning", portfolioDroppedBelowWarning)
-                .append("endPortfolioIn2025Dollars", endPortfolioIn2025Dollars)
+                .append("endPortfolioIn2025Dollars", endPortfolioBalIn2025Dollars)
                 .toString();
+    }
+
+    public String toCSVString() {
+        StringBuffer sb = new StringBuffer();
+        sb.append("year,")
+                .append("bobAgeInSeptember,")
+                .append("startingPortfolioBalance,")
+                .append("withdrawalAmtBeforeGuardrail,")
+                .append("withdrawalPctBeforeGuardrail,")
+                .append("withdrawalAmtAfterGuardrail,")
+                .append("withdrawalPctAfterGuardrail,")
+                .append("portfolioGrowth,")
+                .append("endingPortfolioBeforeInflation,")
+                .append("upper_withdrawalRateGuardrailUsed_bad,")
+                .append("inflationRateAvg,")
+                .append("investReturnAvg,")
+                .append("withdrawalEqualsThisAmtIn2026,")
+                .append("inflationFactor,")
+                .append("endPortfolioIncludesInflation,")
+                .append("portfolioDroppedBelowWarning,")
+                .append("endPortfolioIn2025Dollars")
+                .append("\n");
+        return sb.toString();
+    }
+
+    public String toStringHdr() {
+            StringBuffer sb = new StringBuffer();
+            sb.append("year,")
+                    .append("yearNumber,")
+                    .append("bobAgeInSeptember,")
+                    .append("startingPortfolioBalance,")
+                    .append("withdrawalAmtBeforeGuardrail,")
+                    .append("withdrawalPctBeforeGuardrail,")
+                    .append("withdrawalAmtAfterGuardrail,")
+                    .append("withdrawalPctAfterGuardrail,")
+                    .append("portfolioGrowth,")
+                    .append("endingPortfolioBeforeInflation,")
+                    .append("upper_withdrawalRateGuardrailUsed_bad,")
+                    .append("inflationRateAvg,")
+                    .append("investReturnAvg,")
+                    .append("withdrawalEqualsThisAmtIn2026,")
+                    .append("inflationFactor,")
+                    .append("endPortfolioIncludesInflation,")
+                    .append("portfolioDroppedBelowWarning,")
+                    .append("endPortfolioIn2025Dollars")
+                    .toString();
+            return sb.toString();
+        }
+
+    public String toStringData() {
+        String sb2 = new org.apache.commons.lang3.builder.ToStringBuilder(this, ToStringStyle.SIMPLE_STYLE)
+                .append("yearNumber", yearNumber)
+                .append("year", year)
+                .append("bobAgeInSeptember", bobAgeInSeptember)
+                .append("startingPortfolioBalance", startingPortfolioBalance)
+                .append("withdrawalAmtBeforeGuardrail", withdrawalAmtBeforeGuardrail)
+                .append("withdrawalPctBeforeGuardrail", withdrawalPctBeforeGuardrail)
+                .append("withdrawalAmtAfterGuardrail", withdrawalAmtAfterGuardrail)
+                .append("withdrawalPctAfterGuardrail", withdrawalPctAfterGuardrail)
+                .append("portfolioGrowth", portfolioGrowth)
+                .append("endingPortfolioBeforeInflation", endPortfolioBalBeforeInflation)
+                .append("upper_withdrawalRateGuardrailUsed_bad", upper_withdrawalRateGuardrailUsed_bad)
+                .append("inflationRateAvg", inflationRateAvg)
+                .append("investReturnAvg", investReturnAvg)
+                .append("withdrawalEqualsThisAmtIn2026", withdrawalEqualsThisAmtIn2026)
+                .append("inflationFactor", inflationFactor)
+                .append("endPortfolioIncludesInflation", endPortfolioBalInclInflation)
+                .append("portfolioDroppedBelowWarning", portfolioDroppedBelowWarning)
+                .append("endPortfolioIn2025Dollars", endPortfolioBalIn2025Dollars)
+                .toString();
+
+        return sb2;
     }
 }

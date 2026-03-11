@@ -1,12 +1,15 @@
-package com.hiflite.montecarlo_excel;
+package com.hiflite.montecarlo_excel_unfinished;
 
-public class Inputs_And_Results {
+public class ConstsAndCntrs {
 
     private static final double avg_retirement_asset_returns_1965_2024      = 0.0944;
     private static final double forecast_retirement_asset_returns_2025_2040 = 0.067;
     public static final long YEAR_OF_START = 2026;
+    public static final long YEAR_BEGIN_WD = 2027;
+
 
     public static final long NUM_YEARS = 30;
+    public static final long BOB_AGE_IN_SEPTEMBER = 65;
 
     public static final double STARTING_PORTFOLIO_AMT = 1500000.0;
 
