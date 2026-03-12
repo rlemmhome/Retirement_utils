@@ -73,7 +73,7 @@ public class GuytonKlinger {
     static final double RETURN_STDDEV = 0.1089;   // 12% standard deviation
 
     // --- Monte Carlo ---
-    static final int MONTE_CARLO_RUNS = 1_000;
+    static final int MONTE_CARLO_RUNS = 10_000;
 
     /** Output CSV file name */
     static final String OUTPUT_FILE = "/home/bob/Documents/java_results/guyton_klinger_simulation.csv";

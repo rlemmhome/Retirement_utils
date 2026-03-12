@@ -7,7 +7,7 @@ import java.util.random.RandomGenerator;
 public class IncomeLabProModel {
 
     // --- Core Settings ---
-    private static final int    NUM_SIMULATIONS  = 100_000;
+    private static final int    NUM_SIMULATIONS  = 10_000;
     private static final double REAL_MEAN_RETURN = 0.039;   // (JPM gives nominal, we need to subtract inflation)
     private static final double REAL_STD_DEV     = 0.1089;        // orig gives 0.12 ; historical since 1955 is 0.1089
     private static final double INFLATION_RATE   = 0.03;
