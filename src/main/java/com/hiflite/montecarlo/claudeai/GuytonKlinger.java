@@ -308,6 +308,8 @@ public class GuytonKlinger {
                 successRate, successCount, MONTE_CARLO_RUNS);
         System.out.printf("Median final bal  : $%,.2f%n", medianOf(finalBalances));
         System.out.printf("Avg final bal     : $%,.2f%n", stats.getAverage());
+        System.out.printf("Initial portfolio : $%,.2f%n",    INITIAL_PORTFOLIO);
+        System.out.printf("Init withdraw rate: %.2f%%%n", INITIAL_WITHDRAWAL_RATE * 100);
         System.out.println("─".repeat(60));
         System.out.println("CSV written to   : " + OUTPUT_FILE);
         System.out.println("Completed at     : " + TIMESTAMP_FMT.format(Instant.now()));
