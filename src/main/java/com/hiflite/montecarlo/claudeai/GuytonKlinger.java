@@ -5,6 +5,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -33,7 +34,7 @@ public class GuytonKlinger {
     static final int START_YEAR = 2026;
 
     /** Initial withdrawal rate (as decimal, e.g. 0.05 = 5%) */
-    static final double INITIAL_WITHDRAWAL_RATE = 0.05;
+    static final double INITIAL_WITHDRAWAL_RATE = 0.042;
 
     /**
      * Upper guardrail: if current withdrawal rate rises this far ABOVE
@@ -75,8 +76,14 @@ public class GuytonKlinger {
     // --- Monte Carlo ---
     static final int MONTE_CARLO_RUNS = 10_000;
 
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("'_'yyyyMMdd-HHmmss'_'");
+
+    // The constant capturing the time the class was initialized
+    public static final String STARTUP_TIMESTAMP = LocalDateTime.now().format(FORMATTER);
+
+
     /** Output CSV file name */
-    static final String OUTPUT_FILE = "/home/bob/Documents/java_results/guyton_klinger_simulation.csv";
+    static final String OUTPUT_FILE = "/home/bob/Documents/java_results/guyton_klinger_simulation"+STARTUP_TIMESTAMP+".csv";
 
     /** Random seed (use -1 for a different result each run) */
     static final long RANDOM_SEED = -1L;
@@ -112,22 +119,22 @@ public class GuytonKlinger {
         // CSV header — null sentinel used for blank separator rows
         csvRows.add(new String[]{
                 "Run",
-                "Year_Number",
-                "Calendar_Year",
+                "Yr_Num",
+                "Cal_Yr",
                 "Start_Portfolio",
-                "Pre_Guardrail_Withdrawal_$",
-                "Pre_Guardrail_Withdrawal_%",
-                "Guardrail_Triggered",
-                "Post_Guardrail_Withdrawal_$",
-                "Post_Guardrail_Withdrawal_%",
-                "This_Year_Inflation_Rate",
-                "Cumulative_Inflation_Factor",
-                "Withdrawal_In_Initial_Year_$",
-                "Investment_Return",
+                "Pre_GR_WD_$",
+                "Pre_GR_WD_%",
+                "Guardrail_Trigger",
+                "Post_GR_WD_$",
+                "Post_GR_WD_%",
+                "This_Yr_Infl_Rate",
+                "Cum_Infl_Factor",
+                "WD_In_Initial_Year_$",
+                "Invest_Return",
                 "Portfolio_Growth_$",
-                "End_Portfolio_Before_Guardrail_Adj",
+                "End_Portfolio_Before_GR_Adj",
                 "End_Portfolio_Final",
-                "Final_Year_End_Portfolio_In_Initial_Year_$",
+                "Final_Yr_End_Portfolio_In_Init_Yr_$",
                 "Portfolio_Depleted"
         });
 

@@ -12,9 +12,9 @@ public class IncomeLabProModel {
     private static final double REAL_STD_DEV     = 0.1089;        // orig gives 0.12 ; historical since 1955 is 0.1089
     private static final double INFLATION_RATE   = 0.03;
 
-    private static final double TARGET_RISK = 0.18;       // Target (Reset point)
-    private static final double LOWER_GUARDRAIL_RISK = 0.22; // Preservation Trigger
-    private static final double UPPER_GUARDRAIL_RISK = 0.08; // Prosperity Trigger
+    private static final double TARGET_RISK = 0.20;       // Target (Reset point)
+    private static final double LOWER_GUARDRAIL_RISK = 0.28; // Preservation Trigger
+    private static final double UPPER_GUARDRAIL_RISK = 0.10; // Prosperity Trigger
 
     private static final double INITIAL_PORTFOLIO = 1_500_000.0;
     private static final int    RETIREMENT_LENGTH = 30; // Total plan length from 2026
