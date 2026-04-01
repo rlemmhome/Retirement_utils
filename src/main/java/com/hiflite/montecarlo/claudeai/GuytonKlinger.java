@@ -81,7 +81,6 @@ public class GuytonKlinger {
     // The constant capturing the time the class was initialized
     public static final String STARTUP_TIMESTAMP = LocalDateTime.now().format(FORMATTER);
 
-
     /** Output CSV file name */
     static final String OUTPUT_FILE = "/home/bob/Documents/java_results/guyton_klinger_simulation"+STARTUP_TIMESTAMP+".csv";
 
