@@ -1,6 +1,17 @@
-package com.hiflite.montecarlo_excel;
+package com.hiflite.montecarlo_excel_unfinished;
 
-public class Inputs_And_Results {
+public class ConstsAndCntrs {
+
+    private static final double avg_retirement_asset_returns_1965_2024      = 0.0944;
+    private static final double forecast_retirement_asset_returns_2025_2040 = 0.067;
+    public static final long YEAR_OF_START = 2026;
+    public static final long YEAR_BEGIN_WD = 2027;
+
+
+    public static final long NUM_YEARS = 30;
+    public static final long BOB_AGE_IN_SEPTEMBER = 65;
+
+    public static final double STARTING_PORTFOLIO_AMT = 1500000.0;
 
     public static final double STARTING_WITHDRAWAL_PCT = 0.05;
 
@@ -10,24 +21,21 @@ public class Inputs_And_Results {
     public static final double LOWER_GUARDRAIL_PCT     = STARTING_WITHDRAWAL_PCT * (1.0 - GUARDRAIL_MOVEMENT_PCT);
     public static final double UPPER_GUARDRAIL_PCT     = STARTING_WITHDRAWAL_PCT * (1.0 + GUARDRAIL_MOVEMENT_PCT);
 
-    public static final double INFLATION_AVG           = 0.067;
+    public static final double INFLATION_AVG           = 0.0379;
+    public static final double INFLATION_STDDEV        = 0.0273;
+    public static final double INVEST_RETURNS_AVG           = forecast_retirement_asset_returns_2025_2040;
+    public static final double INVEST_RETURNS_STDDEV        = 0.1089;
 
+    public static final double portfolio_warning_at    = 1.0;
 
-    public static final double INFLATION_STDDEV        = 0.1089;
-
-    public static final double portfolio_warning_at    = 250_000;
-
-    private long run_counter                      = 0;
-    private long no_decrease_in_withdrawal_needed = 0;
-    private long failure_counter                  = 0;
-    private long success_counter                  = 0;
-    private long portfolio_warning                = 0;
-    private boolean first_run = true;
+    private long run_counter                           = 0;
+    private long no_decrease_in_withdrawal_needed      = 0;
+    private long failure_counter                       = 0;
+    private long success_counter                       = 0;
+    private long portfolio_warning                     = 0;
+    private boolean first_run                          = true;
 
     private double min_ending_portfolio_in_2026_dollars = 999_999_999;
-
-    private static final double avg_retirement_asset_returns_1965_2024      = 0.0944;
-    private static final double forecast_retirement_asset_returns_2025_2040 = 0.067;
 
 
     public long getRun_counter() {
