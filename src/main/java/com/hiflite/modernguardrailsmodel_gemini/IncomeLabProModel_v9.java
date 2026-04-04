@@ -36,7 +36,7 @@ public class IncomeLabProModel_v9
     public static int GO_GO_YEARS = 10;
 
     private static final RandomGenerator RANDOM = RandomGenerator.getDefault();
-    private static final String RESULTS_FOLDER = "/home/bob/Documents/java_results/";
+    private static String RESULTS_FOLDER = "/home/bob/Documents/java_results/";
 
     public static void main(String[] args) {
         // Launch the GUI first
@@ -66,6 +66,7 @@ public class IncomeLabProModel_v9
         JTextField fieldGoGoMult = new JTextField(String.valueOf(GO_GO_MULTIPLIER));
         JTextField fieldGoGoYrs = new JTextField(String.valueOf(GO_GO_YEARS));
         JTextField fieldTargetRisk = new JTextField(String.valueOf(TARGET_RISK));
+        JTextField fieldResultsFolder = new JTextField(String.valueOf(RESULTS_FOLDER));
 
         // Add to Panel
         panel.add(new JLabel("Monte Carlo Runs:")); panel.add(fieldMC);
@@ -82,6 +83,7 @@ public class IncomeLabProModel_v9
         panel.add(new JLabel("Go-Go Multiplier (1.125):")); panel.add(fieldGoGoMult);
         panel.add(new JLabel("Go-Go Years:")); panel.add(fieldGoGoYrs);
         panel.add(new JLabel("Target Risk (0.20):")); panel.add(fieldTargetRisk);
+        panel.add(new JLabel("Results Folder:")); panel.add(fieldResultsFolder);
 
         JButton runBtn = new JButton("Run Simulation");
         runBtn.addActionListener(e -> {
@@ -101,6 +103,7 @@ public class IncomeLabProModel_v9
                 GO_GO_MULTIPLIER = Double.parseDouble(fieldGoGoMult.getText());
                 GO_GO_YEARS = Integer.parseInt(fieldGoGoYrs.getText());
                 TARGET_RISK = Double.parseDouble(fieldTargetRisk.getText());
+                RESULTS_FOLDER = fieldResultsFolder.getText();
 
                 frame.dispose(); // Close the GUI
                 new Thread(IncomeLabProModel_v9::runSimulation).start(); // Run in background thread
