@@ -148,6 +148,7 @@ public class IncomeLabProModel_v8 {
                 sBal = (sBal - Math.max(0, draw)) * (1 + sRet);
                 if (sBal <= 0) { failures++; break; }
             }
+            int ii=1;
         }
         return (double) failures / MONTE_CARLO_RUNS;
     }

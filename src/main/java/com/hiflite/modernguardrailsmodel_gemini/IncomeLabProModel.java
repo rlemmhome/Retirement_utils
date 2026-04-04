@@ -75,7 +75,6 @@ public class IncomeLabProModel {
         // 3. Run the Multi-Year Simulation
         // ---- Write CSV ------------------------------------------------------
         try (PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(OUTPUT_FILE)))) {
-            int x = 1;
 
             // Metadata block at top — NO commas anywhere in these lines (would split CSV columns)
             pw.println("# Guyton-Klinger Withdrawal Rate Guardrails - Monte Carlo Simulation");
