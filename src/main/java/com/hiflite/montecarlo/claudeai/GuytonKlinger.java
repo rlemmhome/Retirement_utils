@@ -34,7 +34,7 @@ public class GuytonKlinger {
     static final int START_YEAR = 2026;
 
     /** Initial withdrawal rate (as decimal, e.g. 0.05 = 5%) */
-    static final double INITIAL_WITHDRAWAL_RATE = 0.042;
+    static final double INITIAL_WITHDRAWAL_RATE = 0.06;
 
     /**
      * Upper guardrail: if current withdrawal rate rises this far ABOVE
@@ -82,7 +82,7 @@ public class GuytonKlinger {
     public static final String STARTUP_TIMESTAMP = LocalDateTime.now().format(FORMATTER);
 
     /** Output CSV file name */
-    static final String OUTPUT_FILE = "/home/bob/Documents/java_results/guyton_klinger_simulation"+STARTUP_TIMESTAMP+".csv";
+    static final String OUTPUT_FILE = "/home/bob/Documents/java_results/guyton_klinger_sim_"+ (INITIAL_WITHDRAWAL_RATE*100.0) +"%_"+ STARTUP_TIMESTAMP+".csv";
 
     /** Random seed (use -1 for a different result each run) */
     static final long RANDOM_SEED = -1L;
