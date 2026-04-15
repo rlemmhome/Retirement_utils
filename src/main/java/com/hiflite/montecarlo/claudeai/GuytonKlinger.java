@@ -34,7 +34,7 @@ public class GuytonKlinger {
     static final int START_YEAR = 2026;
 
     /** Initial withdrawal rate (as decimal, e.g. 0.05 = 5%) */
-    static final double INITIAL_WITHDRAWAL_RATE = 0.06;
+    static final double INITIAL_WITHDRAWAL_RATE = 0.05;
 
     /**
      * Upper guardrail: if current withdrawal rate rises this far ABOVE
