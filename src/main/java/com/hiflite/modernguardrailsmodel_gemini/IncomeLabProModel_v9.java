@@ -121,7 +121,7 @@ public class IncomeLabProModel_v9
 
     public static void runSimulation() {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
-        String outputFile = RESULTS_FOLDER + "incomeLabProResults_v9_" + timestamp + ".csv";
+        String outputFile = RESULTS_FOLDER + "IncomeLabProResults_v9_"+TARGET_RISK+"_" + timestamp + ".csv";
 
         double currentPortfolio = INITIAL_PORTFOLIO;
         double currentAnnuityReal = 0;
@@ -134,7 +134,7 @@ public class IncomeLabProModel_v9
             double initialBaseIncome = realBaseIncome;
 
             pw.println("Year,Portfolio_End_Real,Total_Spend_Real,SS_Annuity_Real,Port_Withdrawal_Real,Draw_Pct," +
-                    "Prob_Success_Pct,Risk_Pct,Yearly_Inf_Pct,Yearly_Ret_Pct," +
+                    "Risk_Pct,Yearly_Inf_Pct,Yearly_Ret_Pct," +
                     "Cut_Threshold_Port,Cut_Adj_Amt,Raise_Threshold_Port,Raise_Adj_Amt,Note");
 
             for (int year = 0; year <= RETIREMENT_LENGTH; year++) {
@@ -183,7 +183,7 @@ public class IncomeLabProModel_v9
 
                 pw.printf("%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,%.4f,%.2f,%.2f,%.2f,%.2f,%s\n",
                         calYear, Math.max(0, currentPortfolio), yearlySpendReal, (ssReal + currentAnnuityReal),
-                        portDrawReal, drawPct, (1.0 - finalRisk) * 100.0, finalRisk * 100,
+                        portDrawReal, drawPct, finalRisk * 100,
                         simInf * 100, simRet * 100, cutThreshold, cutAdj, raiseThreshold, raiseAdj, note);
 
                 if (currentPortfolio <= 0) break;
@@ -256,7 +256,7 @@ public class IncomeLabProModel_v9
 
     private static void printDashboard(double start, double end, double port, double spent, int cuts, int raises, double risk) {
         System.out.println("\n========================================================");
-        System.out.println("           MODERN GUARDRAILS V8 DASHBOARD               ");
+        System.out.println("           MODERN GUARDRAILS V9 DASHBOARD               ");
         System.out.println("========================================================");
         System.out.printf("Initial Base Budget (Real):      $%,.2f\n", start);
         System.out.printf("Final Base Budget (Real):        $%,.2f\n", end);
