@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * BoldinGuardrailsSim_claude.java
+ * Boldin_GK_GuardrailsSim_claude.java
  *
  * Simulates the Boldin "Guardrails" portfolio withdrawal strategy.
  *
@@ -39,10 +39,10 @@ import java.util.List;
  *   • Lower guardrail  =  IWR + lowerOffset  → spend LESS
  * In normal years spending is inflation-adjusted only.
  *
- * Compile:  javac BoldinGuardrailsSim_claude.java
- * Run:      java  BoldinGuardrailsSim_claude
+ * Compile:  javac Boldin_GK_GuardrailsSim_claude.java
+ * Run:      java  Boldin_GK_GuardrailsSim_claude
  */
-public class BoldinGuardrailsSim_claude extends JFrame {
+public class Boldin_GK_GuardrailsSim_claude extends JFrame {
 
     // ── Palette ──────────────────────────────────────────────────────────────────
     private static final Color BG_DARK      = new Color(15,  23,  42);
@@ -129,7 +129,7 @@ public class BoldinGuardrailsSim_claude extends JFrame {
     private final DecimalFormat pct1Fmt   = new DecimalFormat("0.000%");
 
     // ── Constructor ───────────────────────────────────────────────────────────────
-    public BoldinGuardrailsSim_claude() {
+    public Boldin_GK_GuardrailsSim_claude() {
         super("Boldin Guardrails Withdrawal Simulator");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1340, 900);
@@ -1724,6 +1724,6 @@ public class BoldinGuardrailsSim_claude extends JFrame {
         UIManager.put("ToolTip.foreground", new Color(241, 245, 249));
         UIManager.put("ToolTip.border",
                 BorderFactory.createLineBorder(new Color(51, 65, 100)));
-        SwingUtilities.invokeLater(() -> new BoldinGuardrailsSim_claude().setVisible(true));
+        SwingUtilities.invokeLater(() -> new Boldin_GK_GuardrailsSim_claude().setVisible(true));
     }
 }
