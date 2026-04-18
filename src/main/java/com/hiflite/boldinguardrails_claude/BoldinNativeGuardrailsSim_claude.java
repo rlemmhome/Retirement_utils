@@ -127,7 +127,7 @@ public class BoldinNativeGuardrailsSim_claude extends JFrame {
 
     private final DecimalFormat dollarFmt = new DecimalFormat("$#,##0");
     private final DecimalFormat pctFmt    = new DecimalFormat("0.00%");
-    private final DecimalFormat pct1Fmt   = new DecimalFormat("0.000%");
+    private final DecimalFormat pct1Fmt   = new DecimalFormat("0.0%");
 
     // ── Constructor ───────────────────────────────────────────────────────────────
     public BoldinNativeGuardrailsSim_claude() {
@@ -296,21 +296,17 @@ public class BoldinNativeGuardrailsSim_claude extends JFrame {
         return section;
     }
 
-    // ── Portfolio section with live-linked IWR <-> Spending ───────────────────────
+    // ── Portfolio section ─────────────────────────────────────────────────────────
     /**
-     * The two linked fields obey exactly one equation:
+     * IWR and Year-1 Spend are editable inputs.  The simulation uses whatever
+     * values are in these fields at Run time — no re-solving happens on Run.
      *
-     *   Annual Spending  =  Portfolio Value  x  (IWR / 100)
-     *
-     * IWR is the MASTER input (gold star label).
-     * Annual Spending is the DERIVED display (teal text).
-     *
-     * Either field can be edited:
-     *   Edit Portfolio or IWR  ->  recalculate Spending
-     *   Edit Spending          ->  back-calculate IWR
-     *
-     * A live note line always shows the arithmetic equation so the
-     * user can see they are always consistent.
+     * Three ways to populate IWR / Year-1 Spend:
+     *   1. Type directly into either field — they stay live-linked (IWR ↔ Spend).
+     *   2. Click the ⚙ button — opens a dialog with live-linked fields and a
+     *      "Calculate from Target PoS" button that solves for the 80% PoS level.
+     *   3. Change the Adjustment Target PoS field — auto-overwrites both fields
+     *      immediately so the user always sees the PoS-consistent starting point.
      */
     private JPanel buildPortfolioFields() {
         JPanel p = new JPanel(new GridBagLayout());
@@ -343,39 +339,61 @@ public class BoldinNativeGuardrailsSim_claude extends JFrame {
         p.add(label("Portfolio Value ($)"), lc);
         p.add(tfPortfolio, fc);
 
-        // Row 1: IWR (MASTER)
+        // Row 1: ⚙ button + IWR label  |  IWR field
         lc.gridy = 1; fc.gridy = 1;
         tfInitialWR = makeField(String.format("%.2f", DEF_IWR));
-        JLabel iwrLbl = new JLabel("<html>Initial W/R %  <font color='#FBBF24'>\u2605 master</font></html>");
-        iwrLbl.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        iwrLbl.setForeground(TEXT_MUTED);
+        tfInitialWR.setForeground(ACCENT_TEAL);
         addTooltip(tfInitialWR,
-                "<html><b>Initial Withdrawal Rate (IWR)</b><br>"
-                        + "Sets Year-1 spending = Portfolio x IWR.<br>"
-                        + "After Year 1, the PoS engine takes over — the IWR<br>"
-                        + "is NOT a permanent anchor (unlike Guyton-Klinger).<br>"
-                        + "Year 2+ spending is recalculated from current balance<br>"
-                        + "and remaining horizon to hit the target PoS level.</html>");
-        p.add(iwrLbl,    lc);
+                "<html><b>Initial Withdrawal Rate (IWR)</b><br><br>"
+                        + "Year-1 portfolio draw = Portfolio × IWR.<br>"
+                        + "Editable directly, or use the ⚙ button to open<br>"
+                        + "the IWR dialog where you can type a rate or<br>"
+                        + "calculate from the current Adjustment Target PoS.<br><br>"
+                        + "Changing Adjustment Target PoS overwrites this<br>"
+                        + "field automatically.</html>");
+
+        // Small ⚙ button placed in the label cell
+        JButton btnIWRDialog = new JButton("\u2699");
+        btnIWRDialog.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        btnIWRDialog.setForeground(ACCENT_GOLD);
+        btnIWRDialog.setBackground(BG_CARD);
+        btnIWRDialog.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER_COLOR, 1, true),
+                new EmptyBorder(1, 5, 1, 5)));
+        btnIWRDialog.setFocusPainted(false);
+        btnIWRDialog.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btnIWRDialog.setToolTipText("Open IWR / Year-1 Draw setup dialog");
+        btnIWRDialog.addActionListener(e -> showIWRDialog());
+
+        JLabel iwrTxt = new JLabel("Initial W/R %");
+        iwrTxt.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        iwrTxt.setForeground(TEXT_MUTED);
+
+        JPanel iwrLblPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 0));
+        iwrLblPanel.setOpaque(false);
+        iwrLblPanel.add(btnIWRDialog);
+        iwrLblPanel.add(iwrTxt);
+
+        p.add(iwrLblPanel, lc);
         p.add(tfInitialWR, fc);
 
-        // Row 2: Derived Spending
+        // Row 2: Year-1 Draw (editable, linked to IWR)
         lc.gridy = 2; fc.gridy = 2;
         tfAnnualSpend = makeField(String.valueOf((long)(DEF_PORTFOLIO * DEF_IWR / 100.0)));
         tfAnnualSpend.setForeground(ACCENT_TEAL);
         JLabel spendLbl = new JLabel(
-                "<html>Year-1 Portfolio Draw ($)  <font color='#2DD4BF'>derived</font></html>");
+                "<html>Year-1 Portfolio Draw ($)</html>");
         spendLbl.setFont(new Font("SansSerif", Font.PLAIN, 11));
         spendLbl.setForeground(TEXT_MUTED);
         addTooltip(tfAnnualSpend,
-                "<html><b>Year-1 Portfolio Withdrawal</b><br>"
-                        + "= Portfolio x IWR.<br>"
+                "<html><b>Year-1 Portfolio Withdrawal</b><br><br>"
+                        + "= Portfolio × IWR.<br>"
+                        + "Editing this field back-calculates IWR.<br>"
+                        + "Both fields stay live-linked at all times.<br><br>"
                         + "<b>This is NOT total spending power.</b><br>"
-                        + "Total spending = this amount + SS + Other Income.<br>"
-                        + "Edit here to back-calculate IWR.<br>"
-                        + "Both stay in sync at all times.<br><br>"
-                        + "From Year 2 onward, spending is recalculated<br>"
-                        + "by the PoS engine — the IWR is only used in Year 1.</html>");
+                        + "Total spending = this amount + SS + Other Income.<br><br>"
+                        + "From Year 2 onward spending is re-solved each year<br>"
+                        + "by the PoS engine from the current balance.</html>");
         p.add(spendLbl,    lc);
         p.add(tfAnnualSpend, fc);
 
@@ -386,7 +404,7 @@ public class BoldinNativeGuardrailsSim_claude extends JFrame {
         lblDerivedNote.setForeground(ACCENT_GOLD);
         p.add(lblDerivedNote, nc);
 
-        // ── Listeners: fire on every keystroke, not just focus-lost ─────────────
+        // ── Live links: IWR ↔ Spend, Portfolio ↔ Spend ───────────────────────────
         javax.swing.event.DocumentListener iwrOrPfListener =
                 new javax.swing.event.DocumentListener() {
                     public void insertUpdate (javax.swing.event.DocumentEvent e) { recalcSpendingFromIWR(); }
@@ -403,12 +421,11 @@ public class BoldinNativeGuardrailsSim_claude extends JFrame {
                     public void changedUpdate(javax.swing.event.DocumentEvent e) { recalcIWRFromSpending(); }
                 });
 
-        // Initial sync on startup
         SwingUtilities.invokeLater(this::recalcSpendingFromIWR);
         return p;
     }
 
-    /** IWR is master: Spending = Portfolio * IWR/100 */
+    /** IWR is master → Spending = Portfolio × IWR/100 */
     private void recalcSpendingFromIWR() {
         if (updatingLinkedFields) return;
         updatingLinkedFields = true;
@@ -417,11 +434,11 @@ public class BoldinNativeGuardrailsSim_claude extends JFrame {
             double iwr = parseDouble(tfInitialWR,  DEF_IWR);
             double sp  = pf * (iwr / 100.0);
             tfAnnualSpend.setValue(String.format("%.0f", sp));
-            updateNote(pf, iwr, sp);
+            updatePortfolioNote(pf, iwr, sp);
         } finally { updatingLinkedFields = false; }
     }
 
-    /** Spending edited: IWR = Spending / Portfolio * 100 */
+    /** Spending edited → IWR = Spending / Portfolio × 100 */
     private void recalcIWRFromSpending() {
         if (updatingLinkedFields) return;
         updatingLinkedFields = true;
@@ -430,14 +447,201 @@ public class BoldinNativeGuardrailsSim_claude extends JFrame {
             double sp  = parseDouble(tfAnnualSpend, DEF_PORTFOLIO * DEF_IWR / 100.0);
             double iwr = (pf > 0) ? (sp / pf) * 100.0 : 0;
             tfInitialWR.setValue(String.format("%.2f", iwr));
-            updateNote(pf, iwr, sp);
+            updatePortfolioNote(pf, iwr, sp);
         } finally { updatingLinkedFields = false; }
     }
 
-    private void updateNote(double pf, double iwr, double sp) {
+    private void updatePortfolioNote(double pf, double iwr, double sp) {
         lblDerivedNote.setText(String.format(
-                "  %s  x  %.2f%%  =  %s",
+                "  %s  ×  %.2f%%  =  %s",
                 dollarFmt.format(pf), iwr, dollarFmt.format(sp)));
+    }
+
+    /**
+     * Solve for the spending that hits the current Adjustment Target PoS and
+     * write the result into the main IWR and Year-1 Spend fields.
+     * Called from: (a) the ⚙ dialog's Calculate button, and
+     *              (b) the Adjustment Target DocumentListener (live overwrite).
+     */
+    private void solveAndApplyTargetPoS() {
+        if (updatingLinkedFields) return;
+        try {
+            double pf       = parseDouble(tfPortfolio,  DEF_PORTFOLIO);
+            double target   = parseDouble(tfTargetPoS,  DEF_TARGET_POS) / 100.0;
+            double mu       = parseDouble(tfNominalReturn, DEF_NOMINAL_RETURN) / 100.0;
+            double sigma    = parseDouble(tfReturnStdDev,  DEF_RETURN_STD_DEV) / 100.0;
+            double infl     = parseDouble(tfInflation,     DEF_INFLATION)      / 100.0;
+            int    yrs      = (int) parseDouble(tfProjectionYears, DEF_PROJECTION_YEARS);
+            if (pf <= 0 || target <= 0 || target >= 1 || yrs < 1) return;
+
+            double sp  = solveSpendingForPoS(pf, target, yrs, mu, sigma, infl);
+            double iwr = (pf > 0) ? (sp / pf) * 100.0 : 0;
+
+            updatingLinkedFields = true;
+            try {
+                tfInitialWR  .setValue(String.format("%.2f", iwr));
+                tfAnnualSpend.setValue(String.format("%.0f", sp));
+                updatePortfolioNote(pf, iwr, sp);
+            } finally { updatingLinkedFields = false; }
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * Open the IWR / Year-1 Draw setup dialog.
+     * The dialog has two live-linked fields (IWR ↔ Draw) and a
+     * "Calculate from Target PoS" button.  OK writes back to the main fields.
+     */
+    private void showIWRDialog() {
+        JDialog dlg = new JDialog(this, "IWR / Year-1 Draw Setup", true);
+        dlg.setSize(380, 260);
+        dlg.setLocationRelativeTo(this);
+        dlg.setResizable(false);
+
+        JPanel content = new JPanel(new GridBagLayout());
+        content.setBackground(BG_PANEL);
+        content.setBorder(new EmptyBorder(18, 20, 14, 20));
+
+        GridBagConstraints lc = new GridBagConstraints();
+        lc.anchor = GridBagConstraints.WEST; lc.gridx = 0;
+        lc.insets = new Insets(5, 0, 5, 10); lc.weightx = 0.4;
+        lc.fill   = GridBagConstraints.HORIZONTAL;
+
+        GridBagConstraints fc = new GridBagConstraints();
+        fc.anchor = GridBagConstraints.WEST; fc.gridx = 1;
+        fc.insets = new Insets(5, 0, 5, 0);  fc.weightx = 0.6;
+        fc.fill   = GridBagConstraints.HORIZONTAL;
+
+        GridBagConstraints wc = new GridBagConstraints();
+        wc.gridx = 0; wc.gridwidth = 2; wc.fill = GridBagConstraints.HORIZONTAL;
+        wc.insets = new Insets(4, 0, 4, 0);
+
+        // Header
+        wc.gridy = 0;
+        JLabel hdr = new JLabel("Set initial withdrawal rate and Year-1 draw.");
+        hdr.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        hdr.setForeground(TEXT_MUTED);
+        content.add(hdr, wc);
+
+        // IWR field
+        lc.gridy = 1; fc.gridy = 1;
+        JFormattedTextField dlgIWR = makeField(tfInitialWR.getText().replaceAll("[^\\d.]", ""));
+        dlgIWR.setPreferredSize(new Dimension(120, 26));
+        JLabel dlgIWRLbl = label("Initial W/R (%)");
+        content.add(dlgIWRLbl, lc);
+        content.add(dlgIWR,    fc);
+
+        // Year-1 Spend field
+        lc.gridy = 2; fc.gridy = 2;
+        JFormattedTextField dlgSpend = makeField(tfAnnualSpend.getText().replaceAll("[^\\d.]", ""));
+        dlgSpend.setPreferredSize(new Dimension(120, 26));
+        dlgSpend.setForeground(ACCENT_TEAL);
+        JLabel dlgSpendLbl = label("Year-1 Draw ($)");
+        content.add(dlgSpendLbl, lc);
+        content.add(dlgSpend,    fc);
+
+        // Live link inside the dialog
+        final boolean[] dlgUpdating = {false};
+        double pf = parseDouble(tfPortfolio, DEF_PORTFOLIO);
+
+        dlgIWR.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate (javax.swing.event.DocumentEvent e) { syncFromIWR(); }
+            public void removeUpdate (javax.swing.event.DocumentEvent e) { syncFromIWR(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { syncFromIWR(); }
+            void syncFromIWR() {
+                if (dlgUpdating[0]) return; dlgUpdating[0] = true;
+                try {
+                    double iwr = parseDouble(dlgIWR, DEF_IWR);
+                    dlgSpend.setValue(String.format("%.0f", pf * iwr / 100.0));
+                } finally { dlgUpdating[0] = false; }
+            }
+        });
+        dlgSpend.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate (javax.swing.event.DocumentEvent e) { syncFromSpend(); }
+            public void removeUpdate (javax.swing.event.DocumentEvent e) { syncFromSpend(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { syncFromSpend(); }
+            void syncFromSpend() {
+                if (dlgUpdating[0]) return; dlgUpdating[0] = true;
+                try {
+                    double sp = parseDouble(dlgSpend, DEF_PORTFOLIO * DEF_IWR / 100.0);
+                    dlgIWR.setValue(String.format("%.2f", pf > 0 ? sp / pf * 100.0 : 0));
+                } finally { dlgUpdating[0] = false; }
+            }
+        });
+
+        // "Calculate from Target PoS" button
+        wc.gridy = 3;
+        wc.insets = new Insets(10, 0, 4, 0);
+        JButton btnCalc = new JButton("Calculate from Target PoS ("
+                + String.format("%.0f%%", parseDouble(tfTargetPoS, DEF_TARGET_POS)) + ")");
+        btnCalc.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        btnCalc.setBackground(BG_CARD);
+        btnCalc.setForeground(ACCENT_TEAL);
+        btnCalc.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(ACCENT_TEAL, 1, true),
+                new EmptyBorder(4, 10, 4, 10)));
+        btnCalc.setFocusPainted(false);
+        btnCalc.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btnCalc.addActionListener(e -> {
+            try {
+                double target = parseDouble(tfTargetPoS,      DEF_TARGET_POS) / 100.0;
+                double mu     = parseDouble(tfNominalReturn,   DEF_NOMINAL_RETURN) / 100.0;
+                double sigma  = parseDouble(tfReturnStdDev,    DEF_RETURN_STD_DEV) / 100.0;
+                double infl   = parseDouble(tfInflation,       DEF_INFLATION)      / 100.0;
+                int    yrs    = (int) parseDouble(tfProjectionYears, DEF_PROJECTION_YEARS);
+                double sp     = solveSpendingForPoS(pf, target, yrs, mu, sigma, infl);
+                double iwr2   = pf > 0 ? sp / pf * 100.0 : 0;
+                dlgUpdating[0] = true;
+                try {
+                    dlgIWR  .setValue(String.format("%.2f", iwr2));
+                    dlgSpend.setValue(String.format("%.0f", sp));
+                } finally { dlgUpdating[0] = false; }
+            } catch (Exception ignored) {}
+        });
+        content.add(btnCalc, wc);
+
+        // OK / Cancel buttons
+        wc.gridy = 4;
+        wc.insets = new Insets(14, 0, 0, 0);
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        btnRow.setOpaque(false);
+
+        JButton btnOK = new JButton("OK");
+        btnOK.setFont(new Font("Georgia", Font.BOLD, 12));
+        btnOK.setBackground(ACCENT_GOLD);
+        btnOK.setForeground(BG_DARK);
+        btnOK.setBorderPainted(false);
+        btnOK.setFocusPainted(false);
+        btnOK.setPreferredSize(new Dimension(72, 28));
+        btnOK.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btnOK.addActionListener(e -> {
+            // Write dialog values back to main fields
+            updatingLinkedFields = true;
+            try {
+                double iwr3 = parseDouble(dlgIWR,   DEF_IWR);
+                double sp3  = parseDouble(dlgSpend, DEF_PORTFOLIO * DEF_IWR / 100.0);
+                tfInitialWR  .setValue(String.format("%.2f", iwr3));
+                tfAnnualSpend.setValue(String.format("%.0f", sp3));
+                updatePortfolioNote(pf, iwr3, sp3);
+            } finally { updatingLinkedFields = false; }
+            dlg.dispose();
+        });
+
+        JButton btnCancel = new JButton("Cancel");
+        btnCancel.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        btnCancel.setForeground(TEXT_MUTED);
+        btnCancel.setBackground(BG_CARD);
+        btnCancel.setBorder(BorderFactory.createLineBorder(BORDER_COLOR, 1, true));
+        btnCancel.setFocusPainted(false);
+        btnCancel.setPreferredSize(new Dimension(72, 28));
+        btnCancel.addActionListener(e -> dlg.dispose());
+
+        btnRow.add(btnCancel);
+        btnRow.add(btnOK);
+        content.add(btnRow, wc);
+
+        dlg.setContentPane(content);
+        dlg.getRootPane().setDefaultButton(btnOK);
+        dlg.setVisible(true);
     }
 
     // ── Other sections ────────────────────────────────────────────────────────────
@@ -481,7 +685,7 @@ public class BoldinNativeGuardrailsSim_claude extends JFrame {
         p.add(new JLabel(""));
         p.add(lblGuardrailNote);
 
-        // Attach listeners to keep readout live
+        // Attach listeners to keep guardrail note live
         javax.swing.event.DocumentListener gl = new javax.swing.event.DocumentListener() {
             public void insertUpdate (javax.swing.event.DocumentEvent e) { updateGuardrailNote(); }
             public void removeUpdate (javax.swing.event.DocumentEvent e) { updateGuardrailNote(); }
@@ -490,6 +694,14 @@ public class BoldinNativeGuardrailsSim_claude extends JFrame {
         tfUpperPoS .getDocument().addDocumentListener(gl);
         tfLowerPoS .getDocument().addDocumentListener(gl);
         tfTargetPoS.getDocument().addDocumentListener(gl);
+
+        // Adjustment Target also live-overwrites the IWR / Year-1 Spend fields
+        tfTargetPoS.getDocument().addDocumentListener(
+                new javax.swing.event.DocumentListener() {
+                    public void insertUpdate (javax.swing.event.DocumentEvent e) { solveAndApplyTargetPoS(); }
+                    public void removeUpdate (javax.swing.event.DocumentEvent e) { solveAndApplyTargetPoS(); }
+                    public void changedUpdate(javax.swing.event.DocumentEvent e) { solveAndApplyTargetPoS(); }
+                });
 
         SwingUtilities.invokeLater(this::updateGuardrailNote);
         return p;
@@ -834,7 +1046,7 @@ public class BoldinNativeGuardrailsSim_claude extends JFrame {
     }
 
     private void runSimulation() {
-        // Commit any in-progress edit, then force IWR→Spending sync
+        // Commit any in-progress edit, then sync IWR→Spend
         KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusOwner();
         recalcSpendingFromIWR();
 
