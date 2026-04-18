@@ -126,7 +126,7 @@ public class BoldinGuardrailsSim_claude extends JFrame {
 
     private final DecimalFormat dollarFmt = new DecimalFormat("$#,##0");
     private final DecimalFormat pctFmt    = new DecimalFormat("0.00%");
-    private final DecimalFormat pct1Fmt   = new DecimalFormat("0.0%");
+    private final DecimalFormat pct1Fmt   = new DecimalFormat("0.000%");
 
     // ── Constructor ───────────────────────────────────────────────────────────────
     public BoldinGuardrailsSim_claude() {
