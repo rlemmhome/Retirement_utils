@@ -108,6 +108,14 @@ public class BoldinGuardrailsSim_claude extends JFrame {
     private JToggleButton btnRealDollars;
     private SimResult     lastDetResult;   // most recent deterministic run result
 
+    // ── Last computed nominal stat values — re-deflated when toggle changes ───────
+    private double lastSuccessRate = Double.NaN;
+    private double lastMedianFinal = Double.NaN;
+    private double lastAvgWD       = Double.NaN;
+    private double lastMinWD       = Double.NaN;
+    private double lastMaxWD       = Double.NaN;
+    private String lastRuinStr     = "—";
+
     // ── Output widgets ────────────────────────────────────────────────────────────
     private JTable             resultTable;
     private DefaultTableModel  tableModel;
@@ -541,6 +549,15 @@ public class BoldinGuardrailsSim_claude extends JFrame {
 
         tfSocialSecurity  = addField(p, "SS Benefit ($/yr)",   String.valueOf((long) DEF_SS));
         tfSSStartAge      = addField(p, "SS Start Age",         String.valueOf(DEF_SS_START_AGE));
+        addTooltip(tfSocialSecurity,
+                "<html><b>Enter your SS benefit in today's (2026) dollars</b> —<br>"
+                        + "i.e. the amount shown on your Social Security statement<br>"
+                        + "expressed in current purchasing power.<br><br>"
+                        + "If COLA is checked, the simulation compounds this amount<br>"
+                        + "forward from year 1 using the inflation rate, so it will<br>"
+                        + "have grown to the correct nominal value by your start age.<br><br>"
+                        + "Do NOT enter the inflated future dollar amount — that would<br>"
+                        + "double-count inflation before your SS start age.</html>");
 
         // ── Person 2 (Spouse) SS ─────────────────────────────────────────────────
         p.add(label("")); p.add(new JLabel(""));   // spacer row
@@ -552,6 +569,10 @@ public class BoldinGuardrailsSim_claude extends JFrame {
         tfSpouseBirthYear  = addField(p, "Spouse Birth Year",       String.valueOf(DEF_SPOUSE_BIRTH_YEAR));
         tfSpouseSS         = addField(p, "Spouse SS Benefit ($/yr)", String.valueOf((long) DEF_SPOUSE_SS));
         tfSpouseSSStartAge = addField(p, "Spouse SS Start Age",      String.valueOf(DEF_SPOUSE_SS_START_AGE));
+        addTooltip(tfSpouseSS,
+                "<html><b>Enter spouse SS benefit in today's (2026) dollars.</b><br>"
+                        + "Same convention as Person 1 — current purchasing power,<br>"
+                        + "not the inflated future nominal amount.</html>");
         addTooltip(tfSpouseBirthYear,
                 "<html><b>Spouse birth year determines their RMD start age:</b><br>"
                         + "Born 1951–1959 → RMD starts at 73<br>"
@@ -629,6 +650,7 @@ public class BoldinGuardrailsSim_claude extends JFrame {
                 populateTable(lastDetResult);           // re-render table instantly
                 chartPanel.setRealDollars(real);        // re-render chart instantly
             }
+            refreshStatCards();                         // re-deflate stat cards
         });
 
         JPanel toggleBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 4));
@@ -758,8 +780,9 @@ public class BoldinGuardrailsSim_claude extends JFrame {
                         setBackground(BG_CARD);
                         setForeground(TEXT_PRIMARY);
                         String s = val == null ? "" : val.toString();
-                        if      (s.contains("INCREASE")) setForeground(ACCENT_GREEN);
-                        else if (s.contains("CUTBACK"))  setForeground(ACCENT_RED);
+                        if      (s.contains("INCREASE"))      setForeground(ACCENT_GREEN);
+                        else if (s.contains("CUTBACK"))       setForeground(ACCENT_RED);
+                        else if (s.contains("skipped"))       setForeground(ACCENT_GOLD);
                         else if (s.contains("DEPLETED")) {
                             setForeground(ACCENT_RED);
                             setBackground(new Color(60, 20, 20));
@@ -848,7 +871,7 @@ public class BoldinGuardrailsSim_claude extends JFrame {
                     upperOffset, lowerOffset, prosperityAdj, cutbackAdj,
                     nominalReturn, returnStdDev, inflation, inflationStdDev, years,
                     ss, ssAge, spouseSS, spouseAge, spouseSSStartAge,
-                    currentAge, birthYear, otherIncome, otherIncomeStartAge,
+                    currentAge, birthYear, spouseBirthYear, otherIncome, otherIncomeStartAge,
                     inflAdjSS, enforceRMD, returnModel, false, 42L);
 
             populateTable(det);
@@ -857,11 +880,13 @@ public class BoldinGuardrailsSim_claude extends JFrame {
                     returnModel, returnStdDev, inflationStdDev));
             lblSuccessRate.setText(det.ruined ? "N/A" : "100.0%");
             lblSuccessRate.setForeground(ACCENT_TEAL);
-            lblMedianFinal.setText(dollarFmt.format(det.finalBalance));
-            lblAvgWithdrawal.setText(dollarFmt.format(det.avgWithdrawal));
-            lblMinWithdrawal.setText(dollarFmt.format(det.avgWithdrawal));
-            lblMaxWithdrawal.setText(dollarFmt.format(det.avgWithdrawal));
-            lblRuinYear.setText(det.ruined ? "Year " + det.ruinYear : "None");
+            lastSuccessRate = det.ruined ? 0.0 : 1.0;
+            lastMedianFinal = det.finalBalance;
+            lastAvgWD       = det.avgWithdrawal;
+            lastMinWD       = det.avgWithdrawal;
+            lastMaxWD       = det.avgWithdrawal;
+            lastRuinStr     = det.ruined ? "Year " + det.ruinYear : "None";
+            refreshStatCards();
             progressBar.setVisible(false);
             btnRun.setEnabled(true);
             btnRun.setText("\u25b6  RUN SIMULATION");
@@ -869,7 +894,35 @@ public class BoldinGuardrailsSim_claude extends JFrame {
         }
 
         // ── Stochastic MC batch runs on background thread ─────────────────────────
-        btnRun.setEnabled(false);
+
+        // ── Memory check: estimate heap needed for allResults ────────────────────
+        // Each SimResult holds ~15 double/boolean arrays of length `years` plus
+        // overhead. Empirically ~14 doubles + 1 boolean per year = ~113 bytes/year.
+        // Add ~200 bytes object overhead per SimResult.
+        // We compare against available heap (max - currently used) with a 20% margin.
+        long bytesPerResult  = (long) years * 120L + 200L;   // conservative estimate
+        long estimatedBytes  = (long) mcRuns * bytesPerResult;
+        Runtime rt           = Runtime.getRuntime();
+        long availableBytes  = rt.maxMemory() - (rt.totalMemory() - rt.freeMemory());
+        long safeAvailable   = (long)(availableBytes * 0.80);  // keep 20% headroom
+
+        if (estimatedBytes > safeAvailable) {
+            long maxSafeRuns = safeAvailable / bytesPerResult;
+            JOptionPane.showMessageDialog(this,
+                    String.format(
+                            "The requested %,d Monte Carlo runs would require approximately %,d MB\n"
+                                    + "of memory, but only ~%,d MB is safely available.\n\n"
+                                    + "Please reduce Monte Carlo Runs to approximately %,d or fewer\n"
+                                    + "and click Run Simulation again.",
+                            mcRuns,
+                            estimatedBytes  / (1024 * 1024),
+                            safeAvailable   / (1024 * 1024),
+                            maxSafeRuns),
+                    "Memory Warning", JOptionPane.WARNING_MESSAGE);
+            btnRun.setEnabled(true);
+            btnRun.setText("\u25b6  RUN SIMULATION");
+            return;
+        }
         btnRun.setText("  Running…");
         progressBar.setValue(0);
         progressBar.setString("0 / " + mcRuns);
@@ -906,7 +959,7 @@ public class BoldinGuardrailsSim_claude extends JFrame {
                             upperOffset, lowerOffset, prosperityAdj, cutbackAdj,
                             nominalReturn, returnStdDev, inflation, inflationStdDev, years,
                             ss, ssAge, spouseSS, spouseAge, spouseSSStartAge,
-                            currentAge, birthYear, otherIncome, otherIncomeStartAge,
+                            currentAge, birthYear, spouseBirthYear, otherIncome, otherIncomeStartAge,
                             inflAdjSS, enforceRMD, returnModel, true, rng.nextLong());
 
                     allResults.add(r);
@@ -965,14 +1018,14 @@ public class BoldinGuardrailsSim_claude extends JFrame {
                         ruinYears.stream().mapToDouble(i->(double)i)
                         .boxed().collect(java.util.stream.Collectors.toList()));
 
-                lblSuccessRate.setText(pct1Fmt.format(successRate));
-                lblSuccessRate.setForeground(successRate >= 0.85 ? ACCENT_GREEN
-                        : successRate >= 0.70 ? ACCENT_GOLD : ACCENT_RED);
-                lblMedianFinal.setText(successCount == 0 ? "$0" : dollarFmt.format(medFinal));
-                lblAvgWithdrawal.setText(dollarFmt.format(avgWD));
-                lblMinWithdrawal.setText(dollarFmt.format(minWD));
-                lblMaxWithdrawal.setText(dollarFmt.format(maxWD));
-                lblRuinYear.setText(ruinStr);
+                // Store nominal values — refreshStatCards() applies deflation if needed
+                lastSuccessRate = successRate;
+                lastMedianFinal = medFinal;
+                lastAvgWD       = avgWD;
+                lastMinWD       = minWD;
+                lastMaxWD       = maxWD;
+                lastRuinStr     = ruinStr;
+                refreshStatCards();
 
                 btnRun.setEnabled(true);
                 btnRun.setText("\u25b6  RUN SIMULATION");
@@ -1001,7 +1054,7 @@ public class BoldinGuardrailsSim_claude extends JFrame {
             double inflation,   double inflationStdDev, int years,
             double ss,    int ssAge,
             double spouseSS, int spouseAge, int spouseSSStartAge,
-            int currentAge, int birthYear,
+            int currentAge, int birthYear, int spouseBirthYear,
             double otherIncome, int otherIncomeStartAge,
             boolean inflAdjSS, boolean enforceRMD, int returnModel,
             boolean stochastic, long seed) {
@@ -1009,11 +1062,12 @@ public class BoldinGuardrailsSim_claude extends JFrame {
         java.util.Random rng = new java.util.Random(seed);
         SimResult res = new SimResult(years);
 
-        double balance    = portfolio;
-        double withdrawal = annualSpend;
-        double ss1Amount  = 0;
-        double ss2Amount  = 0;
-        double cumulCPI   = 1.0;
+        double balance         = portfolio;
+        double withdrawal      = annualSpend;
+        double ss1Amount       = 0;
+        double ss2Amount       = 0;
+        double cumulCPI        = 1.0;
+        double priorYearReturn = 0.0;  // tracks prior year return for GK inflation-skip rule
 
         for (int yr = 0; yr < years; yr++) {
             int age1 = currentAge + yr;
@@ -1061,6 +1115,11 @@ public class BoldinGuardrailsSim_claude extends JFrame {
                 res.rmdAmounts[yr]      = 0;
                 res.rmdForced[yr]       = false;
                 if (!res.ruined) { res.ruined = true; res.ruinYear = yr + 1; }
+                // ── FIX #3: cumulCPI must advance every year even after depletion ──
+                // Without this, SS COLA stops growing after the portfolio is gone,
+                // understating SS income in post-depletion years.
+                res.cumulCPI[yr] = cumulCPI;
+                cumulCPI *= (1 + inflRate);
                 continue;
             }
 
@@ -1086,9 +1145,16 @@ public class BoldinGuardrailsSim_claude extends JFrame {
                     netWithdrawal  = withdrawal;
                     guardrailEvent = "CUTBACK -" + (int)(cutbackAdj * 100) + "%";
                 } else {
-                    withdrawal    *= (1 + inflRate);
-                    netWithdrawal  = withdrawal;
-                    guardrailEvent = "Inflation adj";
+                    // Normal year: apply inflation adjustment UNLESS prior year
+                    // return was negative — Guyton-Klinger "Withdrawal Policy Rule"
+                    // specifies no inflation raise in down-market years.
+                    if (priorYearReturn >= 0) {
+                        withdrawal *= (1 + inflRate);
+                        guardrailEvent = "Inflation adj";
+                    } else {
+                        guardrailEvent = "Infl. skipped (↓ return)";
+                    }
+                    netWithdrawal = withdrawal;
                 }
             }
 
@@ -1098,10 +1164,18 @@ public class BoldinGuardrailsSim_claude extends JFrame {
             res.incomes[yr]        = incomeFromSources;
             res.inflRates[yr]      = inflRate;
 
-            // ── RMD: compute required amount ──────────────────────────────────────
-            double rmd = SimResult.rmdFactor(res.ages[yr], birthYear) > 0
-                    ? res.portfolioBefore[yr] / SimResult.rmdFactor(res.ages[yr], birthYear)
-                    : 0;
+            // ── RMD: combined required amount for both spouses ────────────────────
+            // Each spouse has their own tax-deferred account. We model the joint
+            // portfolio as split 50/50 and compute each person's RMD on their half,
+            // using their own birth year (and therefore their own RMD start age).
+            // This avoids the ~2× overstatement in the first RMD year that occurs
+            // when only Person 1's factor is applied to the entire joint balance.
+            double halfBalance = res.portfolioBefore[yr] / 2.0;
+            double rmd1 = SimResult.rmdFactor(age1, birthYear) > 0
+                    ? halfBalance / SimResult.rmdFactor(age1, birthYear) : 0;
+            double rmd2 = SimResult.rmdFactor(age2, spouseBirthYear) > 0
+                    ? halfBalance / SimResult.rmdFactor(age2, spouseBirthYear) : 0;
+            double rmd = rmd1 + rmd2;
             res.rmdAmounts[yr] = rmd;
 
             // ── Enforce RMD as a floor on the portfolio draw ──────────────────────
@@ -1127,27 +1201,45 @@ public class BoldinGuardrailsSim_claude extends JFrame {
             double annualRet = nominalReturn;
             if (stochastic) {
                 switch (returnModel) {
-                    case 1 ->   // Monte Carlo Normal
+                    case 1 ->   // Monte Carlo Normal — arithmetic mean and std dev
                             annualRet = nominalReturn + rng.nextGaussian() * returnStdDev;
-                    case 2 ->   // Monte Carlo Log-Normal
-                            annualRet = Math.exp(
-                                    Math.log(1 + nominalReturn)
-                                            - 0.5 * returnStdDev * returnStdDev
-                                            + rng.nextGaussian() * returnStdDev) - 1;
+                    case 2 -> { // Monte Carlo Log-Normal
+                        // User inputs arithmetic mean (μ_a) and arithmetic std dev (σ_a).
+                        // Convert to log-space parameters:
+                        //   variance_a  = σ_a²
+                        //   σ_ln²  = ln(1 + variance_a / (1 + μ_a)²)
+                        //   μ_ln   = ln(1 + μ_a) - 0.5 * σ_ln²
+                        // This ensures the log-normal distribution has the correct
+                        // arithmetic mean and std dev as entered by the user.
+                        double mu_a  = nominalReturn;
+                        double sig_a = returnStdDev;
+                        double sig2_ln = Math.log(1.0 + (sig_a * sig_a)
+                                / ((1.0 + mu_a) * (1.0 + mu_a)));
+                        double mu_ln   = Math.log(1.0 + mu_a) - 0.5 * sig2_ln;
+                        annualRet = Math.exp(mu_ln + rng.nextGaussian() * Math.sqrt(sig2_ln)) - 1;
+                    }
                     default -> { /* fixed return, no change */ }
                 }
             }
             res.returns[yr] = annualRet;
             balance = Math.max(0, balance * (1 + annualRet));
             res.portfolioAfter[yr] = balance;
+            priorYearReturn = annualRet;   // GK inflation-skip rule uses this next year
 
             res.cumulCPI[yr] = cumulCPI;
             cumulCPI *= (1 + inflRate);
         }
 
         res.finalBalance = res.portfolioAfter[years - 1];
+        // avgWithdrawal reflects the actual portfolio draw each year —
+        // including years where RMD enforcement required a larger draw
+        // than the guardrail strategy called for.
         double sumWD = 0; int cnt = 0;
-        for (double w : res.withdrawals) { if (w > 0) { sumWD += w; cnt++; } }
+        for (int i = 0; i < years; i++) {
+            // Use the actual draw: RMD amount if forced, otherwise guardrail withdrawal
+            double actualDraw = res.rmdForced[i] ? res.rmdAmounts[i] : res.withdrawals[i];
+            if (actualDraw > 0) { sumWD += actualDraw; cnt++; }
+        }
         res.avgWithdrawal = cnt > 0 ? sumWD / cnt : 0;
         return res;
     }
@@ -1244,7 +1336,39 @@ public class BoldinGuardrailsSim_claude extends JFrame {
         return sb.toString();
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────────
+    // ── Stat card refresh — called on run completion AND on toggle change ─────────
+    /**
+     * Populates the six stat cards, deflating dollar values when
+     * "Today's Dollars" is selected.  Uses:
+     *   - Final-year CPI (lastDetResult.cumulCPI[last]) for Median End Value
+     *   - Mid-projection CPI (lastDetResult.cumulCPI[mid]) for withdrawal stats,
+     *     since those are averages spanning the full projection period.
+     * Success Rate and Ruin Year are ratios/counts — never deflated.
+     */
+    private void refreshStatCards() {
+        if (Double.isNaN(lastSuccessRate)) return;   // no run yet
+
+        boolean real = (btnRealDollars != null && btnRealDollars.isSelected());
+
+        // Determine deflators from the median/deterministic run result
+        double deflFinal = 1.0;
+        double deflWD    = 1.0;
+        if (real && lastDetResult != null && lastDetResult.cumulCPI != null) {
+            int n   = lastDetResult.cumulCPI.length;
+            deflFinal = lastDetResult.cumulCPI[n - 1];          // end-of-projection CPI
+            deflWD    = lastDetResult.cumulCPI[Math.max(0, n / 2)]; // mid-projection CPI
+        }
+
+        lblSuccessRate.setText(pct1Fmt.format(lastSuccessRate));
+        lblSuccessRate.setForeground(lastSuccessRate >= 0.85 ? ACCENT_GREEN
+                : lastSuccessRate >= 0.70 ? ACCENT_GOLD : ACCENT_RED);
+        lblMedianFinal.setText(lastMedianFinal == 0 ? "$0"
+                : dollarFmt.format(lastMedianFinal / deflFinal));
+        lblAvgWithdrawal.setText(dollarFmt.format(lastAvgWD / deflWD));
+        lblMinWithdrawal.setText(dollarFmt.format(lastMinWD / deflWD));
+        lblMaxWithdrawal.setText(dollarFmt.format(lastMaxWD / deflWD));
+        lblRuinYear.setText(lastRuinStr);
+    }
     private double median(List<Double> list) {
         if (list.isEmpty()) return 0;
         List<Double> s = new ArrayList<>(list);
