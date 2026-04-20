@@ -50,16 +50,16 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     }
 
     // ── Column indices ───────────────────────────────────────────────────────
-    // 0=ManAge 1=CalYr 2=PortBal 3=Withdrawal 4=WdPct
-    // 5=ManRMD 6=WomanRMD 7=CombinedRMD
-    // 8=Guardrail(hidden) 9=ManSS 10=WomanSS 11=Annuity 12=Guaranteed
-    // 13=Living 14=Medical 15=Tax 16=TotalSpend 17=TotalIncome 18=SurplusGap
-    // 19=InflFactor 20=ReturnUsed(hidden) 21=InflUsed(hidden)
-    private static final int COL_GUARDRAIL = 8;
-    private static final int COL_SURPLUS   = 18;
-    private static final int COL_MAN_RMD   = 5;
-    private static final int COL_WOM_RMD   = 6;
-    private static final int COL_CMB_RMD   = 7;
+    // 0=ManAge 1=CalYr 2=PortBal 3=PoSWithdrawal 4=ActualWd 5=WdPct
+    // 6=ManRMD 7=WomanRMD 8=CombinedRMD
+    // 9=Guardrail(hidden) 10=ManSS 11=WomanSS 12=Annuity 13=Guaranteed
+    // 14=Living 15=Medical 16=Tax 17=TotalSpend 18=TotalIncome 19=SurplusGap
+    // 20=InflFactor 21=ReturnUsed(hidden) 22=InflUsed(hidden)
+    private static final int COL_GUARDRAIL = 9;
+    private static final int COL_SURPLUS   = 19;
+    private static final int COL_MAN_RMD   = 6;
+    private static final int COL_WOM_RMD   = 7;
+    private static final int COL_CMB_RMD   = 8;
     private static final int COL_WD        = 3;
 
     // ── Input spinners ───────────────────────────────────────────────────────
@@ -77,9 +77,13 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     private JSpinner spGoGo;         // go-go years spending multiplier
     private JSpinner spGoGoDuration; // number of years from withdrawal start the multiplier applies
     private JSpinner spUpperGuardrail, spLowerGuardrail;
-    // RMD inputs
-    private JSpinner  spRothBalance, spManTradBalance;
-    private JLabel    lblWomanTradBalance;
+    // Account balance spinners
+    private JSpinner spManTradIRA;      // man's traditional IRA (RMD at 75)
+    private JSpinner spManRothIRA;      // man's Roth IRA (no RMD)
+    private JSpinner spWomanRoth401K;   // woman's Roth 401K (no RMD)
+    private JSpinner spWomanTradIRA;    // woman's traditional IRA (RMD at 75)
+    private JSpinner spWomanTrad401K;   // woman's traditional 401K (RMD at 75)
+    private JLabel   lblAccountTotal;   // live sum of all accounts
     // Randomization
     private JCheckBox chkRandomize;
     private long      runSeedOffset = 0L;
@@ -260,24 +264,31 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         }));
 
         // RMD assumptions
-        spRothBalance    = spinI(350_000, 0, 5_000_000, 10_000, "#,###");
-        spManTradBalance = spinI(900_000, 0, 5_000_000, 10_000, "#,###");
-        lblWomanTradBalance = new JLabel("Woman traditional 401K: $250,000");
-        lblWomanTradBalance.setFont(new Font("SansSerif", Font.BOLD, 11));
-        lblWomanTradBalance.setForeground(new Color(24, 95, 165));
-        lblWomanTradBalance.setAlignmentX(LEFT_ALIGNMENT);
+        // Account balances
+        spManTradIRA    = spinI(900_000, 0, 10_000_000, 10_000, "#,###");
+        spManRothIRA    = spinI(10_000,  0, 10_000_000, 10_000, "#,###");
+        spWomanRoth401K = spinI(33_000,  0, 10_000_000, 10_000, "#,###");
+        spWomanTradIRA  = spinI(286_000, 0, 10_000_000, 10_000, "#,###");
+        spWomanTrad401K = spinI(320_000, 0, 10_000_000, 10_000, "#,###");
 
-        // Update woman's trad balance label whenever portfolio/roth/man changes
-        ChangeListener rmdWatcher = e -> updateWomanTradLabel();
-        spPortfolio.addChangeListener(rmdWatcher);
-        spRothBalance.addChangeListener(rmdWatcher);
-        spManTradBalance.addChangeListener(rmdWatcher);
-        updateWomanTradLabel();
+        lblAccountTotal = new JLabel("Account total: $1,549,000");
+        lblAccountTotal.setFont(new Font("SansSerif", Font.BOLD, 11));
+        lblAccountTotal.setForeground(new Color(24, 95, 165));
+        lblAccountTotal.setAlignmentX(LEFT_ALIGNMENT);
 
-        inner.add(card("RMD Assumptions (SECURE 2.0 — age 75)", new Object[]{
-                "Woman's Roth 401K balance ($)  [no RMD]", spRothBalance,
-                "Man's traditional 401K balance ($)",       spManTradBalance,
-                null, lblWomanTradBalance,
+        ChangeListener acctWatcher = e -> updateAccountTotal();
+        for (JSpinner s : new JSpinner[]{
+                spManTradIRA, spManRothIRA, spWomanRoth401K, spWomanTradIRA, spWomanTrad401K})
+            s.addChangeListener(acctWatcher);
+        updateAccountTotal();
+
+        inner.add(card("Account Balances (SECURE 2.0 RMD — age 75)", new Object[]{
+                "Man — traditional IRA ($)  [RMD age 75]",  spManTradIRA,
+                "Man — Roth IRA ($)  [no RMD]",             spManRothIRA,
+                "Woman — Roth 401K ($)  [no RMD]",          spWomanRoth401K,
+                "Woman — traditional IRA ($)  [RMD age 75]",spWomanTradIRA,
+                "Woman — traditional 401K ($)  [RMD age 75]",spWomanTrad401K,
+                null, lblAccountTotal,
         }));
 
         // Market
@@ -365,13 +376,13 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         } catch (Exception ignored) {}
     }
 
-    private void updateWomanTradLabel() {
+    private void updateAccountTotal() {
         try {
-            int portfolio = iv(spPortfolio);
-            int roth      = iv(spRothBalance);
-            int manTrad   = iv(spManTradBalance);
-            int womanTrad = Math.max(0, portfolio - roth - manTrad);
-            lblWomanTradBalance.setText("Woman traditional 401K: " + CURRENCY.format(womanTrad));
+            long total = (long)iv(spManTradIRA) + iv(spManRothIRA)
+                    + iv(spWomanRoth401K) + iv(spWomanTradIRA) + iv(spWomanTrad401K);
+            lblAccountTotal.setText("Account total: " + CURRENCY.format(total));
+            // Sync portfolio spinner to match account total
+            spPortfolio.setValue((int) Math.min(total, 20_000_000));
         } catch (Exception ignored) {}
     }
 
@@ -464,14 +475,14 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     // ── Table ────────────────────────────────────────────────────────────────
     private JScrollPane buildTablePanel() {
         String[] cols = {
-                "Man age", "Cal yr", "Portfolio bal",          // 0 1 2
-                "80% PoS withdrawal", "Wd %",                  // 3 4
-                "Man RMD", "Woman RMD", "Combined RMD",        // 5 6 7
-                "Guardrail",                                    // 8  hidden
-                "Man SS", "Woman SS", "Annuity", "Guaranteed", // 9 10 11 12
-                "Living", "Medical", "Tax (est)",               // 13 14 15
-                "Total spend", "Total income", "Surplus/gap",  // 16 17 18
-                "Infl factor", "Return used", "Infl used"      // 19 20h 21h
+                "Man age", "Cal yr", "Portfolio bal",                    // 0 1 2
+                "80% PoS withdrawal", "Actual wd", "Wd %",              // 3 4 5
+                "Man RMD", "Woman RMD", "Combined RMD",                  // 6 7 8
+                "Guardrail",                                              // 9  hidden
+                "Man SS", "Woman SS", "Annuity", "Guaranteed",           // 10 11 12 13
+                "Living", "Medical", "Tax (est)",                        // 14 15 16
+                "Total spend", "Total income", "Surplus/gap",            // 17 18 19
+                "Infl factor", "Return used", "Infl used"                // 20 21h 22h
         };
         tblModel = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -483,8 +494,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 int col = columnAtPoint(e.getPoint());
                 int row = rowAtPoint(e.getPoint());
                 if (row < 0) return null;
-                // Wd% col — show guardrail status
-                if (col == 4) {
+                // Wd% col (5) — show guardrail status
+                if (col == 5) {
                     Object gv = tblModel.getValueAt(row, COL_GUARDRAIL);
                     String g  = gv == null ? "" : gv.toString();
                     if (g.contains("▲"))
@@ -499,9 +510,19 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                     return "<html><b>Within guardrail range</b><br>"
                             + "Withdrawal is within the guardrail bands. No adjustment indicated.</html>";
                 }
+                // Actual wd col (4) tooltip
+                if (col == 4 && row < lastResults.medianRows.size()) {
+                    boolean rmdOvr = lastResults.medianRows.get(row).rmdOverride;
+                    return rmdOvr
+                            ? "<html><b>Actual withdrawal — RMD override active</b><br>"
+                              + "The combined RMD exceeded the 80% PoS withdrawal.<br>"
+                              + "The RMD amount is being used instead.</html>"
+                            : "<html><b>Actual withdrawal</b><br>"
+                              + "= 80% PoS withdrawal × go-go multiplier (if applicable).<br>"
+                              + "No RMD override this year.</html>";
+                }
                 // RMD columns tooltip
                 if (col == COL_MAN_RMD || col == COL_WOM_RMD || col == COL_CMB_RMD) {
-                    Object wdVal  = tblModel.getValueAt(row, COL_WD);
                     Object rmdVal = tblModel.getValueAt(row, col);
                     if (rmdVal == null || "—".equals(rmdVal.toString())) return null;
                     boolean exceeds = col == COL_CMB_RMD
@@ -509,8 +530,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                             : isIndivRmdExceedsWd(row, col);
                     return "<html><b>RMD (IRS Uniform Lifetime Table)</b><br>"
                             + "SECURE 2.0: begins at age 75 (born after 1960).<br>"
-                            + "Roth 401K ($" + CURRENCY.format(iv(spRothBalance)).replace("$","")
-                            + ") is excluded — no RMD applies.<br>"
+                            + "Roth accounts (man $" + CURRENCY.format(iv(spManRothIRA)).replace("$","")
+                            + " + woman $" + CURRENCY.format(iv(spWomanRoth401K)).replace("$","")
+                            + ") excluded — no RMD applies.<br>"
                             + (exceeds
                             ? "<b style='color:orange'>⚠ This RMD exceeds the 80% PoS withdrawal amount.</b><br>"
                               + "You may be required to withdraw more than the simulation recommends."
@@ -529,15 +551,15 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         tblResults.setSelectionBackground(new Color(210, 230, 250));
         tblResults.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
-        // col widths: 0=hidden cols get 0
+        // col widths: hidden cols get 0
         int[] w = {
-                55, 55, 105, 115, 68,          // 0-4
-                80, 85, 90,                     // 5-7 RMDs
-                0,                              // 8  guardrail hidden
-                75, 80, 72, 90,                 // 9-12
-                72, 72, 78,                     // 13-15
-                88, 95, 85,                     // 16-18
-                72, 0, 0                        // 19, 20 hidden, 21 hidden
+                55, 55, 105, 115, 105, 68,         // 0-5
+                80, 85, 90,                          // 6-8 RMDs
+                0,                                   // 9  guardrail hidden
+                75, 80, 72, 90,                      // 10-13
+                72, 72, 78,                          // 14-16
+                88, 95, 85,                          // 17-19
+                72, 0, 0                             // 20, 21 hidden, 22 hidden
         };
         for (int i = 0; i < w.length && i < tblResults.getColumnCount(); i++) {
             TableColumn tc = tblResults.getColumnModel().getColumn(i);
@@ -545,27 +567,33 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             if (w[i] == 0) { tc.setMinWidth(0); tc.setMaxWidth(0); }
         }
 
-        // Header tooltip for Wd% and RMD columns
+        // Header tooltips
         JTableHeader header = tblResults.getTableHeader();
         header.addMouseMotionListener(new MouseMotionAdapter() {
             @Override public void mouseMoved(MouseEvent e) {
                 int col = header.columnAtPoint(e.getPoint());
                 switch (col) {
                     case 4 -> header.setToolTipText(
-                            "<html><b>Wd % — effective withdrawal rate</b><br>"
-                                    + "= withdrawal ÷ portfolio balance.<br>"
-                                    + "Hover cells for guardrail status.</html>");
+                            "<html><b>Actual wd — what is actually withdrawn</b><br>"
+                                    + "= max(80% PoS wd × go-go multiplier, combined RMD).<br>"
+                                    + "Used for Total Income, Surplus/Gap, and balance drawdown.<br>"
+                                    + "Orange = RMD override active this year.</html>");
                     case 5 -> header.setToolTipText(
-                            "<html><b>Man RMD</b><br>"
-                                    + "Required Minimum Distribution from man's traditional 401K.<br>"
-                                    + "Begins age 75 (SECURE 2.0). Orange = exceeds 80% PoS withdrawal.</html>");
+                            "<html><b>Wd % — effective withdrawal rate</b><br>"
+                                    + "= actual withdrawal ÷ portfolio balance.<br>"
+                                    + "Hover cells for guardrail status.</html>");
                     case 6 -> header.setToolTipText(
-                            "<html><b>Woman RMD</b><br>"
-                                    + "Required Minimum Distribution from woman's traditional 401K.<br>"
-                                    + "Begins age 75 (SECURE 2.0). Orange = exceeds 80% PoS withdrawal.</html>");
+                            "<html><b>Man RMD</b><br>"
+                                    + "Required Minimum Distribution from man's traditional IRA.<br>"
+                                    + "Begins age 75 (SECURE 2.0, born after 1960).</html>");
                     case 7 -> header.setToolTipText(
+                            "<html><b>Woman RMD</b><br>"
+                                    + "Required Minimum Distribution from woman's traditional IRA + 401K.<br>"
+                                    + "Begins age 75 (SECURE 2.0, born after 1960).</html>");
+                    case 8 -> header.setToolTipText(
                             "<html><b>Combined RMD</b><br>"
-                                    + "Sum of man + woman RMDs. Orange = exceeds 80% PoS withdrawal.</html>");
+                                    + "Sum of man + woman RMDs.<br>"
+                                    + "Orange = overrides 80% PoS withdrawal as actual withdrawal.</html>");
                     default -> header.setToolTipText(null);
                 }
             }
@@ -594,15 +622,29 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                     String s = v == null ? "" : v.toString();
 
                     if (col == 3 && goGo) {
-                        // Withdrawal column — stronger teal during go-go years
+                        // PoS withdrawal col — teal during go-go years
                         c.setBackground(GOGO_WD_BG);
                         c.setForeground(new Color(0, 90, 50));
-                    } else if (col == 4) {
+                    } else if (col == 4 && goGo) {
+                        // Actual wd col — teal during go-go years
+                        c.setBackground(GOGO_WD_BG);
+                        c.setForeground(new Color(0, 90, 50));
+                    } else if (col == 4 && row < lastResults.medianRows.size()
+                            && lastResults.medianRows.get(row).rmdOverride) {
+                        // Actual wd — orange when RMD override active
+                        c.setBackground(new Color(255, 200, 120));
+                        c.setForeground(new Color(140, 60, 0));
+                    } else if (col == 5) {
                         // Wd% — color by guardrail
                         Object gv = tblModel.getValueAt(row, COL_GUARDRAIL);
                         String g  = gv == null ? "" : gv.toString();
                         c.setForeground(g.contains("▲") ? new Color(59,109,17)
                                 : g.contains("▼") ? new Color(163,45,45) : Color.BLACK);
+                    } else if (col == COL_CMB_RMD && row < lastResults.medianRows.size()
+                            && lastResults.medianRows.get(row).rmdOverride) {
+                        // Combined RMD — orange when overriding PoS withdrawal
+                        c.setBackground(new Color(255, 200, 120));
+                        c.setForeground(new Color(140, 60, 0));
                     } else if (col == COL_MAN_RMD && isIndivRmdExceedsWd(row, col)) {
                         c.setBackground(AMBER_BG); c.setForeground(AMBER_FG);
                     } else if (col == COL_WOM_RMD && isIndivRmdExceedsWd(row, col)) {
@@ -755,9 +797,14 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         i.ssCola             = dv(spSSCola)          / 100.0;
         i.annuity            = iv(spAnnuity);
         i.annuityStartYear   = iv(spAnnuityStartYear);
-        i.rothBalance        = iv(spRothBalance);
-        i.manTradBalance     = iv(spManTradBalance);
-        i.womanTradBalance   = Math.max(0, i.portfolio - i.rothBalance - i.manTradBalance);
+        i.manTradIRA     = iv(spManTradIRA);
+        i.manRothIRA     = iv(spManRothIRA);
+        i.womanRoth401K  = iv(spWomanRoth401K);
+        i.womanTradIRA   = iv(spWomanTradIRA);
+        i.womanTrad401K  = iv(spWomanTrad401K);
+        // Portfolio = sum of all accounts
+        i.portfolio      = i.manTradIRA + i.manRothIRA
+                + i.womanRoth401K + i.womanTradIRA + i.womanTrad401K;
         i.nomReturn          = dv(spNomReturn)        / 100.0;
         i.stdDev             = dv(spStdDev)           / 100.0;
         i.inflation          = dv(spInflation)        / 100.0;
@@ -826,13 +873,15 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         res.yr1Withdrawal = yr1Wd;
 
         double bal         = inp.portfolio;
-        double manTrad     = inp.manTradBalance;
-        double womanTrad   = inp.womanTradBalance;
+        double manTradIRA  = inp.manTradIRA;
+        double womanTradIRA= inp.womanTradIRA;
+        double womanTrad401K=inp.womanTrad401K;
 
         for (int y = 0; y < inp.horizon; y++) {
             int calYear   = BASE_YEAR + y;
-            int manAge    = inp.manAge + y;
-            int womanAge  = inp.womanAge + y;
+            // Age reached during this calendar year (standard retirement planning convention)
+            int manAge    = calYear - inp.manBirthYear;
+            int womanAge  = calYear - inp.womanBirthYear;
             int remaining = inp.horizon - y;
             boolean drawing = calYear >= inp.withdrawStartYear;
 
@@ -842,18 +891,23 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                     ? solveWithdrawal((int) Math.max(0, bal), remaining, inp,
                     999 + y * 37 + seed, solvePaths, binIters, goGoRemaining) : 0;
 
-            // Apply go-go multiplier to actual withdrawal taken this year
+            // RMD: man from traditional IRA; woman from traditional IRA + traditional 401K
+            double manRmd    = calcRmd(manTradIRA,   manAge);
+            double womanRmd  = calcRmd(womanTradIRA, womanAge) + calcRmd(womanTrad401K, womanAge);
+            double combRmd   = manRmd + womanRmd;
+
+            // Apply go-go multiplier then RMD override
             double goGoMult   = (goGoRemaining > 0) ? inp.goGoMultiplier : 1.0;
-            int    wdActual   = (int)(wd * goGoMult); // actual dollars taken (displayed)
+            int    wdGoGo     = (int)(wd * goGoMult);
+            // wdActual = what is actually withdrawn (max of goGo-adjusted PoS and RMD requirement)
+            int    wdActual   = drawing ? Math.max(wdGoGo, (int)combRmd) : 0;
+            boolean rmdOverride = drawing && (int)combRmd > wdGoGo && combRmd > 0;
+
+            // wd (pure PoS) stored separately for display; wdActual drives all cashflow
             double wdPct      = (drawing && bal > 0) ? wdActual / (double) bal * 100.0 : 0.0;
             double vsYr1      = (yr1Wd > 0 && drawing)
-                    ? (wdActual - (int)(yr1Wd * inp.goGoMultiplier)) / (double)(yr1Wd * inp.goGoMultiplier) : 0.0;
+                    ? (wdActual - (int)(yr1Wd * goGoMult)) / (double)(yr1Wd * goGoMult) : 0.0;
             double inflFactor = Math.pow(1 + inp.inflation, y);
-
-            // RMD: calculated on prior year-end balance (approximated as current bal before draw)
-            double manRmd   = calcRmd(manTrad,   manAge);
-            double womanRmd = calcRmd(womanTrad, womanAge);
-            double combRmd  = manRmd + womanRmd;
 
             double manSS      = manSSThisYear(inp, y);
             double womanSS    = womanSSThisYear(inp, y);
@@ -877,7 +931,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             row.manAge      = manAge;
             row.womanAge    = womanAge;
             row.balance     = (int) Math.max(0, bal);
-            row.withdrawal  = wdActual;
+            row.withdrawal  = wd;       // pure 80% PoS amount — display only
+            row.wdActual    = wdActual; // actual amount taken (max of goGo-PoS and RMD)
             row.wdPct       = wdPct;
             row.vsYr1       = vsYr1;
             row.alert       = alert;
@@ -899,15 +954,18 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             row.inflUsed    = inp.inflation * 100.0;
             row.drawing     = drawing;
             row.goGoActive  = goGoRemaining > 0;
+            row.rmdOverride = rmdOverride;
             res.medianRows.add(row);
 
-            // Advance: portfolio grows then withdraw actual (go-go multiplied) amount
-            bal      = bal      * (1 + inp.nomReturn) - wdActual;
-            manTrad  = manTrad  * (1 + inp.nomReturn) - manRmd;
-            womanTrad= womanTrad* (1 + inp.nomReturn) - womanRmd;
-            if (bal < 0)       bal       = 0;
-            if (manTrad < 0)   manTrad   = 0;
-            if (womanTrad < 0) womanTrad = 0;
+            // Advance: portfolio grows then withdraw actual amount; traditional accounts grow then RMD
+            bal          = bal          * (1 + inp.nomReturn) - wdActual;
+            manTradIRA   = manTradIRA   * (1 + inp.nomReturn) - manRmd;
+            womanTradIRA = womanTradIRA * (1 + inp.nomReturn) - calcRmd(womanTradIRA, womanAge);
+            womanTrad401K= womanTrad401K* (1 + inp.nomReturn) - calcRmd(womanTrad401K, womanAge);
+            if (bal < 0)          bal          = 0;
+            if (manTradIRA < 0)   manTradIRA   = 0;
+            if (womanTradIRA < 0) womanTradIRA = 0;
+            if (womanTrad401K< 0) womanTrad401K= 0;
         }
 
         // Fan paths
@@ -932,13 +990,21 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
                 int fanStartY        = inp.withdrawStartYear - BASE_YEAR;
                 int fanGoGoRemaining = Math.max(0, inp.goGoDuration - Math.max(0, y - fanStartY));
+                int fanManAge        = calYear - inp.manBirthYear;
+                int fanWomanAge      = calYear - inp.womanBirthYear;
+                // Approximate RMD using mean-return grown balances (simplified for fan paths)
+                double fanManRmd   = calcRmd(inp.manTradIRA   * Math.pow(1+inp.nomReturn, y), fanManAge);
+                double fanWomanRmd = calcRmd(inp.womanTradIRA  * Math.pow(1+inp.nomReturn, y), fanWomanAge)
+                        + calcRmd(inp.womanTrad401K * Math.pow(1+inp.nomReturn, y), fanWomanAge);
+                double fanCombRmd  = fanManRmd + fanWomanRmd;
+
                 int wd = 0;
                 if (drawing && b > 0)
                     wd = solveWithdrawal((int) b, inp.horizon - y, inp,
                             p * 1000 + y * 37 + seed, solvePaths, binIters, fanGoGoRemaining);
-                // Apply go-go multiplier to actual draw
-                double fanGoGoMult = (fanGoGoRemaining > 0) ? inp.goGoMultiplier : 1.0;
-                int wdFanActual = (int)(wd * fanGoGoMult);
+                double fanGoGoMult  = (fanGoGoRemaining > 0) ? inp.goGoMultiplier : 1.0;
+                int wdFanGoGo       = (int)(wd * fanGoGoMult);
+                int wdFanActual     = drawing ? Math.max(wdFanGoGo, (int)fanCombRmd) : 0;
                 res.fanWithdrawals[p][y] = wdFanActual;
 
                 double ret = inp.nomReturn + inp.stdDev * rng.nextGaussian();
@@ -1030,24 +1096,25 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                     r.calYear,                                                             // 1
                     CURRENCY.format((long)(r.balance / d)),                                // 2
                     r.drawing ? CURRENCY.format((long)(r.withdrawal / d)) : "—",          // 3
-                    r.drawing ? String.format("%.2f%%", r.wdPct) : "—",                   // 4
-                    r.manRmd   > 0 ? CURRENCY.format((long)(r.manRmd   / d)) : "—",       // 5
-                    r.womanRmd > 0 ? CURRENCY.format((long)(r.womanRmd / d)) : "—",       // 6
-                    r.combRmd  > 0 ? CURRENCY.format((long)(r.combRmd  / d)) : "—",       // 7
-                    r.alert,                                                               // 8 hidden
-                    r.manSS   > 0 ? CURRENCY.format((long)(r.manSS   / d)) : "—",         // 9
-                    r.womanSS > 0 ? CURRENCY.format((long)(r.womanSS / d)) : "—",         // 10
-                    r.annuity > 0 ? CURRENCY.format((long)(r.annuity / d)) : "—",         // 11
-                    r.guaranteed > 0 ? CURRENCY.format((long)(r.guaranteed / d)) : "—",  // 12
-                    r.drawing ? CURRENCY.format((long)(r.living     / d)) : "—",          // 13
-                    r.drawing ? CURRENCY.format((long)(r.medical    / d)) : "—",          // 14
-                    r.tax > 0  ? CURRENCY.format((long)(r.tax       / d)) : "—",          // 15
-                    r.drawing ? CURRENCY.format((long)(r.totalSpend / d)) : "—",          // 16
-                    CURRENCY.format((long)(r.totalIncome / d)),                            // 17
+                    r.drawing ? CURRENCY.format((long)(r.wdActual   / d)) : "—",          // 4 actual wd
+                    r.drawing ? String.format("%.2f%%", r.wdPct) : "—",                   // 5
+                    r.manRmd   > 0 ? CURRENCY.format((long)(r.manRmd   / d)) : "—",       // 6
+                    r.womanRmd > 0 ? CURRENCY.format((long)(r.womanRmd / d)) : "—",       // 7
+                    r.combRmd  > 0 ? CURRENCY.format((long)(r.combRmd  / d)) : "—",       // 8
+                    r.alert,                                                               // 9 hidden
+                    r.manSS   > 0 ? CURRENCY.format((long)(r.manSS   / d)) : "—",         // 10
+                    r.womanSS > 0 ? CURRENCY.format((long)(r.womanSS / d)) : "—",         // 11
+                    r.annuity > 0 ? CURRENCY.format((long)(r.annuity / d)) : "—",         // 12
+                    r.guaranteed > 0 ? CURRENCY.format((long)(r.guaranteed / d)) : "—",  // 13
+                    r.drawing ? CURRENCY.format((long)(r.living     / d)) : "—",          // 14
+                    r.drawing ? CURRENCY.format((long)(r.medical    / d)) : "—",          // 15
+                    r.tax > 0  ? CURRENCY.format((long)(r.tax       / d)) : "—",          // 16
+                    r.drawing ? CURRENCY.format((long)(r.totalSpend / d)) : "—",          // 17
+                    CURRENCY.format((long)(r.totalIncome / d)),                            // 18
                     r.drawing
                             ? (r.surplus >= 0 ? "+" : "-")
                               + CURRENCY.format((long)(Math.abs(r.surplus) / d))
-                            : "—",                                                             // 18
+                            : "—",                                                             // 19
                     String.format("%.3f", r.inflFactor),                                  // 19
                     String.format("%.2f%%", r.returnUsed),                                // 20 hidden
                     String.format("%.2f%%", r.inflUsed),                                  // 21 hidden
@@ -1074,8 +1141,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         int inc1  = yr1 + guar1;
         int sur1  = inc1 - spd1;
         int fullSSYear = Math.max(inp.manSSStartYear, inp.womanSSStartYear);
-        int manRmdYear  = BASE_YEAR + (RMD_START_AGE - inp.manAge);
-        int womanRmdYear= BASE_YEAR + (RMD_START_AGE - inp.womanAge);
+        int manRmdYear   = inp.manBirthYear   + RMD_START_AGE;
+        int womanRmdYear = inp.womanBirthYear + RMD_START_AGE;
 
         return String.format(
                 "══ YEAR 2026 ══\n"
@@ -1093,9 +1160,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                         + "══ ANNUITY ══\n"
                         + "  %s/yr from %d (non-COLA) · Loses ~%.0f%% real value by %d at %.1f%% inflation\n\n"
                         + "══ RMD SCHEDULE (SECURE 2.0 — age 75) ══\n"
-                        + "  Man's traditional 401K: %s · RMDs begin %d (age 75)\n"
-                        + "  Woman's traditional 401K: %s · RMDs begin %d (age 75)\n"
-                        + "  Woman's Roth 401K: %s · No RMD required\n"
+                        + "  Man's traditional IRA: %s · RMDs begin %d (age 75)\n"
+                        + "  Woman's traditional IRA + 401K: %s · RMDs begin %d (age 75)\n"
+                        + "  Roth accounts (no RMD): %s\n"
                         + "  Amber highlight = RMD exceeds 80%% PoS withdrawal that year\n\n"
                         + "══ TAX / SPENDING ══\n"
                         + "  Base tax %s in %d, at %.1f%%/yr · Medical %s at %.1f%%/yr\n"
@@ -1118,9 +1185,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 CURRENCY.format(inp.annuity), inp.annuityStartYear,
                 (1 - 1.0/Math.pow(1+inp.inflation, inp.horizon))*100,
                 BASE_YEAR + inp.horizon, inp.inflation * 100,
-                CURRENCY.format(inp.manTradBalance),   manRmdYear,
-                CURRENCY.format(inp.womanTradBalance), womanRmdYear,
-                CURRENCY.format(inp.rothBalance),
+                CURRENCY.format(inp.manTradIRA),    manRmdYear,
+                CURRENCY.format(inp.womanTradIRA) + " IRA + " + CURRENCY.format(inp.womanTrad401K) + " 401K", womanRmdYear,
+                CURRENCY.format(inp.manRothIRA) + " (man) + " + CURRENCY.format(inp.womanRoth401K) + " (woman)",
                 CURRENCY.format(inp.baseTax), inp.withdrawStartYear, inp.taxInflation*100,
                 CURRENCY.format(inp.medical), inp.medInflation*100,
                 inp.goGoMultiplier, inp.goGoDuration,
@@ -1289,7 +1356,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             int yrs=rows.size();
             double[]inc=deflatedMedian(rows.stream().mapToDouble(r->r.totalIncome).toArray(),rows);
             double[]spd=deflatedMedian(rows.stream().mapToDouble(r->r.totalSpend).toArray(),rows);
-            double[]wd =deflatedMedian(rows.stream().mapToDouble(r->r.withdrawal).toArray(),rows);
+            double[]wd =deflatedMedian(rows.stream().mapToDouble(r->r.wdActual).toArray(),rows);
             double[]gu =deflatedMedian(rows.stream().mapToDouble(r->r.guaranteed).toArray(),rows);
             double maxV=0;
             for(int i=0;i<yrs;i++)maxV=Math.max(maxV,Math.max(inc[i],spd[i]));
@@ -1351,7 +1418,12 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         int womanSSAmount, womanSSStartYear, womanSSStartMonth;
         double ssCola;
         int annuity, annuityStartYear;
-        int rothBalance, manTradBalance, womanTradBalance;
+        // Account balances
+        int manTradIRA;      // traditional IRA — RMD at 75
+        int manRothIRA;      // Roth IRA — no RMD
+        int womanRoth401K;   // Roth 401K — no RMD
+        int womanTradIRA;    // traditional IRA — RMD at 75
+        int womanTrad401K;   // traditional 401K — RMD at 75
         double nomReturn, stdDev, inflation, inflationStdDev;
         int livingExp, medical; double medInflation;
         int baseTax; double taxInflation;
@@ -1361,13 +1433,14 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     }
 
     static class MedianRow {
-        int calYear, manAge, womanAge, balance, withdrawal;
+        int calYear, manAge, womanAge, balance, withdrawal, wdActual;
         int manRmd, womanRmd, combRmd;
         int manSS, womanSS, annuity, guaranteed;
         int living, medical, tax, totalSpend, totalIncome, surplus;
         double vsYr1, wdPct, inflFactor, returnUsed, inflUsed;
         String alert; boolean drawing;
-        boolean goGoActive; // true during go-go duration years
+        boolean goGoActive;   // true during go-go duration years
+        boolean rmdOverride;  // true when RMD forced withdrawal above PoS amount
     }
 
     static class SimResults {
