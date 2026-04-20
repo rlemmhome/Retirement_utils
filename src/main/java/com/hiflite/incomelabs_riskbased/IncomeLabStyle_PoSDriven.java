@@ -74,6 +74,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     private JSpinner spNomReturn, spStdDev, spInflation, spInflationStdDev;
     private JSpinner spLivingExp, spMedical, spMedInflation;
     private JSpinner spBaseTax, spTaxInflation;
+    private JSpinner spGoGo;         // go-go years spending multiplier
+    private JSpinner spGoGoDuration; // number of years from withdrawal start the multiplier applies
     private JSpinner spUpperGuardrail, spLowerGuardrail;
     // RMD inputs
     private JSpinner  spRothBalance, spManTradBalance;
@@ -296,12 +298,32 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         spMedInflation = spinD(4.5,     1.0,    10.0,      0.1,   "0.0#");
         spBaseTax      = spinI(15_000,  0,      100_000,   500,   "#,###");
         spTaxInflation = spinD(3.79,    0.5,    10.0,      0.1,   "0.0#");
+        spGoGo         = spinD(1.0,  1.0, 2.0, 0.005, "0.000");
+        spGoGoDuration = spinI(10,   1,   30,  1,     "#");
+        spGoGo.setToolTipText("<html><b>Go-go years multiplier</b><br>"
+                + "Applies to portfolio withdrawals for the number of years set in<br>"
+                + "'Go-go duration'. Early retirement typically features higher spending<br>"
+                + "on travel and experiences while health and energy are at their peak.<br><br>"
+                + "<b>Rational default: 1.125</b> — based on research by Michael Kitces<br>"
+                + "and others showing ~10-15% higher real spending in early retirement.<br><br>"
+                + "A value of 1.0 means no adjustment (flat spending throughout).<br>"
+                + "The multiplier is applied inside the Monte Carlo solver so the<br>"
+                + "80% PoS target is genuinely maintained during go-go years.</html>");
+        spGoGoDuration.setToolTipText("<html><b>Go-go years duration</b><br>"
+                + "Number of years from the withdrawal start date that the go-go<br>"
+                + "spending multiplier applies.<br><br>"
+                + "<b>Default: 10 years</b> — roughly covers ages 65-75 for a typical<br>"
+                + "early retiree, but works generically regardless of age or who is<br>"
+                + "running the simulation.<br><br>"
+                + "Set to 0 to disable the go-go multiplier entirely.</html>");
         inner.add(card("Annual Spending (2027 base $)", new Object[]{
-                "Living expenses ($/yr)",   spLivingExp,
-                "Medical ($/yr)",           spMedical,
-                "Medical inflation (%/yr)", spMedInflation,
-                "Base tax — yr 1 ($/yr)",   spBaseTax,
-                "Tax inflation (%/yr)",     spTaxInflation,
+                "Living expenses ($/yr)",                spLivingExp,
+                "Medical ($/yr)",                        spMedical,
+                "Medical inflation (%/yr)",              spMedInflation,
+                "Base tax — yr 1 ($/yr)",                spBaseTax,
+                "Tax inflation (%/yr)",                  spTaxInflation,
+                "Go-go years multiplier",                spGoGo,
+                "Go-go years duration (from wd start)",  spGoGoDuration,
         }));
 
         // Guardrails
@@ -553,18 +575,29 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         tblResults.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
             // Amber for RMD-exceeds-withdrawal highlight
             private final Color AMBER_BG = new Color(255, 220, 100);
-            private final Color AMBER_FG = new Color(130, 80, 0);
+            private final Color AMBER_FG  = new Color(130, 80, 0);
+            private final Color GOGO_BG   = new Color(232, 248, 240); // faint teal for go-go rows
+            private final Color GOGO_WD_BG= new Color(180, 230, 205); // stronger teal on withdrawal cell
 
             @Override public Component getTableCellRendererComponent(
                     JTable t, Object v, boolean sel, boolean foc, int row, int col) {
                 Component c = super.getTableCellRendererComponent(t, v, sel, foc, row, col);
                 if (!sel) {
-                    Color defaultBg = row % 2 == 0 ? Color.WHITE : new Color(248, 248, 245);
+                    // Check if this is a go-go year row
+                    boolean goGo = row < lastResults.medianRows.size()
+                            && lastResults.medianRows.get(row).goGoActive;
+
+                    Color defaultBg = goGo ? GOGO_BG
+                            : (row % 2 == 0 ? Color.WHITE : new Color(248, 248, 245));
                     c.setBackground(defaultBg);
                     c.setForeground(Color.BLACK);
                     String s = v == null ? "" : v.toString();
 
-                    if (col == 4) {
+                    if (col == 3 && goGo) {
+                        // Withdrawal column — stronger teal during go-go years
+                        c.setBackground(GOGO_WD_BG);
+                        c.setForeground(new Color(0, 90, 50));
+                    } else if (col == 4) {
                         // Wd% — color by guardrail
                         Object gv = tblModel.getValueAt(row, COL_GUARDRAIL);
                         String g  = gv == null ? "" : gv.toString();
@@ -734,6 +767,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         i.medInflation       = dv(spMedInflation)     / 100.0;
         i.baseTax            = iv(spBaseTax);
         i.taxInflation       = dv(spTaxInflation)     / 100.0;
+        i.goGoMultiplier     = dv(spGoGo);
+        i.goGoDuration       = iv(spGoGoDuration);
         i.upperGuardrail     = dv(spUpperGuardrail)   / 100.0;
         i.lowerGuardrail     = dv(spLowerGuardrail)   / 100.0;
         i.manAge             = computeAge(i.manBirthYear,   i.manBirthMonth);
@@ -784,7 +819,10 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         res.inp = inp;
         res.medianRows = new ArrayList<>();
 
-        int yr1Wd = solveWithdrawal(inp.portfolio, inp.horizon, inp, 999 + seed, solvePaths, binIters);
+        int startY      = inp.withdrawStartYear - BASE_YEAR; // y-offset when draws begin
+        int goGoAtStart = inp.goGoDuration; // full duration remaining at start
+        int yr1Wd = solveWithdrawal(inp.portfolio, inp.horizon, inp, 999 + seed,
+                solvePaths, binIters, goGoAtStart);
         res.yr1Withdrawal = yr1Wd;
 
         double bal         = inp.portfolio;
@@ -798,11 +836,18 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             int remaining = inp.horizon - y;
             boolean drawing = calYear >= inp.withdrawStartYear;
 
+            // Go-go years remaining: duration minus years elapsed since withdrawal start
+            int goGoRemaining = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
             int wd = drawing && bal > 0
-                    ? solveWithdrawal((int) Math.max(0, bal), remaining, inp, 999 + y * 37 + seed, solvePaths, binIters) : 0;
+                    ? solveWithdrawal((int) Math.max(0, bal), remaining, inp,
+                    999 + y * 37 + seed, solvePaths, binIters, goGoRemaining) : 0;
 
-            double wdPct      = (drawing && bal > 0) ? wd / (double) bal * 100.0 : 0.0;
-            double vsYr1      = (yr1Wd > 0 && drawing) ? (wd - yr1Wd) / (double) yr1Wd : 0.0;
+            // Apply go-go multiplier to actual withdrawal taken this year
+            double goGoMult   = (goGoRemaining > 0) ? inp.goGoMultiplier : 1.0;
+            int    wdActual   = (int)(wd * goGoMult); // actual dollars taken (displayed)
+            double wdPct      = (drawing && bal > 0) ? wdActual / (double) bal * 100.0 : 0.0;
+            double vsYr1      = (yr1Wd > 0 && drawing)
+                    ? (wdActual - (int)(yr1Wd * inp.goGoMultiplier)) / (double)(yr1Wd * inp.goGoMultiplier) : 0.0;
             double inflFactor = Math.pow(1 + inp.inflation, y);
 
             // RMD: calculated on prior year-end balance (approximated as current bal before draw)
@@ -814,7 +859,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             double womanSS    = womanSSThisYear(inp, y);
             double ann        = annuityThisYear(inp, y);
             double guaranteed = manSS + womanSS + ann;
-            double totalIncome = guaranteed + wd;
+            double totalIncome = guaranteed + wdActual;
             double tax        = taxThisYear(inp, y);
             double living     = drawing ? inp.livingExp * Math.pow(1 + inp.inflation, y) : 0;
             double medical    = drawing ? inp.medical   * Math.pow(1 + inp.medInflation, y) : 0;
@@ -832,7 +877,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             row.manAge      = manAge;
             row.womanAge    = womanAge;
             row.balance     = (int) Math.max(0, bal);
-            row.withdrawal  = wd;
+            row.withdrawal  = wdActual;
             row.wdPct       = wdPct;
             row.vsYr1       = vsYr1;
             row.alert       = alert;
@@ -853,10 +898,11 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             row.returnUsed  = inp.nomReturn * 100.0;
             row.inflUsed    = inp.inflation * 100.0;
             row.drawing     = drawing;
+            row.goGoActive  = goGoRemaining > 0;
             res.medianRows.add(row);
 
-            // Advance: portfolio grows then withdraw; traditional balances grow then RMD
-            bal      = bal      * (1 + inp.nomReturn) - wd;
+            // Advance: portfolio grows then withdraw actual (go-go multiplied) amount
+            bal      = bal      * (1 + inp.nomReturn) - wdActual;
             manTrad  = manTrad  * (1 + inp.nomReturn) - manRmd;
             womanTrad= womanTrad* (1 + inp.nomReturn) - womanRmd;
             if (bal < 0)       bal       = 0;
@@ -884,13 +930,19 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                         inp.inflation + inp.inflationStdDev * rng.nextGaussian());
                 res.fanInflFactors[p][y + 1] = res.fanInflFactors[p][y] * (1 + infl);
 
+                int fanStartY        = inp.withdrawStartYear - BASE_YEAR;
+                int fanGoGoRemaining = Math.max(0, inp.goGoDuration - Math.max(0, y - fanStartY));
                 int wd = 0;
                 if (drawing && b > 0)
-                    wd = solveWithdrawal((int) b, inp.horizon - y, inp, p * 1000 + y * 37 + seed, solvePaths, binIters);
-                res.fanWithdrawals[p][y] = wd;
+                    wd = solveWithdrawal((int) b, inp.horizon - y, inp,
+                            p * 1000 + y * 37 + seed, solvePaths, binIters, fanGoGoRemaining);
+                // Apply go-go multiplier to actual draw
+                double fanGoGoMult = (fanGoGoRemaining > 0) ? inp.goGoMultiplier : 1.0;
+                int wdFanActual = (int)(wd * fanGoGoMult);
+                res.fanWithdrawals[p][y] = wdFanActual;
 
                 double ret = inp.nomReturn + inp.stdDev * rng.nextGaussian();
-                b = b * (1 + ret) - wd;
+                b = b * (1 + ret) - wdFanActual;
                 if (b < 0) b = 0;
                 res.fanBalances[p][y + 1] = b;
             }
@@ -906,26 +958,30 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         return res;
     }
 
-    private int solveWithdrawal(int balance, int years, SimInputs inp, long seed, int solvePaths, int binIters) {
+    private int solveWithdrawal(int balance, int years, SimInputs inp, long seed,
+                                int solvePaths, int binIters, int goGoYearsRemaining) {
         if (balance <= 0 || years <= 0) return 0;
         double lo = 0, hi = balance * 0.22;
         for (int i = 0; i < binIters; i++) {
             double mid = (lo + hi) / 2.0;
-            if (survivalRate(balance, years, mid, inp, seed, solvePaths) > inp.targetPoS)
+            if (survivalRate(balance, years, mid, inp, seed, solvePaths, goGoYearsRemaining) > inp.targetPoS)
                 lo = mid; else hi = mid;
         }
         return (int) ((lo + hi) / 2.0);
     }
 
-    private double survivalRate(int balance, int years, double wd, SimInputs inp, long seed, int solvePaths) {
+    private double survivalRate(int balance, int years, double wd, SimInputs inp,
+                                long seed, int solvePaths, int goGoYearsRemaining) {
         int ok = 0;
         for (int i = 0; i < solvePaths; i++) {
             SeededRng rng = new SeededRng(seed * 1000L + i * 7 + 3);
             double b = balance; boolean alive = true;
             for (int y = 0; y < years; y++) {
-                double infl = Math.max(0, inp.inflation + inp.inflationStdDev * rng.nextGaussian());
-                double ret  = inp.nomReturn + inp.stdDev * rng.nextGaussian();
-                b = b * (1 + ret) - wd * Math.pow(1 + infl, y);
+                double infl   = Math.max(0, inp.inflation + inp.inflationStdDev * rng.nextGaussian());
+                double ret    = inp.nomReturn + inp.stdDev * rng.nextGaussian();
+                // Apply go-go multiplier for years still within go-go period
+                double mult   = (y < goGoYearsRemaining) ? inp.goGoMultiplier : 1.0;
+                b = b * (1 + ret) - wd * mult * Math.pow(1 + infl, y);
                 if (b <= 0) { alive = false; break; }
             }
             if (alive) ok++;
@@ -1042,7 +1098,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                         + "  Woman's Roth 401K: %s · No RMD required\n"
                         + "  Amber highlight = RMD exceeds 80%% PoS withdrawal that year\n\n"
                         + "══ TAX / SPENDING ══\n"
-                        + "  Base tax %s in %d, at %.1f%%/yr · Medical %s at %.1f%%/yr\n\n"
+                        + "  Base tax %s in %d, at %.1f%%/yr · Medical %s at %.1f%%/yr\n"
+                        + "  Go-go multiplier: %.3f× for first %d years of withdrawals (through %d) · Teal rows = go-go\n\n"
                         + "══ MARKET (1961-2024 historical) ══\n"
                         + "  Return: %.2f%% / %.2f%% std dev · Inflation: %.2f%% / %.2f%% std dev\n\n"
                         + "══ MEDIAN SCENARIO ══\n"
@@ -1066,6 +1123,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 CURRENCY.format(inp.rothBalance),
                 CURRENCY.format(inp.baseTax), inp.withdrawStartYear, inp.taxInflation*100,
                 CURRENCY.format(inp.medical), inp.medInflation*100,
+                inp.goGoMultiplier, inp.goGoDuration,
+                inp.withdrawStartYear + inp.goGoDuration - 1,
                 inp.nomReturn*100, inp.stdDev*100, inp.inflation*100, inp.inflationStdDev*100,
                 formatMoney(res.medianFinalBalance), inp.horizon,
                 res.actualPoS*100, res.fanPathCount
@@ -1296,6 +1355,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         double nomReturn, stdDev, inflation, inflationStdDev;
         int livingExp, medical; double medInflation;
         int baseTax; double taxInflation;
+        double goGoMultiplier; // spending multiplier during go-go period
+        int    goGoDuration;   // number of years from withdrawal start the multiplier applies
         double upperGuardrail, lowerGuardrail;
     }
 
@@ -1306,6 +1367,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         int living, medical, tax, totalSpend, totalIncome, surplus;
         double vsYr1, wdPct, inflFactor, returnUsed, inflUsed;
         String alert; boolean drawing;
+        boolean goGoActive; // true during go-go duration years
     }
 
     static class SimResults {
