@@ -28,11 +28,12 @@ import java.util.List;
  */
 public class IncomeLabStyle_PoSDriven extends JFrame {
 
-    private static final int MC_SOLVE_PATHS = 800;
-    private static final int MC_FAN_PATHS   = 400;
-    private static final int BINARY_ITERS   = 22;
     private static final int BASE_YEAR      = 2026;
     private static final int RMD_START_AGE  = 75; // SECURE 2.0: born 1960 or later
+    // MC parameters — driven by spinners at runtime
+    private int mcSolvePaths = 800;
+    private int mcFanPaths   = 400;
+    private int binaryIters  = 22;
 
     // IRS Uniform Lifetime Table (age -> distribution period)
     private static final Map<Integer, Double> ULT = new HashMap<>();
@@ -79,7 +80,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     private JLabel    lblWomanTradBalance;
     // Randomization
     private JCheckBox chkRandomize;
-    private long      runSeedOffset = 0L; // 0 = deterministic; set from System.nanoTime() when randomized
+    private long      runSeedOffset = 0L;
+    // MC accuracy spinners
+    private JSpinner  spMcSolvePaths, spBinaryIters, spMcFanPaths;
 
     // ── Output ───────────────────────────────────────────────────────────────
     private JLabel            lblYear1Answer, lblYear1Sub, lblYear1Detail;
@@ -109,7 +112,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         setLayout(new BorderLayout(0, 0));
         getContentPane().setBackground(new Color(245, 245, 242));
 
-        ToolTipManager.sharedInstance().setDismissDelay(10_000);
+        ToolTipManager.sharedInstance().setDismissDelay(15_000);
         ToolTipManager.sharedInstance().setInitialDelay(400);
 
         add(buildInputPanel(),  BorderLayout.WEST);
@@ -121,8 +124,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLocationRelativeTo(null);
         setVisible(true);
-
-        SwingUtilities.invokeLater(this::runSimulation);
+        // No auto-run — user adjusts inputs then clicks Run Simulation
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -135,7 +137,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         outer.setPreferredSize(new Dimension(420, 0));
         outer.setMinimumSize(new Dimension(380, 0));
 
-        JPanel inner = new JPanel();
+        // ScrollablePanel forces inner panel to match viewport width — fixes hidden spinner values
+        JPanel inner = new ScrollablePanel();
         inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS));
         inner.setBackground(new Color(240, 240, 237));
         inner.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
@@ -157,6 +160,33 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 + "Unchecked: same seed every run — identical results for same inputs.<br>"
                 + "Use unchecked for scenario comparison; checked to explore uncertainty.</html>");
 
+        spMcSolvePaths = spinI(800, 50, 5000, 50, "#,###");
+        spMcSolvePaths.setToolTipText("<html><b>Monte Carlo solve paths</b><br>"
+                + "Number of simulation paths used in each binary-search iteration<br>"
+                + "to find the 80% PoS withdrawal amount.<br><br>"
+                + "<b>Default: 800</b> — high accuracy.<br>"
+                + "200 = ~4x faster, slightly noisier withdrawal estimates (~$500 variance).<br>"
+                + "100 = ~8x faster, moderate noise (~$1,000 variance).<br>"
+                + "This is the biggest driver of total runtime.</html>");
+
+        spBinaryIters = spinI(22, 8, 30, 1, "#");
+        spBinaryIters.setToolTipText("<html><b>Binary search iterations</b><br>"
+                + "Number of iterations to narrow down the withdrawal amount<br>"
+                + "that achieves the target probability of success.<br><br>"
+                + "<b>Default: 22</b> — converges to within ~$1.<br>"
+                + "16 = ~1.4x faster, converges to within ~$50.<br>"
+                + "12 = ~1.8x faster, converges to within ~$500.<br>"
+                + "Smallest impact on runtime of the three parameters.</html>");
+
+        spMcFanPaths = spinI(400, 20, 2000, 20, "#,###");
+        spMcFanPaths.setToolTipText("<html><b>Fan chart paths</b><br>"
+                + "Number of full simulation paths used to draw the fan chart<br>"
+                + "and compute the actual PoS metric at the top.<br><br>"
+                + "<b>Default: 400</b> — smooth fan chart, stable PoS reading.<br>"
+                + "100 = ~4x faster, fan chart is noisier but percentile lines are still meaningful.<br>"
+                + "50 = ~8x faster, fan chart is rough but usable for quick checks.<br>"
+                + "Each fan path re-solves withdrawal every year — very expensive.</html>");
+
         inner.add(card("Portfolio & Simulation", new Object[]{
                 "Starting portfolio ($)",        spPortfolio,
                 "Retirement horizon (years)",    spHorizon,
@@ -164,6 +194,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 "Withdrawal start year",         spWithdrawStartYear,
                 "Withdrawal start month (1-12)", spWithdrawStartMonth,
                 null, chkRandomize,
+                "MC solve paths (accuracy vs speed)", spMcSolvePaths,
+                "Binary search iterations",           spBinaryIters,
+                "Fan chart paths (chart quality)",    spMcFanPaths,
         }));
 
         // People
@@ -296,7 +329,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
         JScrollPane scroll = new JScrollPane(inner,
                 JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getViewport().setBackground(new Color(240, 240, 237));
         outer.add(scroll, BorderLayout.CENTER);
@@ -643,15 +676,22 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         // Capture seed offset on the EDT before handing off to worker
         runSeedOffset = chkRandomize.isSelected() ? System.nanoTime() : 0L;
         final long seedForThisRun = runSeedOffset;
+        // Capture MC parameters on EDT before handing to worker
+        final int solvePaths  = iv(spMcSolvePaths);
+        final int fanPaths    = iv(spMcFanPaths);
+        final int binIters    = iv(spBinaryIters);
         SwingWorker<SimResults, Void> worker = new SwingWorker<>() {
-            @Override protected SimResults doInBackground() { return simulate(readInputs(), seedForThisRun); }
+            @Override protected SimResults doInBackground() {
+                return simulate(readInputs(), seedForThisRun, solvePaths, fanPaths, binIters);
+            }
             @Override protected void done() {
                 try {
                     lastResults = get();
                     updateUI(lastResults);
                     progressBar.setIndeterminate(false);
-                    progressBar.setString("Complete — " + MC_FAN_PATHS
-                            + " fan paths × " + lastResults.inp.horizon + " years");
+                    progressBar.setString("Complete — " + fanPaths
+                            + " fan paths × " + lastResults.inp.horizon + " years · "
+                            + solvePaths + " solve paths · " + binIters + " binary iters");
                 } catch (Exception ex) {
                     progressBar.setString("Error: " + ex.getMessage());
                     ex.printStackTrace();
@@ -739,12 +779,12 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         return inp.baseTax * Math.pow(1 + inp.taxInflation, calYear - inp.withdrawStartYear);
     }
 
-    private SimResults simulate(SimInputs inp, long seed) {
+    private SimResults simulate(SimInputs inp, long seed, int solvePaths, int fanPaths, int binIters) {
         SimResults res = new SimResults();
         res.inp = inp;
         res.medianRows = new ArrayList<>();
 
-        int yr1Wd = solveWithdrawal(inp.portfolio, inp.horizon, inp, 999 + seed);
+        int yr1Wd = solveWithdrawal(inp.portfolio, inp.horizon, inp, 999 + seed, solvePaths, binIters);
         res.yr1Withdrawal = yr1Wd;
 
         double bal         = inp.portfolio;
@@ -759,7 +799,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             boolean drawing = calYear >= inp.withdrawStartYear;
 
             int wd = drawing && bal > 0
-                    ? solveWithdrawal((int) Math.max(0, bal), remaining, inp, 999 + y * 37 + seed) : 0;
+                    ? solveWithdrawal((int) Math.max(0, bal), remaining, inp, 999 + y * 37 + seed, solvePaths, binIters) : 0;
 
             double wdPct      = (drawing && bal > 0) ? wd / (double) bal * 100.0 : 0.0;
             double vsYr1      = (yr1Wd > 0 && drawing) ? (wd - yr1Wd) / (double) yr1Wd : 0.0;
@@ -825,12 +865,12 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         }
 
         // Fan paths
-        res.fanBalances    = new double[MC_FAN_PATHS][inp.horizon + 1];
-        res.fanWithdrawals = new double[MC_FAN_PATHS][inp.horizon];
-        res.fanInflFactors = new double[MC_FAN_PATHS][inp.horizon + 1];
+        res.fanBalances    = new double[fanPaths][inp.horizon + 1];
+        res.fanWithdrawals = new double[fanPaths][inp.horizon];
+        res.fanInflFactors = new double[fanPaths][inp.horizon + 1];
         int survived = 0;
 
-        for (int p = 0; p < MC_FAN_PATHS; p++) {
+        for (int p = 0; p < fanPaths; p++) {
             SeededRng rng = new SeededRng(p * 13 + 7 + seed);
             double b = inp.portfolio;
             res.fanBalances[p][0]    = b;
@@ -846,7 +886,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
                 int wd = 0;
                 if (drawing && b > 0)
-                    wd = solveWithdrawal((int) b, inp.horizon - y, inp, p * 1000 + y * 37 + seed);
+                    wd = solveWithdrawal((int) b, inp.horizon - y, inp, p * 1000 + y * 37 + seed, solvePaths, binIters);
                 res.fanWithdrawals[p][y] = wd;
 
                 double ret = inp.nomReturn + inp.stdDev * rng.nextGaussian();
@@ -856,29 +896,30 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             }
             if (res.fanBalances[p][inp.horizon] > 0) survived++;
         }
-        res.actualPoS = survived / (double) MC_FAN_PATHS;
+        res.actualPoS = survived / (double) fanPaths;
+        res.fanPathCount = fanPaths;
 
-        double[] finals = new double[MC_FAN_PATHS];
-        for (int p = 0; p < MC_FAN_PATHS; p++) finals[p] = res.fanBalances[p][inp.horizon];
+        double[] finals = new double[fanPaths];
+        for (int p = 0; p < fanPaths; p++) finals[p] = res.fanBalances[p][inp.horizon];
         Arrays.sort(finals);
-        res.medianFinalBalance = (int) finals[MC_FAN_PATHS / 2];
+        res.medianFinalBalance = (int) finals[fanPaths / 2];
         return res;
     }
 
-    private int solveWithdrawal(int balance, int years, SimInputs inp, long seed) {
+    private int solveWithdrawal(int balance, int years, SimInputs inp, long seed, int solvePaths, int binIters) {
         if (balance <= 0 || years <= 0) return 0;
         double lo = 0, hi = balance * 0.22;
-        for (int i = 0; i < BINARY_ITERS; i++) {
+        for (int i = 0; i < binIters; i++) {
             double mid = (lo + hi) / 2.0;
-            if (survivalRate(balance, years, mid, inp, seed) > inp.targetPoS)
+            if (survivalRate(balance, years, mid, inp, seed, solvePaths) > inp.targetPoS)
                 lo = mid; else hi = mid;
         }
         return (int) ((lo + hi) / 2.0);
     }
 
-    private double survivalRate(int balance, int years, double wd, SimInputs inp, long seed) {
+    private double survivalRate(int balance, int years, double wd, SimInputs inp, long seed, int solvePaths) {
         int ok = 0;
-        for (int i = 0; i < MC_SOLVE_PATHS; i++) {
+        for (int i = 0; i < solvePaths; i++) {
             SeededRng rng = new SeededRng(seed * 1000L + i * 7 + 3);
             double b = balance; boolean alive = true;
             for (int y = 0; y < years; y++) {
@@ -889,7 +930,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             }
             if (alive) ok++;
         }
-        return ok / (double) MC_SOLVE_PATHS;
+        return ok / (double) solvePaths;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1027,7 +1068,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 CURRENCY.format(inp.medical), inp.medInflation*100,
                 inp.nomReturn*100, inp.stdDev*100, inp.inflation*100, inp.inflationStdDev*100,
                 formatMoney(res.medianFinalBalance), inp.horizon,
-                res.actualPoS*100, MC_FAN_PATHS
+                res.actualPoS*100, res.fanPathCount
         );
     }
 
@@ -1130,12 +1171,13 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             double[][]rawSer=balMode?data.fanBalances:data.fanWithdrawals;
             double[][]ser=deflatedFan(rawSer,data.fanInflFactors);
             int pts=balMode?yrs+1:yrs;
+            int nPaths=data.fanPathCount;
             double maxV=0;
             for(double[]p:ser)for(double v:p)maxV=Math.max(maxV,v);
             maxV=Math.ceil(maxV/100_000.0)*100_000;
             Rectangle2D pa=pa(); grid(g,pa);
-            int step=Math.max(1,MC_FAN_PATHS/60);
-            for(int p=0;p<MC_FAN_PATHS;p+=step){
+            int step=Math.max(1,nPaths/60);
+            for(int p=0;p<nPaths;p+=step){
                 boolean sv=data.fanBalances[p][yrs]>0;
                 g.setColor(sv?new Color(55,138,221,28):new Color(226,75,74,18));
                 g.setStroke(new BasicStroke(0.7f));
@@ -1145,9 +1187,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             for(int pi=0;pi<3;pi++){
                 double[]pl=new double[pts];
                 for(int y=0;y<pts;y++){
-                    double[]vs=new double[MC_FAN_PATHS];
-                    for(int p=0;p<MC_FAN_PATHS;p++)vs[p]=ser[p][Math.min(y,ser[p].length-1)];
-                    Arrays.sort(vs); pl[y]=vs[(int)(pcts[pi]*(MC_FAN_PATHS-1))];}
+                    double[]vs=new double[nPaths];
+                    for(int p=0;p<nPaths;p++)vs[p]=ser[p][Math.min(y,ser[p].length-1)];
+                    Arrays.sort(vs); pl[y]=vs[(int)(pcts[pi]*(nPaths-1))];}
                 g.setColor(PCTC[pi]); g.setStroke(new BasicStroke(2.2f));
                 drawPath(g,pa,pl,pts,0,maxV,yrs);
                 g.setFont(new Font("SansSerif",Font.PLAIN,10));
@@ -1156,13 +1198,14 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
         private void drawHist(Graphics2D g){
             int yrs=data.inp.horizon;
-            double[]fn=new double[MC_FAN_PATHS];
-            for(int p=0;p<MC_FAN_PATHS;p++){
+            int nPaths=data.fanPathCount;
+            double[]fn=new double[nPaths];
+            for(int p=0;p<nPaths;p++){
                 double raw=data.fanBalances[p][yrs];
                 double f=realDollars?data.fanInflFactors[p][yrs]:1.0;
                 fn[p]=f>0?raw/f:0;}
             Arrays.sort(fn);
-            double maxV=fn[MC_FAN_PATHS-1];
+            double maxV=fn[nPaths-1];
             int BINS=16; double bw=Math.max(1,maxV/BINS);
             int[]cnt=new int[BINS]; int fail=0;
             for(double v:fn){if(v<=0){fail++;continue;}cnt[Math.min(BINS-1,(int)(v/bw))]++;}
@@ -1177,8 +1220,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 g.setColor(new Color(24,95,165)); g.setStroke(new BasicStroke(0.8f));
                 g.draw(new Rectangle2D.Double(x,pa.getMaxY()-h,bwPx,h));}
             g.setColor(new Color(163,45,45)); g.setFont(new Font("SansSerif",Font.BOLD,11));
-            g.drawString(fail+" of "+MC_FAN_PATHS+" failed ("+
-                            String.format("%.0f%%",fail*100.0/MC_FAN_PATHS)+")",
+            g.drawString(fail+" of "+nPaths+" failed ("+
+                            String.format("%.0f%%",fail*100.0/nPaths)+")",
                     (float)(pa.getX()+4),(float)(pa.getY()+14));
             axes(g,pa,0,maxC,BINS,"# paths by final balance");}
 
@@ -1209,6 +1252,17 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 g.setColor(new Color(50,50,50));
                 g.drawString(lbls[li],(int)(pa.getX()+17+li*126),(int)(pa.getY()+13));}
             axes(g,pa,0,maxV,yrs,"Annual dollars");}
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  SCROLLABLE PANEL — tracks viewport width so spinners fill correctly
+    // ════════════════════════════════════════════════════════════════════════
+    static class ScrollablePanel extends JPanel implements javax.swing.Scrollable {
+        @Override public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
+        @Override public int getScrollableUnitIncrement(java.awt.Rectangle r,int o,int d){ return 20; }
+        @Override public int getScrollableBlockIncrement(java.awt.Rectangle r,int o,int d){ return 60; }
+        @Override public boolean getScrollableTracksViewportWidth()  { return true; }
+        @Override public boolean getScrollableTracksViewportHeight() { return false; }
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1259,6 +1313,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         List<MedianRow> medianRows;
         double[][] fanBalances, fanWithdrawals, fanInflFactors;
         double actualPoS; int medianFinalBalance;
+        int fanPathCount; // actual number of fan paths used
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1296,8 +1351,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
     private JPanel wrapSpinner(JSpinner sp){
         sp.setMaximumSize(new Dimension(Integer.MAX_VALUE,28));
-        sp.setPreferredSize(new Dimension(360,28));
-        sp.setMinimumSize(new Dimension(160,28));
+        sp.setPreferredSize(new Dimension(200,28));
+        sp.setMinimumSize(new Dimension(100,28));
         JPanel p=new JPanel(new BorderLayout()); p.setOpaque(false);
         p.add(sp,BorderLayout.CENTER); return p;}
 
