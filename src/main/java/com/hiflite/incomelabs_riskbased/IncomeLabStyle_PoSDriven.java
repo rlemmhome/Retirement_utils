@@ -75,8 +75,11 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     private JSpinner spBaseTax, spTaxInflation;
     private JSpinner spUpperGuardrail, spLowerGuardrail;
     // RMD inputs
-    private JSpinner spRothBalance, spManTradBalance;
-    private JLabel   lblWomanTradBalance;
+    private JSpinner  spRothBalance, spManTradBalance;
+    private JLabel    lblWomanTradBalance;
+    // Randomization
+    private JCheckBox chkRandomize;
+    private long      runSeedOffset = 0L; // 0 = deterministic; set from System.nanoTime() when randomized
 
     // ── Output ───────────────────────────────────────────────────────────────
     private JLabel            lblYear1Answer, lblYear1Sub, lblYear1Detail;
@@ -143,12 +146,24 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         spTargetPoS          = spinI(80, 60, 99, 1, "#");
         spWithdrawStartYear  = spinI(2027, 2025, 2040, 1, "#");
         spWithdrawStartMonth = spinI(1, 1, 12, 1, "#");
+
+        chkRandomize = new JCheckBox("Re-randomize each run (uncheck for reproducible results)");
+        chkRandomize.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        chkRandomize.setForeground(new Color(75, 75, 75));
+        chkRandomize.setOpaque(false);
+        chkRandomize.setAlignmentX(LEFT_ALIGNMENT);
+        chkRandomize.setToolTipText("<html><b>Re-randomize each run</b><br>"
+                + "Checked: each run uses a different random seed — natural MC variance.<br>"
+                + "Unchecked: same seed every run — identical results for same inputs.<br>"
+                + "Use unchecked for scenario comparison; checked to explore uncertainty.</html>");
+
         inner.add(card("Portfolio & Simulation", new Object[]{
                 "Starting portfolio ($)",        spPortfolio,
                 "Retirement horizon (years)",    spHorizon,
                 "Target success rate (%)",       spTargetPoS,
                 "Withdrawal start year",         spWithdrawStartYear,
                 "Withdrawal start month (1-12)", spWithdrawStartMonth,
+                null, chkRandomize,
         }));
 
         // People
@@ -625,8 +640,11 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         btnRun.setEnabled(false);
         progressBar.setIndeterminate(true);
         progressBar.setString("Running Monte Carlo…");
+        // Capture seed offset on the EDT before handing off to worker
+        runSeedOffset = chkRandomize.isSelected() ? System.nanoTime() : 0L;
+        final long seedForThisRun = runSeedOffset;
         SwingWorker<SimResults, Void> worker = new SwingWorker<>() {
-            @Override protected SimResults doInBackground() { return simulate(readInputs()); }
+            @Override protected SimResults doInBackground() { return simulate(readInputs(), seedForThisRun); }
             @Override protected void done() {
                 try {
                     lastResults = get();
@@ -721,12 +739,12 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         return inp.baseTax * Math.pow(1 + inp.taxInflation, calYear - inp.withdrawStartYear);
     }
 
-    private SimResults simulate(SimInputs inp) {
+    private SimResults simulate(SimInputs inp, long seed) {
         SimResults res = new SimResults();
         res.inp = inp;
         res.medianRows = new ArrayList<>();
 
-        int yr1Wd = solveWithdrawal(inp.portfolio, inp.horizon, inp, 999);
+        int yr1Wd = solveWithdrawal(inp.portfolio, inp.horizon, inp, 999 + seed);
         res.yr1Withdrawal = yr1Wd;
 
         double bal         = inp.portfolio;
@@ -741,7 +759,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             boolean drawing = calYear >= inp.withdrawStartYear;
 
             int wd = drawing && bal > 0
-                    ? solveWithdrawal((int) Math.max(0, bal), remaining, inp, 999 + y * 37) : 0;
+                    ? solveWithdrawal((int) Math.max(0, bal), remaining, inp, 999 + y * 37 + seed) : 0;
 
             double wdPct      = (drawing && bal > 0) ? wd / (double) bal * 100.0 : 0.0;
             double vsYr1      = (yr1Wd > 0 && drawing) ? (wd - yr1Wd) / (double) yr1Wd : 0.0;
@@ -813,7 +831,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         int survived = 0;
 
         for (int p = 0; p < MC_FAN_PATHS; p++) {
-            SeededRng rng = new SeededRng(p * 13 + 7);
+            SeededRng rng = new SeededRng(p * 13 + 7 + seed);
             double b = inp.portfolio;
             res.fanBalances[p][0]    = b;
             res.fanInflFactors[p][0] = 1.0;
@@ -828,7 +846,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
                 int wd = 0;
                 if (drawing && b > 0)
-                    wd = solveWithdrawal((int) b, inp.horizon - y, inp, p * 1000 + y * 37);
+                    wd = solveWithdrawal((int) b, inp.horizon - y, inp, p * 1000 + y * 37 + seed);
                 res.fanWithdrawals[p][y] = wd;
 
                 double ret = inp.nomReturn + inp.stdDev * rng.nextGaussian();
@@ -847,7 +865,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         return res;
     }
 
-    private int solveWithdrawal(int balance, int years, SimInputs inp, int seed) {
+    private int solveWithdrawal(int balance, int years, SimInputs inp, long seed) {
         if (balance <= 0 || years <= 0) return 0;
         double lo = 0, hi = balance * 0.22;
         for (int i = 0; i < BINARY_ITERS; i++) {
@@ -858,7 +876,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         return (int) ((lo + hi) / 2.0);
     }
 
-    private double survivalRate(int balance, int years, double wd, SimInputs inp, int seed) {
+    private double survivalRate(int balance, int years, double wd, SimInputs inp, long seed) {
         int ok = 0;
         for (int i = 0; i < MC_SOLVE_PATHS; i++) {
             SeededRng rng = new SeededRng(seed * 1000L + i * 7 + 3);
