@@ -207,6 +207,11 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 "Fan chart paths (chart quality)",    spMcFanPaths,
         }));
 
+        // Wire complexity tooltip to update whenever any MC parameter or horizon changes
+        ChangeListener complexityWatcher = e -> updateRunTooltip();
+        for (JSpinner s : new JSpinner[]{spMcSolvePaths, spBinaryIters, spMcFanPaths, spHorizon})
+            s.addChangeListener(complexityWatcher);
+
         // People
         spManBirthYear    = spinI(1961, 1920, 2000, 1, "#");
         spManBirthMonth   = spinI(9,    1,    12,   1, "#");
@@ -368,6 +373,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getViewport().setBackground(new Color(240, 240, 237));
         outer.add(scroll, BorderLayout.CENTER);
+
+        // Set initial Run button tooltip (will update whenever spinners change)
+        SwingUtilities.invokeLater(this::updateRunTooltip);
         return outer;
     }
 
@@ -386,6 +394,45 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             // Sync portfolio spinner to match account total
             spPortfolio.setValue((int) Math.min(total, 20_000_000));
         } catch (Exception ignored) {}
+    }
+
+    /** Recompute Run button tooltip and return the complexity string for status bar use. */
+    private String updateRunTooltip() {
+        try {
+            int horizon    = iv(spHorizon);
+            int solvePaths = iv(spMcSolvePaths);
+            int fanPaths   = iv(spMcFanPaths);
+            int binIters   = iv(spBinaryIters);
+
+            // Median path: for each of 'horizon' years, binary search runs
+            // binIters × solvePaths × (remaining years avg ≈ horizon/2) paths
+            // Simpler accurate count: sum of solve calls per year × binIters × solvePaths
+            long medianPathYears = (long) horizon * binIters * solvePaths
+                    * (horizon + 1) / 2; // avg remaining years
+            // Fan paths: fanPaths × horizon years × (binIters × solvePaths per year)
+            long fanPathYears    = (long) fanPaths * horizon * binIters * solvePaths;
+            long totalM          = (medianPathYears + fanPathYears) / 1_000_000;
+
+            String complexity = String.format(
+                    "<html><b>Estimated computation at current settings:</b><br>"
+                            + "Fan paths: %,d paths × %d yrs × %d iters × %,d solve paths = <b>%,dM inner path-years</b><br>"
+                            + "Median path: %d yrs × %d iters × %,d solve paths × avg %d remaining yrs = <b>%,dM</b><br>"
+                            + "Grand total: <b>~%,dM inner path-years</b><br><br>"
+                            + "Tip: reduce MC spinners above for faster runs.<br>"
+                            + "200 solve paths + 100 fan paths ≈ 16× faster with modest accuracy loss.</html>",
+                    fanPaths, horizon, binIters, solvePaths, fanPathYears / 1_000_000,
+                    horizon, binIters, solvePaths, (horizon + 1) / 2, medianPathYears / 1_000_000,
+                    totalM);
+
+            String statusStr = String.format(
+                    "Running — %,d fan paths × %d yrs × %d iters × %,d solve paths ≈ %,dM inner path-years…",
+                    fanPaths, horizon, binIters, solvePaths, totalM);
+
+            if (btnRun != null) btnRun.setToolTipText(complexity);
+            return statusStr;
+        } catch (Exception e) {
+            return "Running Monte Carlo…";
+        }
     }
 
     private int computeAge(int birthYear, int birthMonth) {
@@ -757,7 +804,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     private void runSimulation() {
         btnRun.setEnabled(false);
         progressBar.setIndeterminate(true);
-        progressBar.setString("Running Monte Carlo…");
+        // Show computation complexity immediately — before worker starts
+        String complexityMsg = updateRunTooltip();
+        progressBar.setString(complexityMsg);
         // Capture seed offset on the EDT before handing off to worker
         runSeedOffset = chkRandomize.isSelected() ? System.nanoTime() : 0L;
         final long seedForThisRun = runSeedOffset;
