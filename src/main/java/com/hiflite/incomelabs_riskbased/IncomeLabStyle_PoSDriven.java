@@ -72,7 +72,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     private JSpinner spManSSAmount, spManSSStartYear, spManSSStartMonth;
     private JSpinner spWomanSSAmount, spWomanSSStartYear, spWomanSSStartMonth;
     private JSpinner spSSCola;
-    private JSpinner spAnnuity, spAnnuityStartYear;
+    private JSpinner spAnnuity, spAnnuityStartYear, spAnnuityStartMonth;
     private JSpinner spNomReturn, spStdDev, spInflation, spInflationStdDev;
     private JSpinner spLivingExp, spMedical, spMedInflation;
     private JSpinner spBaseTax, spTaxInflation;
@@ -107,6 +107,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
     private SimResults lastResults     = null;
     private boolean    showRealDollars = false;
+    private volatile long simCount     = 0;  // running simulation counter
+    private          long simTotal     = 0;  // grand total for this run
+    private volatile java.util.function.LongConsumer simProgressCallback = null;
 
     private static final NumberFormat CURRENCY = NumberFormat.getCurrencyInstance(Locale.US);
     static { CURRENCY.setMaximumFractionDigits(0); }
@@ -265,9 +268,11 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         // Annuity
         spAnnuity          = spinI(22_599, 0, 500_000, 500, "#,###");
         spAnnuityStartYear = spinI(2028, 2024, 2050, 1, "#");
+        spAnnuityStartMonth= spinI(4, 1, 12, 1, "#");
         inner.add(card("Annuity (Non-COLA)", new Object[]{
-                "Annuity amount ($/yr)", spAnnuity,
-                "Annuity start year",    spAnnuityStartYear,
+                "Annuity amount ($/yr)",         spAnnuity,
+                "Annuity start year",            spAnnuityStartYear,
+                "Annuity start month (1-12)",    spAnnuityStartMonth,
         }));
 
         // RMD assumptions
@@ -396,7 +401,6 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         } catch (Exception ignored) {}
     }
 
-    /** Recompute Run button tooltip and return the complexity string for status bar use. */
     private String updateRunTooltip() {
         try {
             int horizon    = iv(spHorizon);
@@ -404,29 +408,26 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             int fanPaths   = iv(spMcFanPaths);
             int binIters   = iv(spBinaryIters);
 
-            // Median path: for each of 'horizon' years, binary search runs
-            // binIters × solvePaths × (remaining years avg ≈ horizon/2) paths
-            // Simpler accurate count: sum of solve calls per year × binIters × solvePaths
-            long medianPathYears = (long) horizon * binIters * solvePaths
-                    * (horizon + 1) / 2; // avg remaining years
-            // Fan paths: fanPaths × horizon years × (binIters × solvePaths per year)
-            long fanPathYears    = (long) fanPaths * horizon * binIters * solvePaths;
-            long totalM          = (medianPathYears + fanPathYears) / 1_000_000;
+            long medianSims = (long) horizon * binIters * solvePaths * (horizon + 1) / 2;
+            long fanSims    = (long) fanPaths * horizon * binIters * solvePaths;
+            long totalSims  = medianSims + fanSims;
+            long totalM     = totalSims / 1_000_000;
 
             String complexity = String.format(
                     "<html><b>Estimated computation at current settings:</b><br>"
-                            + "Fan paths: %,d paths × %d yrs × %d iters × %,d solve paths = <b>%,dM inner path-years</b><br>"
-                            + "Median path: %d yrs × %d iters × %,d solve paths × avg %d remaining yrs = <b>%,dM</b><br>"
-                            + "Grand total: <b>~%,dM inner path-years</b><br><br>"
+                            + "Fan paths: %,d paths × %d yrs × %d iters × %,d solve paths"
+                            + " = <b>%,dM simulations</b><br>"
+                            + "Median path: %d yrs × %d iters × %,d solve paths × avg %d remaining yrs"
+                            + " = <b>%,dM simulations</b><br>"
+                            + "Grand total: <b>~%,dM simulations performed</b><br><br>"
                             + "Tip: reduce MC spinners above for faster runs.<br>"
                             + "200 solve paths + 100 fan paths ≈ 16× faster with modest accuracy loss.</html>",
-                    fanPaths, horizon, binIters, solvePaths, fanPathYears / 1_000_000,
-                    horizon, binIters, solvePaths, (horizon + 1) / 2, medianPathYears / 1_000_000,
+                    fanPaths, horizon, binIters, solvePaths, fanSims / 1_000_000,
+                    horizon, binIters, solvePaths, (horizon + 1) / 2, medianSims / 1_000_000,
                     totalM);
 
             String statusStr = String.format(
-                    "Running — %,d fan paths × %d yrs × %d iters × %,d solve paths ≈ %,dM inner path-years…",
-                    fanPaths, horizon, binIters, solvePaths, totalM);
+                    "Running — 0 / ~%,dM simulations performed…", totalM);
 
             if (btnRun != null) btnRun.setToolTipText(complexity);
             return statusStr;
@@ -531,7 +532,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 "Living", "Medical", "Tax (est)",                           // 11 12 13
                 "Total spend", "Total income", "Surplus/gap",               // 14 15 16
                 "Infl factor", "Return used", "Infl used",                  // 17 18h 19h
-                "Man RMD", "Woman RMD", "Combined RMD", "→ Roth/MM"        // 20 21 22 23
+                "Man RMD", "Woman RMD", "Combined RMD", "→ Roth/MM",        // 20 21 22 23
+                "Bal Δ"                                                       // 24 balance change
         };
         tblModel = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -598,6 +600,44 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                             : "RMD is within the 80% PoS withdrawal amount.")
                             + "</html>";
                 }
+                // Bal Δ col (24) — detailed breakdown tooltip
+                if (col == 24 && row < lastResults.medianRows.size()) {
+                    MedianRow mr = lastResults.medianRows.get(row);
+                    double d = showRealDollars ? mr.inflFactor : 1.0;
+                    int balChange = mr.balDelta;
+                    int growth    = mr.investmentGrowth;
+                    int spend     = mr.wdActual;
+                    double pctChg = mr.balance > 0
+                            ? balChange / (double) mr.balance * 100.0 : 0.0;
+                    StringBuilder sb = new StringBuilder("<html><b>Portfolio change: ");
+                    sb.append(balChange >= 0 ? "+" : "")
+                            .append(CURRENCY.format((long)(balChange / d)))
+                            .append(String.format(" (%+.1f%%)", pctChg))
+                            .append("</b><br>");
+                    sb.append(String.format("&nbsp;&nbsp;Market growth (%.2f%%):&nbsp;&nbsp;&nbsp;+%s<br>",
+                            lastResults.inp.nomReturn * 100,
+                            CURRENCY.format((long)(growth / d))));
+                    sb.append(String.format("&nbsp;&nbsp;Withdrawal (spending):&nbsp;&nbsp;&nbsp;&minus;%s<br>",
+                            CURRENCY.format((long)(spend / d))));
+                    sb.append(String.format("&nbsp;&nbsp;<b>Net change:</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s%s",
+                            balChange >= 0 ? "+" : "",
+                            CURRENCY.format((long)(Math.abs(balChange) / d))));
+                    if (mr.rmdOverage > 0) {
+                        sb.append("<br><br><i>Note: Combined RMD of ")
+                                .append(CURRENCY.format((long)(mr.combRmd / d)))
+                                .append(" exceeds planned withdrawal of ")
+                                .append(CURRENCY.format((long)(spend / d)))
+                                .append(".<br>")
+                                .append("The overage of ")
+                                .append(CURRENCY.format((long)(mr.rmdOverage / d)))
+                                .append(" is withdrawn from traditional IRA/401K accounts<br>")
+                                .append("(as required by law) and assumed to be reinvested<br>")
+                                .append("in a Roth IRA or Money Market account.<br>")
+                                .append("This does <b>not</b> affect the portfolio balance shown above.</i>");
+                    }
+                    sb.append("</html>");
+                    return sb.toString();
+                }
                 return super.getToolTipText(e);
             }
         };
@@ -618,7 +658,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 72, 72, 78,                          // 11-13 living/medical/tax
                 88, 95, 85,                          // 14-16 totals + surplus
                 72, 0, 0,                            // 17, 18h, 19h
-                80, 85, 90, 85                       // 20-23 RMDs
+                80, 85, 90, 85,                      // 20-23 RMDs
+                90                                   // 24 Bal Δ
         };
         for (int i = 0; i < w.length && i < tblResults.getColumnCount(); i++) {
             TableColumn tc = tblResults.getColumnModel().getColumn(i);
@@ -660,6 +701,12 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                                     + "must be taken from the traditional account but is redirected<br>"
                                     + "to a Roth IRA or money market — NOT spent. Net worth preserved.<br>"
                                     + "This is effectively an involuntary Roth conversion opportunity.</html>");
+                    case 24 -> header.setToolTipText(
+                            "<html><b>Bal Δ — portfolio balance change</b><br>"
+                                    + "= end-of-year balance − start-of-year balance.<br>"
+                                    + "= market growth − spending withdrawal.<br>"
+                                    + "Green = portfolio grew · Red = portfolio shrank.<br>"
+                                    + "Hover individual cells for full year breakdown.</html>");
                     default -> header.setToolTipText(null);
                 }
             }
@@ -709,6 +756,10 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                     } else if (col == COL_CMB_RMD && isRmdExceedsWd(row)) {
                         c.setBackground(AMBER_BG); c.setForeground(AMBER_FG);
                     } else if (col == COL_SURPLUS) {
+                        c.setForeground(s.startsWith("-") ? new Color(180,30,30)
+                                : new Color(59,109,17));
+                    } else if (col == 24) {
+                        // Bal Δ — green if portfolio grew, red if shrank
                         c.setForeground(s.startsWith("-") ? new Color(180,30,30)
                                 : new Color(59,109,17));
                     }
@@ -803,29 +854,54 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     // ════════════════════════════════════════════════════════════════════════
     private void runSimulation() {
         btnRun.setEnabled(false);
-        progressBar.setIndeterminate(true);
-        // Show computation complexity immediately — before worker starts
+        progressBar.setIndeterminate(false);
+        progressBar.setValue(0);
+        // Compute grand total and show immediately
         String complexityMsg = updateRunTooltip();
         progressBar.setString(complexityMsg);
-        // Capture seed offset on the EDT before handing off to worker
+        // Capture parameters on EDT
         runSeedOffset = chkRandomize.isSelected() ? System.nanoTime() : 0L;
         final long seedForThisRun = runSeedOffset;
-        // Capture MC parameters on EDT before handing to worker
         final int solvePaths  = iv(spMcSolvePaths);
         final int fanPaths    = iv(spMcFanPaths);
         final int binIters    = iv(spBinaryIters);
-        SwingWorker<SimResults, Void> worker = new SwingWorker<>() {
+        final int horizon     = iv(spHorizon);
+        // Compute grand total for progress bar
+        simTotal = (long) fanPaths * horizon * binIters * solvePaths
+                + (long) horizon * binIters * solvePaths * (horizon + 1) / 2;
+        simCount = 0;
+        final long grandTotal = simTotal;
+        final long grandTotalM = Math.max(1, grandTotal / 1_000_000);
+
+        SwingWorker<SimResults, Long> worker = new SwingWorker<>() {
             @Override protected SimResults doInBackground() {
-                return simulate(readInputs(), seedForThisRun, solvePaths, fanPaths, binIters);
+                // Target ~100 progress updates across the full run (1% per step)
+                final long publishInterval = Math.max(solvePaths, grandTotal / 100);
+                simProgressCallback = running -> {
+                    if (running % publishInterval < solvePaths) publish(running);
+                };
+                SimResults r = simulate(readInputs(), seedForThisRun, solvePaths, fanPaths, binIters);
+                simProgressCallback = null;
+                return r;
+            }
+            @Override protected void process(java.util.List<Long> chunks) {
+                // chunks contains running totals published from simulation thread
+                if (chunks.isEmpty()) return;
+                long latest = chunks.get(chunks.size() - 1);
+                long pct    = Math.min(100, latest * 100 / grandTotal);
+                progressBar.setValue((int) pct);
+                long latestM = latest / 1_000_000;
+                progressBar.setString(String.format(
+                        "%,dM / ~%,dM simulations performed…", latestM, grandTotalM));
             }
             @Override protected void done() {
                 try {
                     lastResults = get();
                     updateUI(lastResults);
-                    progressBar.setIndeterminate(false);
-                    progressBar.setString("Complete — " + fanPaths
-                            + " fan paths × " + lastResults.inp.horizon + " years · "
-                            + solvePaths + " solve paths · " + binIters + " binary iters");
+                    progressBar.setValue(100);
+                    progressBar.setString(String.format(
+                            "Complete — ~%,dM simulations · %,d fan paths · %,d solve paths · %d iters",
+                            grandTotalM, fanPaths, solvePaths, binIters));
                 } catch (Exception ex) {
                     progressBar.setString("Error: " + ex.getMessage());
                     ex.printStackTrace();
@@ -856,6 +932,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         i.ssCola             = dv(spSSCola)          / 100.0;
         i.annuity            = iv(spAnnuity);
         i.annuityStartYear   = iv(spAnnuityStartYear);
+        i.annuityStartMonth  = iv(spAnnuityStartMonth);
         i.manTradIRA     = iv(spManTradIRA);
         i.manRothIRA     = iv(spManRothIRA);
         i.womanRoth401K  = iv(spWomanRoth401K);
@@ -911,7 +988,11 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     }
 
     private double annuityThisYear(SimInputs inp, int y) {
-        return (BASE_YEAR + y) >= inp.annuityStartYear ? inp.annuity : 0;
+        int calYear = BASE_YEAR + y;
+        if (calYear < inp.annuityStartYear) return 0;
+        if (calYear == inp.annuityStartYear)
+            return inp.annuity * (13.0 - inp.annuityStartMonth) / 12.0;
+        return inp.annuity;
     }
 
     private double taxThisYear(SimInputs inp, int y) {
@@ -985,12 +1066,13 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             }
 
             MedianRow row = new MedianRow();
-            row.calYear     = calYear;
-            row.manAge      = manAge;
-            row.womanAge    = womanAge;
-            row.balance     = (int) Math.max(0, bal);
+            row.calYear        = calYear;
+            row.manAge           = manAge;
+            row.womanAge         = womanAge;
+            row.balance          = (int) Math.max(0, bal);         // start-of-year balance (displayed)
+            row.investmentGrowth = (int)(bal * inp.nomReturn);     // dollar gain from mean return
             row.withdrawal  = wd;       // pure 80% PoS amount — display only
-            row.wdActual    = wdActual; // actual amount taken (max of goGo-PoS and RMD)
+            row.wdActual    = wdActual; // actual amount taken
             row.wdPct       = wdPct;
             row.vsYr1       = vsYr1;
             row.alert       = alert;
@@ -1015,12 +1097,15 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             row.rmdOverage  = rmdOverage;
             res.medianRows.add(row);
 
-            // Advance: portfolio grows then withdraw actual amount; traditional accounts grow then RMD
-            bal          = bal          * (1 + inp.nomReturn) - wdActual;
+            // Advance: compute next year's starting balance
+            double nextBal = Math.max(0, bal * (1 + inp.nomReturn) - wdActual);
+            // Store end-of-year balance back into the row for Bal Δ computation
+            // Bal Δ = nextBal − bal (growth minus withdrawal)
+            row.balDelta    = (int)(nextBal - bal);
+            bal          = nextBal;
             manTradIRA   = manTradIRA   * (1 + inp.nomReturn) - manRmd;
             womanTradIRA = womanTradIRA * (1 + inp.nomReturn) - calcRmd(womanTradIRA, womanAge);
             womanTrad401K= womanTrad401K* (1 + inp.nomReturn) - calcRmd(womanTrad401K, womanAge);
-            if (bal < 0)          bal          = 0;
             if (manTradIRA < 0)   manTradIRA   = 0;
             if (womanTradIRA < 0) womanTradIRA = 0;
             if (womanTrad401K< 0) womanTrad401K= 0;
@@ -1115,13 +1200,16 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             for (int y = 0; y < years; y++) {
                 double infl   = Math.max(0, inp.inflation + inp.inflationStdDev * rng.nextGaussian());
                 double ret    = inp.nomReturn + inp.stdDev * rng.nextGaussian();
-                // Apply go-go multiplier for years still within go-go period
                 double mult   = (y < goGoYearsRemaining) ? inp.goGoMultiplier : 1.0;
                 b = b * (1 + ret) - wd * mult * Math.pow(1 + infl, y);
                 if (b <= 0) { alive = false; break; }
             }
             if (alive) ok++;
         }
+        // Increment running counter and notify progress callback (throttled inside callback)
+        long running = (simCount += solvePaths);
+        java.util.function.LongConsumer cb = simProgressCallback;
+        if (cb != null) cb.accept(running);
         return ok / (double) solvePaths;
     }
 
@@ -1189,6 +1277,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                     r.womanRmd > 0 ? CURRENCY.format((long)(r.womanRmd / d)) : "—",       // 21
                     r.combRmd  > 0 ? CURRENCY.format((long)(r.combRmd  / d)) : "—",       // 22
                     r.rmdOverage > 0 ? CURRENCY.format((long)(r.rmdOverage / d)) : "—",   // 23
+                    formatBalDelta(r, d),                                                  // 24
             });
         }
 
@@ -1489,7 +1578,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         int manSSAmount, manSSStartYear, manSSStartMonth;
         int womanSSAmount, womanSSStartYear, womanSSStartMonth;
         double ssCola;
-        int annuity, annuityStartYear;
+        int annuity, annuityStartYear, annuityStartMonth;
         // Account balances
         int manTradIRA;      // traditional IRA — RMD at 75
         int manRothIRA;      // Roth IRA — no RMD
@@ -1506,6 +1595,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
     static class MedianRow {
         int calYear, manAge, womanAge, balance, withdrawal, wdActual;
+        int investmentGrowth; // dollar gain from market return this year
+        int balDelta;         // net portfolio change this year (growth − wdActual)
         int manRmd, womanRmd, combRmd;
         int manSS, womanSS, annuity, guaranteed;
         int living, medical, tax, totalSpend, totalIncome, surplus;
@@ -1590,6 +1681,12 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         s.setForeground(new Color(140,140,140));
         p.add(t,BorderLayout.NORTH); p.add(val,BorderLayout.CENTER);
         p.add(s,BorderLayout.SOUTH); return p;}
+
+    private String formatBalDelta(MedianRow r, double deflator) {
+        int delta = r.balDelta;
+        return (delta >= 0 ? "+" : "-")
+                + CURRENCY.format((long)(Math.abs(delta) / deflator));
+    }
 
     private static String formatMoney(long n){
         if(Math.abs(n)>=1_000_000)return String.format("$%.2fM",n/1_000_000.0);
