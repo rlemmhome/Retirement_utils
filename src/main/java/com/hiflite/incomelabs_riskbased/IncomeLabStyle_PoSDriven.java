@@ -82,6 +82,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     // Account balance spinners
     private JSpinner spManTradIRA;      // man's traditional IRA (RMD at 75)
     private JSpinner spManRothIRA;      // man's Roth IRA (no RMD)
+    private JSpinner spManTrad401K;     // man's traditional 401K (RMD at 75)
     private JSpinner spWomanRoth401K;   // woman's Roth 401K (no RMD)
     private JSpinner spWomanTradIRA;    // woman's traditional IRA (RMD at 75)
     private JSpinner spWomanTrad401K;   // woman's traditional 401K (RMD at 75)
@@ -279,6 +280,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         // Account balances
         spManTradIRA    = spinI(900_000, 0, 10_000_000, 10_000, "#,###");
         spManRothIRA    = spinI(10_000,  0, 10_000_000, 10_000, "#,###");
+        spManTrad401K   = spinI(0,       0, 10_000_000, 10_000, "#,###");
         spWomanRoth401K = spinI(33_000,  0, 10_000_000, 10_000, "#,###");
         spWomanTradIRA  = spinI(286_000, 0, 10_000_000, 10_000, "#,###");
         spWomanTrad401K = spinI(320_000, 0, 10_000_000, 10_000, "#,###");
@@ -290,15 +292,17 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
         ChangeListener acctWatcher = e -> updateAccountTotal();
         for (JSpinner s : new JSpinner[]{
-                spManTradIRA, spManRothIRA, spWomanRoth401K, spWomanTradIRA, spWomanTrad401K})
+                spManTradIRA, spManRothIRA, spManTrad401K,
+                spWomanRoth401K, spWomanTradIRA, spWomanTrad401K})
             s.addChangeListener(acctWatcher);
         updateAccountTotal();
 
         inner.add(card("Account Balances (SECURE 2.0 RMD — age 75)", new Object[]{
-                "Man — traditional IRA ($)  [RMD age 75]",  spManTradIRA,
-                "Man — Roth IRA ($)  [no RMD]",             spManRothIRA,
-                "Woman — Roth 401K ($)  [no RMD]",          spWomanRoth401K,
-                "Woman — traditional IRA ($)  [RMD age 75]",spWomanTradIRA,
+                "Man — traditional IRA ($)  [RMD age 75]",   spManTradIRA,
+                "Man — Roth IRA ($)  [no RMD]",              spManRothIRA,
+                "Man — traditional 401K ($)  [RMD age 75]",  spManTrad401K,
+                "Woman — Roth 401K ($)  [no RMD]",           spWomanRoth401K,
+                "Woman — traditional IRA ($)  [RMD age 75]", spWomanTradIRA,
                 "Woman — traditional 401K ($)  [RMD age 75]",spWomanTrad401K,
                 null, lblAccountTotal,
         }));
@@ -393,10 +397,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
     private void updateAccountTotal() {
         try {
-            long total = (long)iv(spManTradIRA) + iv(spManRothIRA)
+            long total = (long)iv(spManTradIRA) + iv(spManRothIRA) + iv(spManTrad401K)
                     + iv(spWomanRoth401K) + iv(spWomanTradIRA) + iv(spWomanTrad401K);
             lblAccountTotal.setText("Account total: " + CURRENCY.format(total));
-            // Sync portfolio spinner to match account total
             spPortfolio.setValue((int) Math.min(total, 20_000_000));
         } catch (Exception ignored) {}
     }
@@ -935,11 +938,12 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         i.annuityStartMonth  = iv(spAnnuityStartMonth);
         i.manTradIRA     = iv(spManTradIRA);
         i.manRothIRA     = iv(spManRothIRA);
+        i.manTrad401K    = iv(spManTrad401K);
         i.womanRoth401K  = iv(spWomanRoth401K);
         i.womanTradIRA   = iv(spWomanTradIRA);
         i.womanTrad401K  = iv(spWomanTrad401K);
         // Portfolio = sum of all accounts
-        i.portfolio      = i.manTradIRA + i.manRothIRA
+        i.portfolio      = i.manTradIRA + i.manRothIRA + i.manTrad401K
                 + i.womanRoth401K + i.womanTradIRA + i.womanTrad401K;
         i.nomReturn          = dv(spNomReturn)        / 100.0;
         i.stdDev             = dv(spStdDev)           / 100.0;
@@ -1012,10 +1016,11 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 solvePaths, binIters, goGoAtStart);
         res.yr1Withdrawal = yr1Wd;
 
-        double bal         = inp.portfolio;
-        double manTradIRA  = inp.manTradIRA;
-        double womanTradIRA= inp.womanTradIRA;
-        double womanTrad401K=inp.womanTrad401K;
+        double bal          = inp.portfolio;
+        double manTradIRA   = inp.manTradIRA;
+        double manTrad401K  = inp.manTrad401K;
+        double womanTradIRA = inp.womanTradIRA;
+        double womanTrad401K= inp.womanTrad401K;
 
         for (int y = 0; y < inp.horizon; y++) {
             int calYear   = BASE_YEAR + y;
@@ -1031,8 +1036,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                     ? solveWithdrawal((int) Math.max(0, bal), remaining, inp,
                     999 + y * 37 + seed, solvePaths, binIters, goGoRemaining) : 0;
 
-            // RMD: man from traditional IRA; woman from traditional IRA + traditional 401K
-            double manRmd    = calcRmd(manTradIRA,   manAge);
+            // RMD: man from traditional IRA + traditional 401K; woman from traditional IRA + traditional 401K
+            double manRmd    = calcRmd(manTradIRA, manAge) + calcRmd(manTrad401K, manAge);
             double womanRmd  = calcRmd(womanTradIRA, womanAge) + calcRmd(womanTrad401K, womanAge);
             double combRmd   = manRmd + womanRmd;
 
@@ -1099,14 +1104,15 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
             // Advance: compute next year's starting balance
             double nextBal = Math.max(0, bal * (1 + inp.nomReturn) - wdActual);
-            // Store end-of-year balance back into the row for Bal Δ computation
             // Bal Δ = nextBal − bal (growth minus withdrawal)
             row.balDelta    = (int)(nextBal - bal);
             bal          = nextBal;
-            manTradIRA   = manTradIRA   * (1 + inp.nomReturn) - manRmd;
+            manTradIRA   = manTradIRA   * (1 + inp.nomReturn) - calcRmd(manTradIRA,   manAge);
+            manTrad401K  = manTrad401K  * (1 + inp.nomReturn) - calcRmd(manTrad401K,  manAge);
             womanTradIRA = womanTradIRA * (1 + inp.nomReturn) - calcRmd(womanTradIRA, womanAge);
-            womanTrad401K= womanTrad401K* (1 + inp.nomReturn) - calcRmd(womanTrad401K, womanAge);
+            womanTrad401K= womanTrad401K* (1 + inp.nomReturn) - calcRmd(womanTrad401K,womanAge);
             if (manTradIRA < 0)   manTradIRA   = 0;
+            if (manTrad401K < 0)  manTrad401K  = 0;
             if (womanTradIRA < 0) womanTradIRA = 0;
             if (womanTrad401K< 0) womanTrad401K= 0;
         }
@@ -1120,7 +1126,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         for (int p = 0; p < fanPaths; p++) {
             SeededRng rng = new SeededRng(p * 13 + 7 + seed);
             double b            = inp.portfolio;
-            double fpManTrad    = inp.manTradIRA;      // tracked per-path with actual returns
+            double fpManTrad    = inp.manTradIRA;
+            double fpManT401K   = inp.manTrad401K;
             double fpWomanTrad  = inp.womanTradIRA;
             double fpWomanT401K = inp.womanTrad401K;
             res.fanBalances[p][0]    = b;
@@ -1142,7 +1149,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 int fanWomanAge      = calYear - inp.womanBirthYear;
 
                 // RMD from per-path tracked balances — correct, not inflated approximation
-                double fanManRmd   = calcRmd(fpManTrad,    fanManAge);
+                double fanManRmd   = calcRmd(fpManTrad,    fanManAge)
+                        + calcRmd(fpManT401K,   fanManAge);
                 double fanWomanRmd = calcRmd(fpWomanTrad,  fanWomanAge)
                         + calcRmd(fpWomanT401K, fanWomanAge);
                 double fanCombRmd  = fanManRmd + fanWomanRmd;
@@ -1156,13 +1164,15 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 int wdFanActual     = drawing ? wdFanGoGo : 0; // spending only, RMD overage → Roth/MM
                 res.fanWithdrawals[p][y] = wdFanActual;
 
-                // Advance portfolio and all three traditional accounts with same random return
+                // Advance portfolio and all traditional accounts with same random return
                 b            = b            * (1 + ret) - wdFanActual;
-                fpManTrad    = fpManTrad    * (1 + ret) - fanManRmd;
+                fpManTrad    = fpManTrad    * (1 + ret) - calcRmd(fpManTrad,   fanManAge);
+                fpManT401K   = fpManT401K   * (1 + ret) - calcRmd(fpManT401K,  fanManAge);
                 fpWomanTrad  = fpWomanTrad  * (1 + ret) - calcRmd(fpWomanTrad,  fanWomanAge);
                 fpWomanT401K = fpWomanT401K * (1 + ret) - calcRmd(fpWomanT401K, fanWomanAge);
                 if (b            < 0) b            = 0;
                 if (fpManTrad    < 0) fpManTrad    = 0;
+                if (fpManT401K   < 0) fpManT401K   = 0;
                 if (fpWomanTrad  < 0) fpWomanTrad  = 0;
                 if (fpWomanT401K < 0) fpWomanT401K = 0;
                 res.fanBalances[p][y + 1] = b;
@@ -1510,7 +1520,42 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             g.drawString(fail+" of "+nPaths+" failed ("+
                             String.format("%.0f%%",fail*100.0/nPaths)+")",
                     (float)(pa.getX()+4),(float)(pa.getY()+14));
-            axes(g,pa,0,maxC,BINS,"# paths by final balance");}
+
+            // Y axis: # of paths (0 to maxC)
+            g.setFont(new Font("SansSerif",Font.PLAIN,10));
+            g.setColor(new Color(90,90,90));
+            for(int i=0;i<=6;i++){
+                double val=maxC*(1-i/6.0);
+                double y=pa.getY()+i/6.0*pa.getHeight();
+                String lbl=String.format("%,d",(int)val);
+                FontMetrics fm=g.getFontMetrics();
+                g.drawString(lbl,(float)(pa.getX()-fm.stringWidth(lbl)-3),(float)(y+4));}
+
+            // X axis: dollar bin labels (every 4 bins to avoid crowding)
+            for(int b=0;b<=BINS;b+=4){
+                double x=pa.getX()+b/(double)BINS*pa.getWidth();
+                String lbl=formatMoney((long)(b*bw));
+                FontMetrics fm=g.getFontMetrics();
+                g.drawString(lbl,(float)(x-fm.stringWidth(lbl)/2.0),(float)(pa.getMaxY()+14));}
+
+            // Y axis rotated label
+            Graphics2D g2=(Graphics2D)g.create();
+            g2.rotate(-Math.PI/2,11,pa.getCenterY());
+            g2.setFont(new Font("SansSerif",Font.PLAIN,10));
+            g2.setColor(new Color(100,100,100));
+            String yLbl="# of paths";
+            FontMetrics fm2=g2.getFontMetrics();
+            g2.drawString(yLbl,(float)(11-fm2.stringWidth(yLbl)/2.0),(float)pa.getCenterY());
+            g2.dispose();
+
+            // X axis title
+            g.setFont(new Font("SansSerif",Font.PLAIN,10));
+            g.setColor(new Color(100,100,100));
+            String xLbl="Final portfolio balance" + (realDollars?" (2026 $)":" (nominal)");
+            FontMetrics fmx=g.getFontMetrics();
+            g.drawString(xLbl,(float)(pa.getCenterX()-fmx.stringWidth(xLbl)/2.0),
+                    (float)(pa.getMaxY()+28));
+        }
 
         private void drawIncome(Graphics2D g){
             List<MedianRow>rows=data.medianRows; if(rows.isEmpty())return;
@@ -1582,6 +1627,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         // Account balances
         int manTradIRA;      // traditional IRA — RMD at 75
         int manRothIRA;      // Roth IRA — no RMD
+        int manTrad401K;     // traditional 401K — RMD at 75
         int womanRoth401K;   // Roth 401K — no RMD
         int womanTradIRA;    // traditional IRA — RMD at 75
         int womanTrad401K;   // traditional 401K — RMD at 75
