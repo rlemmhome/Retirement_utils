@@ -199,7 +199,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 + "50 = ~8x faster, fan chart is rough but usable for quick checks.<br>"
                 + "Each fan path re-solves withdrawal every year — very expensive.</html>");
 
-        inner.add(card("Portfolio & Simulation", new Object[]{
+        JPanel cardPortfolio = card("Portfolio & Simulation", new Object[]{
                 "Starting portfolio ($)",        spPortfolio,
                 "Retirement horizon (years)",    spHorizon,
                 "Target success rate (%)",       spTargetPoS,
@@ -209,7 +209,20 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 "MC solve paths (accuracy vs speed)", spMcSolvePaths,
                 "Binary search iterations",           spBinaryIters,
                 "Fan chart paths (chart quality)",    spMcFanPaths,
-        }));
+        });
+        SpinnerDef[] sdPortfolio = {
+                new SpinnerDef(spPortfolio,         "portfolio",    1_549_000),
+                new SpinnerDef(spHorizon,           "horizon",      30),
+                new SpinnerDef(spTargetPoS,         "targetPoS",    80),
+                new SpinnerDef(spWithdrawStartYear, "wdStartYear",  2027),
+                new SpinnerDef(spWithdrawStartMonth,"wdStartMonth", 1),
+                new SpinnerDef(spMcSolvePaths,      "mcSolvePaths", 800),
+                new SpinnerDef(spBinaryIters,       "binaryIters",  22),
+                new SpinnerDef(spMcFanPaths,        "mcFanPaths",   400),
+        };
+        CheckDef[] cdPortfolio = { new CheckDef(chkRandomize, "rerandomize", false) };
+        cardPortfolio.add(sectionButtons("portfolio", sdPortfolio, cdPortfolio));
+        inner.add(cardPortfolio);
 
         // Wire complexity tooltip to update whenever any MC parameter or horizon changes
         ChangeListener complexityWatcher = e -> updateRunTooltip();
@@ -234,13 +247,21 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         }
         ageDisplay.add(lblManAge); ageDisplay.add(lblWomanAge);
 
-        inner.add(card("People — Birth Dates", new Object[]{
+        JPanel cardPeople = card("People — Birth Dates", new Object[]{
                 "Man — birth year",           spManBirthYear,
                 "Man — birth month (1-12)",   spManBirthMonth,
                 "Woman — birth year",         spWomanBirthYear,
                 "Woman — birth month (1-12)", spWomanBirthMonth,
                 null, ageDisplay,
-        }));
+        });
+        SpinnerDef[] sdPeople = {
+                new SpinnerDef(spManBirthYear,   "manBirthYear",   1961),
+                new SpinnerDef(spManBirthMonth,  "manBirthMonth",  9),
+                new SpinnerDef(spWomanBirthYear, "womanBirthYear", 1962),
+                new SpinnerDef(spWomanBirthMonth,"womanBirthMonth",12),
+        };
+        cardPeople.add(sectionButtons("people", sdPeople, new CheckDef[0]));
+        inner.add(cardPeople);
 
         ChangeListener ageWatcher = e -> updateAgeLabels();
         for (JSpinner s : new JSpinner[]{
@@ -256,7 +277,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         spWomanSSStartYear  = spinI(2027,   2024, 2045,    1,   "#");
         spWomanSSStartMonth = spinI(12,     1,    12,      1,   "#");
         spSSCola            = spinD(2.3,    0.0,  6.0,     0.1, "0.0#");
-        inner.add(card("Social Security", new Object[]{
+        JPanel cardSS = card("Social Security", new Object[]{
                 "Man SS amount ($/yr)",        spManSSAmount,
                 "Man SS start year",           spManSSStartYear,
                 "Man SS start month (1-12)",   spManSSStartMonth,
@@ -264,17 +285,35 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 "Woman SS start year",         spWomanSSStartYear,
                 "Woman SS start month (1-12)", spWomanSSStartMonth,
                 "SS COLA rate (%/yr)",         spSSCola,
-        }));
+        });
+        SpinnerDef[] sdSS = {
+                new SpinnerDef(spManSSAmount,       "manSSAmount",      40_400),
+                new SpinnerDef(spManSSStartYear,    "manSSStartYear",   2027),
+                new SpinnerDef(spManSSStartMonth,   "manSSStartMonth",  1),
+                new SpinnerDef(spWomanSSAmount,     "womanSSAmount",    40_520),
+                new SpinnerDef(spWomanSSStartYear,  "womanSSStartYear", 2027),
+                new SpinnerDef(spWomanSSStartMonth, "womanSSStartMonth",12),
+                new SpinnerDef(spSSCola,            "ssCola",           2.3),
+        };
+        cardSS.add(sectionButtons("ss", sdSS, new CheckDef[0]));
+        inner.add(cardSS);
 
         // Annuity
         spAnnuity          = spinI(22_599, 0, 500_000, 500, "#,###");
         spAnnuityStartYear = spinI(2028, 2024, 2050, 1, "#");
         spAnnuityStartMonth= spinI(4, 1, 12, 1, "#");
-        inner.add(card("Annuity (Non-COLA)", new Object[]{
+        JPanel cardAnn = card("Annuity (Non-COLA)", new Object[]{
                 "Annuity amount ($/yr)",         spAnnuity,
                 "Annuity start year",            spAnnuityStartYear,
                 "Annuity start month (1-12)",    spAnnuityStartMonth,
-        }));
+        });
+        SpinnerDef[] sdAnn = {
+                new SpinnerDef(spAnnuity,           "amount",     22_599),
+                new SpinnerDef(spAnnuityStartYear,  "startYear",  2028),
+                new SpinnerDef(spAnnuityStartMonth, "startMonth", 4),
+        };
+        cardAnn.add(sectionButtons("annuity", sdAnn, new CheckDef[0]));
+        inner.add(cardAnn);
 
         // RMD assumptions
         // Account balances
@@ -297,7 +336,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             s.addChangeListener(acctWatcher);
         updateAccountTotal();
 
-        inner.add(card("Account Balances (SECURE 2.0 RMD — age 75)", new Object[]{
+        JPanel cardAccts = card("Account Balances (SECURE 2.0 RMD — age 75)", new Object[]{
                 "Man — traditional IRA ($)  [RMD age 75]",   spManTradIRA,
                 "Man — Roth IRA ($)  [no RMD]",              spManRothIRA,
                 "Man — traditional 401K ($)  [RMD age 75]",  spManTrad401K,
@@ -305,19 +344,37 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 "Woman — traditional IRA ($)  [RMD age 75]", spWomanTradIRA,
                 "Woman — traditional 401K ($)  [RMD age 75]",spWomanTrad401K,
                 null, lblAccountTotal,
-        }));
+        });
+        SpinnerDef[] sdAccts = {
+                new SpinnerDef(spManTradIRA,    "manTradIRA",    900_000),
+                new SpinnerDef(spManRothIRA,    "manRothIRA",    10_000),
+                new SpinnerDef(spManTrad401K,   "manTrad401K",   0),
+                new SpinnerDef(spWomanRoth401K, "womanRoth401K", 33_000),
+                new SpinnerDef(spWomanTradIRA,  "womanTradIRA",  286_000),
+                new SpinnerDef(spWomanTrad401K, "womanTrad401K", 320_000),
+        };
+        cardAccts.add(sectionButtons("accounts", sdAccts, new CheckDef[0]));
+        inner.add(cardAccts);
 
         // Market
         spNomReturn       = spinD(6.70,  1.0,  15.0, 0.1,  "0.00");
         spStdDev          = spinD(10.79, 2.0,  30.0, 0.1,  "0.00");
         spInflation       = spinD(3.79,  0.5,  10.0, 0.01, "0.00");
         spInflationStdDev = spinD(2.73,  0.0,  8.0,  0.01, "0.00");
-        inner.add(card("Market Assumptions (1961-2024 historical defaults)", new Object[]{
+        JPanel cardMkt = card("Market Assumptions (1961-2024 historical defaults)", new Object[]{
                 "Expected nominal return (%)", spNomReturn,
                 "Return std deviation (%)",    spStdDev,
                 "Mean inflation (%/yr)",       spInflation,
                 "Inflation std deviation (%)", spInflationStdDev,
-        }));
+        });
+        SpinnerDef[] sdMkt = {
+                new SpinnerDef(spNomReturn,       "nomReturn",      6.70),
+                new SpinnerDef(spStdDev,          "stdDev",         10.79),
+                new SpinnerDef(spInflation,       "inflation",      3.79),
+                new SpinnerDef(spInflationStdDev, "inflationStdDev",2.73),
+        };
+        cardMkt.add(sectionButtons("market", sdMkt, new CheckDef[0]));
+        inner.add(cardMkt);
 
         // Spending
         spLivingExp    = spinI(105_000, 10_000, 1_000_000, 1_000, "#,###");
@@ -343,7 +400,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 + "early retiree, but works generically regardless of age or who is<br>"
                 + "running the simulation.<br><br>"
                 + "Set to 0 to disable the go-go multiplier entirely.</html>");
-        inner.add(card("Annual Spending (2027 base $)", new Object[]{
+        JPanel cardSpend = card("Annual Spending (2027 base $)", new Object[]{
                 "Living expenses ($/yr)",                spLivingExp,
                 "Medical ($/yr)",                        spMedical,
                 "Medical inflation (%/yr)",              spMedInflation,
@@ -351,15 +408,32 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 "Tax inflation (%/yr)",                  spTaxInflation,
                 "Go-go years multiplier",                spGoGo,
                 "Go-go years duration (from wd start)",  spGoGoDuration,
-        }));
+        });
+        SpinnerDef[] sdSpend = {
+                new SpinnerDef(spLivingExp,    "livingExp",    105_000),
+                new SpinnerDef(spMedical,      "medical",      12_000),
+                new SpinnerDef(spMedInflation, "medInflation", 4.5),
+                new SpinnerDef(spBaseTax,      "baseTax",      15_000),
+                new SpinnerDef(spTaxInflation, "taxInflation", 3.79),
+                new SpinnerDef(spGoGo,         "goGo",         1.0),
+                new SpinnerDef(spGoGoDuration, "goGoDuration", 10),
+        };
+        cardSpend.add(sectionButtons("spending", sdSpend, new CheckDef[0]));
+        inner.add(cardSpend);
 
         // Guardrails
         spUpperGuardrail = spinD(20.0, 5.0, 60.0, 1.0, "0.0#");
         spLowerGuardrail = spinD(25.0, 5.0, 60.0, 1.0, "0.0#");
-        inner.add(card("Guardrail Alerts (display only)", new Object[]{
+        JPanel cardGuard = card("Guardrail Alerts (display only)", new Object[]{
                 "Upper guardrail — raise alert (%)", spUpperGuardrail,
                 "Lower guardrail — cut alert (%)",   spLowerGuardrail,
-        }));
+        });
+        SpinnerDef[] sdGuard = {
+                new SpinnerDef(spUpperGuardrail, "upper", 20.0),
+                new SpinnerDef(spLowerGuardrail, "lower", 25.0),
+        };
+        cardGuard.add(sectionButtons("guardrails", sdGuard, new CheckDef[0]));
+        inner.add(cardGuard);
 
         // Run button
         btnRun = new JButton("▶  Run Simulation");
@@ -1738,6 +1812,146 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         if(Math.abs(n)>=1_000_000)return String.format("$%.2fM",n/1_000_000.0);
         if(Math.abs(n)>=1_000)    return String.format("$%,dK", n/1_000);
         return "$"+n;}
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  SECTION SAVE / RESTORE / RESET INFRASTRUCTURE
+    // ════════════════════════════════════════════════════════════════════════
+
+    /** Pairs a spinner with its property key and hardcoded default value. */
+    record SpinnerDef(JSpinner spinner, String key, Object defaultVal) {}
+
+    /** Pairs a checkbox with its property key and hardcoded default value. */
+    record CheckDef(JCheckBox check, String key, boolean defaultVal) {}
+
+    /**
+     * Resolve the properties file path — same directory as the .class file.
+     * Falls back to the current working directory if the code source is unavailable.
+     */
+    private java.io.File resolvePropsFile() {
+        try {
+            java.net.URL loc = getClass().getProtectionDomain().getCodeSource().getLocation();
+            java.io.File base = new java.io.File(loc.toURI());
+            if (base.isFile()) base = base.getParentFile(); // inside a .jar or .class dir
+            return new java.io.File(base, "IncomeLabStyle_PoS.properties");
+        } catch (Exception e) {
+            return new java.io.File("IncomeLabStyle_PoS.properties");
+        }
+    }
+
+    /**
+     * Save a section's current spinner/checkbox values to the properties file.
+     * Non-destructive: reads existing file first, merges, then writes.
+     */
+    private void saveSection(String prefix, SpinnerDef[] spinners, CheckDef[] checks) {
+        java.util.Properties props = new java.util.Properties();
+        java.io.File f = resolvePropsFile();
+        // Load existing so other sections are preserved
+        if (f.exists()) {
+            try (var in = new java.io.FileInputStream(f)) { props.load(in); }
+            catch (Exception ignored) {}
+        }
+        for (SpinnerDef sd : spinners)
+            props.setProperty(prefix + "." + sd.key(),
+                    ((Number) sd.spinner().getValue()).toString());
+        for (CheckDef cd : checks)
+            props.setProperty(prefix + "." + cd.key(),
+                    String.valueOf(cd.check().isSelected()));
+        try (var out = new java.io.FileOutputStream(f)) {
+            props.store(out, "IncomeLabStyle_PoSDriven saved settings");
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Could not save settings:\n" + ex.getMessage(),
+                    "Save Error", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    /**
+     * Restore a section's spinner/checkbox values from the properties file.
+     * Only applies keys matching this section's prefix; silently skips missing keys.
+     */
+    private void restoreSection(String prefix, SpinnerDef[] spinners, CheckDef[] checks) {
+        java.util.Properties props = new java.util.Properties();
+        java.io.File f = resolvePropsFile();
+        if (!f.exists()) {
+            JOptionPane.showMessageDialog(this,
+                    "No saved settings file found.\nSave a section first.",
+                    "Restore", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        try (var in = new java.io.FileInputStream(f)) { props.load(in); }
+        catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Could not read settings:\n" + ex.getMessage(),
+                    "Restore Error", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        for (SpinnerDef sd : spinners) {
+            String val = props.getProperty(prefix + "." + sd.key());
+            if (val == null) continue;
+            try {
+                SpinnerNumberModel m = (SpinnerNumberModel) sd.spinner().getModel();
+                if (m.getValue() instanceof Integer)
+                    sd.spinner().setValue(Integer.parseInt(val.replace(",","").replace("$","").trim()));
+                else
+                    sd.spinner().setValue(Double.parseDouble(val.replace(",","").replace("$","").trim()));
+            } catch (Exception ignored) {}
+        }
+        for (CheckDef cd : checks) {
+            String val = props.getProperty(prefix + "." + cd.key());
+            if (val != null) cd.check().setSelected(Boolean.parseBoolean(val));
+        }
+    }
+
+    /** Reset a section to its hardcoded defaults (no file I/O). */
+    private void resetSection(SpinnerDef[] spinners, CheckDef[] checks) {
+        for (SpinnerDef sd : spinners) {
+            try { sd.spinner().setValue(sd.defaultVal()); }
+            catch (Exception ignored) {}
+        }
+        for (CheckDef cd : checks)
+            cd.check().setSelected(cd.defaultVal());
+    }
+
+    /**
+     * Build the three-button bar (Reset / Save / Restore) for a section card.
+     * prefix: property key prefix (e.g. "portfolio")
+     * spinners: array of SpinnerDef for this section
+     * checks: array of CheckDef for this section (may be empty)
+     */
+    private JPanel sectionButtons(String prefix, SpinnerDef[] spinners, CheckDef[] checks) {
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        bar.setOpaque(false);
+        bar.setAlignmentX(LEFT_ALIGNMENT);
+        bar.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+
+        JButton btnReset   = sectionBtn("↺ Reset",   new Color(130,130,130));
+        JButton btnSave    = sectionBtn("💾 Save",   new Color(55,138,221));
+        JButton btnRestore = sectionBtn("📂 Restore", new Color(99,153,34));
+
+        btnReset  .addActionListener(e -> resetSection(spinners, checks));
+        btnSave   .addActionListener(e -> saveSection(prefix, spinners, checks));
+        btnRestore.addActionListener(e -> restoreSection(prefix, spinners, checks));
+
+        btnReset  .setToolTipText("Reset this section to factory defaults (does not affect saved file)");
+        btnSave   .setToolTipText("Save this section's current values to IncomeLabStyle_PoS.properties");
+        btnRestore.setToolTipText("Restore this section's values from IncomeLabStyle_PoS.properties");
+
+        bar.add(btnReset); bar.add(btnSave); bar.add(btnRestore);
+        return bar;
+    }
+
+    private JButton sectionBtn(String label, Color fg) {
+        JButton b = new JButton(label);
+        b.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        b.setForeground(fg);
+        b.setBackground(new Color(248, 248, 245));
+        b.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(200,198,193), 1),
+                BorderFactory.createEmptyBorder(2, 6, 2, 6)));
+        b.setFocusPainted(false);
+        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return b;
+    }
 
     public static void main(String[] args){
         SwingUtilities.invokeLater(()->{
