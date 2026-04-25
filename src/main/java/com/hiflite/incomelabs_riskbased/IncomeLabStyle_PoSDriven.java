@@ -162,7 +162,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         spWithdrawStartYear  = spinI(2027, 2025, 2040, 1, "#");
         spWithdrawStartMonth = spinI(1, 1, 12, 1, "#");
 
-        chkRandomize = new JCheckBox("Re-randomize each run (uncheck for reproducible results)");
+        chkRandomize = new JCheckBox("Re-randomize each run (uncheck for reproducible results)", true);
         chkRandomize.setFont(new Font("SansSerif", Font.PLAIN, 12));
         chkRandomize.setForeground(new Color(75, 75, 75));
         chkRandomize.setOpaque(false);
@@ -211,7 +211,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 "Fan chart paths (chart quality)",    spMcFanPaths,
         });
         SpinnerDef[] sdPortfolio = {
-                new SpinnerDef(spPortfolio,         "portfolio",    1_549_000),
+                new SpinnerDef(spPortfolio,         "portfolio",    1_500_000),
                 new SpinnerDef(spHorizon,           "horizon",      30),
                 new SpinnerDef(spTargetPoS,         "targetPoS",    80),
                 new SpinnerDef(spWithdrawStartYear, "wdStartYear",  2027),
@@ -220,7 +220,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 new SpinnerDef(spBinaryIters,       "binaryIters",  22),
                 new SpinnerDef(spMcFanPaths,        "mcFanPaths",   400),
         };
-        CheckDef[] cdPortfolio = { new CheckDef(chkRandomize, "rerandomize", false) };
+        CheckDef[] cdPortfolio = { new CheckDef(chkRandomize, "rerandomize", true) };
         cardPortfolio.add(sectionButtons("portfolio", sdPortfolio, cdPortfolio));
         inner.add(cardPortfolio);
 
@@ -317,14 +317,14 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
         // RMD assumptions
         // Account balances
-        spManTradIRA    = spinI(900_000, 0, 10_000_000, 10_000, "#,###");
+        spManTradIRA    = spinI(880_000, 0, 10_000_000, 10_000, "#,###");
         spManRothIRA    = spinI(10_000,  0, 10_000_000, 10_000, "#,###");
         spManTrad401K   = spinI(0,       0, 10_000_000, 10_000, "#,###");
-        spWomanRoth401K = spinI(33_000,  0, 10_000_000, 10_000, "#,###");
-        spWomanTradIRA  = spinI(286_000, 0, 10_000_000, 10_000, "#,###");
-        spWomanTrad401K = spinI(320_000, 0, 10_000_000, 10_000, "#,###");
+        spWomanRoth401K = spinI(30_000,  0, 10_000_000, 10_000, "#,###");
+        spWomanTradIRA  = spinI(266_000, 0, 10_000_000, 10_000, "#,###");
+        spWomanTrad401K = spinI(314_000, 0, 10_000_000, 10_000, "#,###");
 
-        lblAccountTotal = new JLabel("Account total: $1,549,000");
+        lblAccountTotal = new JLabel("Account total: $1,500,000");
         lblAccountTotal.setFont(new Font("SansSerif", Font.BOLD, 11));
         lblAccountTotal.setForeground(new Color(24, 95, 165));
         lblAccountTotal.setAlignmentX(LEFT_ALIGNMENT);
@@ -346,12 +346,12 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 null, lblAccountTotal,
         });
         SpinnerDef[] sdAccts = {
-                new SpinnerDef(spManTradIRA,    "manTradIRA",    900_000),
+                new SpinnerDef(spManTradIRA,    "manTradIRA",    880_000),
                 new SpinnerDef(spManRothIRA,    "manRothIRA",    10_000),
                 new SpinnerDef(spManTrad401K,   "manTrad401K",   0),
-                new SpinnerDef(spWomanRoth401K, "womanRoth401K", 33_000),
-                new SpinnerDef(spWomanTradIRA,  "womanTradIRA",  286_000),
-                new SpinnerDef(spWomanTrad401K, "womanTrad401K", 320_000),
+                new SpinnerDef(spWomanRoth401K, "womanRoth401K", 30_000),
+                new SpinnerDef(spWomanTradIRA,  "womanTradIRA",  266_000),
+                new SpinnerDef(spWomanTrad401K, "womanTrad401K", 314_000),
         };
         cardAccts.add(sectionButtons("accounts", sdAccts, new CheckDef[0]));
         inner.add(cardAccts);
