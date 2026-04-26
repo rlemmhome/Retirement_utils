@@ -124,8 +124,10 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         setLayout(new BorderLayout(0, 0));
         getContentPane().setBackground(new Color(245, 245, 242));
 
-        ToolTipManager.sharedInstance().setDismissDelay(15_000);
-        ToolTipManager.sharedInstance().setInitialDelay(400);
+        ToolTipManager ttm = ToolTipManager.sharedInstance();
+        ttm.setInitialDelay(750);    // appear after 750ms hover
+        ttm.setDismissDelay(15_000); // stay 15 seconds while mouse is still
+        ttm.setReshowDelay(500);     // default reshow behavior
 
         add(buildInputPanel(),  BorderLayout.WEST);
         add(buildOutputPanel(), BorderLayout.CENTER);
@@ -163,7 +165,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         spWithdrawStartMonth = spinI(1, 1, 12, 1, "#");
 
         chkRandomize = new JCheckBox("Re-randomize each run (uncheck for reproducible results)", true);
-        chkRandomize.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        chkRandomize.setFont(new Font("SansSerif", Font.PLAIN, 14));
         chkRandomize.setForeground(new Color(75, 75, 75));
         chkRandomize.setOpaque(false);
         chkRandomize.setAlignmentX(LEFT_ALIGNMENT);
@@ -242,7 +244,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         lblManAge   = new JLabel("Man age: —");
         lblWomanAge = new JLabel("Woman age: —");
         for (JLabel l : new JLabel[]{lblManAge, lblWomanAge}) {
-            l.setFont(new Font("SansSerif", Font.BOLD, 11));
+            l.setFont(new Font("SansSerif", Font.BOLD, 13));
             l.setForeground(new Color(24, 95, 165));
         }
         ageDisplay.add(lblManAge); ageDisplay.add(lblWomanAge);
@@ -325,7 +327,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         spWomanTrad401K = spinI(314_000, 0, 10_000_000, 10_000, "#,###");
 
         lblAccountTotal = new JLabel("Account total: $1,500,000");
-        lblAccountTotal.setFont(new Font("SansSerif", Font.BOLD, 11));
+        lblAccountTotal.setFont(new Font("SansSerif", Font.BOLD, 13));
         lblAccountTotal.setForeground(new Color(24, 95, 165));
         lblAccountTotal.setAlignmentX(LEFT_ALIGNMENT);
 
@@ -378,9 +380,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
         // Spending
         spLivingExp    = spinI(105_000, 10_000, 1_000_000, 1_000, "#,###");
-        spMedical      = spinI(12_000,  0,      200_000,   500,   "#,###");
+        spMedical      = spinI(16_000,  0,      200_000,   500,   "#,###");
         spMedInflation = spinD(4.5,     1.0,    10.0,      0.1,   "0.0#");
-        spBaseTax      = spinI(15_000,  0,      100_000,   500,   "#,###");
+        spBaseTax      = spinI(17_500,  0,      100_000,   500,   "#,###");
         spTaxInflation = spinD(3.79,    0.5,    10.0,      0.1,   "0.0#");
         spGoGo         = spinD(1.0,  1.0, 2.0, 0.005, "0.000");
         spGoGoDuration = spinI(10,   1,   30,  1,     "#");
@@ -411,9 +413,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         });
         SpinnerDef[] sdSpend = {
                 new SpinnerDef(spLivingExp,    "livingExp",    105_000),
-                new SpinnerDef(spMedical,      "medical",      12_000),
+                new SpinnerDef(spMedical,      "medical",      16_000),
                 new SpinnerDef(spMedInflation, "medInflation", 4.5),
-                new SpinnerDef(spBaseTax,      "baseTax",      15_000),
+                new SpinnerDef(spBaseTax,      "baseTax",      17_500),
                 new SpinnerDef(spTaxInflation, "taxInflation", 3.79),
                 new SpinnerDef(spGoGo,         "goGo",         1.0),
                 new SpinnerDef(spGoGoDuration, "goGoDuration", 10),
@@ -437,7 +439,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
         // Run button
         btnRun = new JButton("▶  Run Simulation");
-        btnRun.setFont(new Font("SansSerif", Font.BOLD, 13));
+        btnRun.setFont(new Font("SansSerif", Font.BOLD, 15));
         btnRun.setBackground(new Color(55, 138, 221));
         btnRun.setForeground(Color.WHITE);
         btnRun.setFocusPainted(false);
@@ -477,6 +479,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             spPortfolio.setValue((int) Math.min(total, 20_000_000));
         } catch (Exception ignored) {}
     }
+
 
     private String updateRunTooltip() {
         try {
@@ -537,17 +540,17 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 BorderFactory.createEmptyBorder(10, 16, 10, 16)));
 
         lblYear1Answer = new JLabel("—");
-        lblYear1Answer.setFont(new Font("SansSerif", Font.BOLD, 30));
+        lblYear1Answer.setFont(new Font("SansSerif", Font.BOLD, 32));
         lblYear1Answer.setForeground(new Color(24, 95, 165));
         lblYear1Sub    = new JLabel(" ");
-        lblYear1Sub.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        lblYear1Sub.setFont(new Font("SansSerif", Font.PLAIN, 15));
         lblYear1Sub.setForeground(new Color(90, 90, 90));
         lblYear1Detail = new JLabel(" ");
-        lblYear1Detail.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        lblYear1Detail.setFont(new Font("SansSerif", Font.PLAIN, 14));
         lblYear1Detail.setForeground(new Color(110, 110, 110));
 
         tglDollars = new JToggleButton("Showing: Future $ (nominal)");
-        tglDollars.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        tglDollars.setFont(new Font("SansSerif", Font.PLAIN, 13));
         tglDollars.setFocusPainted(false);
         tglDollars.addActionListener(e -> {
             showRealDollars = tglDollars.isSelected();
@@ -558,7 +561,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
         JPanel aNorth = new JPanel(new BorderLayout()); aNorth.setOpaque(false);
         JLabel aTitle = new JLabel("Year 1 portfolio withdrawal at target PoS");
-        aTitle.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        aTitle.setFont(new Font("SansSerif", Font.PLAIN, 13));
         aTitle.setForeground(new Color(100, 100, 100));
         aNorth.add(aTitle, BorderLayout.WEST);
         aNorth.add(tglDollars, BorderLayout.EAST);
@@ -589,7 +592,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         topSection.add(metricsRow, BorderLayout.CENTER);
 
         JTabbedPane tabs = new JTabbedPane();
-        tabs.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        tabs.setFont(new Font("SansSerif", Font.PLAIN, 14));
         tabs.addTab("Year-by-year table", buildTablePanel());
         tabs.addTab("Simulation chart",   buildChartPanel());
         tabs.addTab("Summary",            buildSummaryPanel());
@@ -635,8 +638,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                         return "<html><b>▼ Cut alert</b><br>"
                                 + "Re-solved withdrawal fell below lower guardrail threshold.<br>"
                                 + "Consider reducing discretionary spending this year.</html>";
-                    return "<html><b>Within guardrail range</b><br>"
-                            + "Withdrawal is within the guardrail bands. No adjustment indicated.</html>";
+                    return null; // no tooltip when within normal range
                 }
                 // Actual wd col (4) tooltip
                 if (col == 4 && row < lastResults.medianRows.size()) {
@@ -719,9 +721,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             }
         };
 
-        tblResults.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        tblResults.setRowHeight(20);
-        tblResults.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 10));
+        tblResults.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        tblResults.setRowHeight(24);
+        tblResults.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
         tblResults.setGridColor(new Color(220, 220, 215));
         tblResults.setShowGrid(true);
         tblResults.setSelectionBackground(new Color(210, 230, 250));
@@ -892,7 +894,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 "Final balance histogram",
                 "Income vs. spending (median)"
         });
-        cmbChartType.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        cmbChartType.setFont(new Font("SansSerif", Font.PLAIN, 14));
         cmbChartType.addActionListener(e -> { if (lastResults != null) refreshChart(); });
         ctrl.add(cmbChartType);
         chartPanel = new ChartPanel();
@@ -903,7 +905,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
     private JScrollPane buildSummaryPanel() {
         txaSummary = new JTextArea();
-        txaSummary.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        txaSummary.setFont(new Font("Monospaced", Font.PLAIN, 14));
         txaSummary.setLineWrap(true);
         txaSummary.setWrapStyleWord(true);
         txaSummary.setEditable(false);
@@ -1453,7 +1455,6 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         private static final Color[] PCTC = {
                 new Color(99,153,34), new Color(55,138,221), new Color(186,117,23)
         };
-
         ChartPanel() {
             setBackground(Color.WHITE);
             setBorder(BorderFactory.createLineBorder(new Color(210,210,205)));
@@ -1522,7 +1523,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             g.setColor(new Color(180,180,175)); g.setStroke(new BasicStroke(1f)); g.draw(pa);}
 
         private void axes(Graphics2D g,Rectangle2D pa,double mn,double mx,int xs,String yLbl){
-            g.setFont(new Font("SansSerif",Font.PLAIN,10)); g.setColor(new Color(90,90,90));
+            g.setFont(new Font("SansSerif",Font.PLAIN,12)); g.setColor(new Color(90,90,90));
             for(int i=0;i<=6;i++){
                 double val=mn+(mx-mn)*(1-i/6.0),y=pa.getY()+i/6.0*pa.getHeight();
                 String l=formatMoney((long)val); FontMetrics fm=g.getFontMetrics();
@@ -1532,7 +1533,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             String suffix=realDollars?" (2026 $)":" (nominal)";
             Graphics2D g2=(Graphics2D)g.create();
             g2.rotate(-Math.PI/2,11,pa.getCenterY());
-            g2.setFont(new Font("SansSerif",Font.PLAIN,10)); g2.setColor(new Color(100,100,100));
+            g2.setFont(new Font("SansSerif",Font.PLAIN,12)); g2.setColor(new Color(100,100,100));
             String full=yLbl+suffix; FontMetrics fm=g2.getFontMetrics();
             g2.drawString(full,(float)(11-fm.stringWidth(full)/2.0),(float)pa.getCenterY());
             g2.dispose();}
@@ -1563,7 +1564,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                     Arrays.sort(vs); pl[y]=vs[(int)(pcts[pi]*(nPaths-1))];}
                 g.setColor(PCTC[pi]); g.setStroke(new BasicStroke(2.2f));
                 drawPath(g,pa,pl,pts,0,maxV,yrs);
-                g.setFont(new Font("SansSerif",Font.PLAIN,10));
+                g.setFont(new Font("SansSerif",Font.PLAIN,12));
                 g.drawString(lbls[pi],(float)(toX(pa,pts-1,yrs)+2),(float)toY(pa,pl[pts-1],0,maxV));}
             axes(g,pa,0,maxV,yrs,balMode?"Portfolio balance":"Annual withdrawal");}
 
@@ -1590,13 +1591,13 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 g.fill(new Rectangle2D.Double(x,pa.getMaxY()-h,bwPx,h));
                 g.setColor(new Color(24,95,165)); g.setStroke(new BasicStroke(0.8f));
                 g.draw(new Rectangle2D.Double(x,pa.getMaxY()-h,bwPx,h));}
-            g.setColor(new Color(163,45,45)); g.setFont(new Font("SansSerif",Font.BOLD,11));
+            g.setColor(new Color(163,45,45)); g.setFont(new Font("SansSerif",Font.BOLD,13));
             g.drawString(fail+" of "+nPaths+" failed ("+
                             String.format("%.0f%%",fail*100.0/nPaths)+")",
                     (float)(pa.getX()+4),(float)(pa.getY()+14));
 
             // Y axis: # of paths (0 to maxC)
-            g.setFont(new Font("SansSerif",Font.PLAIN,10));
+            g.setFont(new Font("SansSerif",Font.PLAIN,12));
             g.setColor(new Color(90,90,90));
             for(int i=0;i<=6;i++){
                 double val=maxC*(1-i/6.0);
@@ -1615,7 +1616,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             // Y axis rotated label
             Graphics2D g2=(Graphics2D)g.create();
             g2.rotate(-Math.PI/2,11,pa.getCenterY());
-            g2.setFont(new Font("SansSerif",Font.PLAIN,10));
+            g2.setFont(new Font("SansSerif",Font.PLAIN,12));
             g2.setColor(new Color(100,100,100));
             String yLbl="# of paths";
             FontMetrics fm2=g2.getFontMetrics();
@@ -1623,7 +1624,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             g2.dispose();
 
             // X axis title
-            g.setFont(new Font("SansSerif",Font.PLAIN,10));
+            g.setFont(new Font("SansSerif",Font.PLAIN,12));
             g.setColor(new Color(100,100,100));
             String xLbl="Final portfolio balance" + (realDollars?" (2026 $)":" (nominal)");
             FontMetrics fmx=g.getFontMetrics();
@@ -1651,7 +1652,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 g.setStroke(li<2?new BasicStroke(2.5f):
                         new BasicStroke(1.8f,BasicStroke.CAP_BUTT,BasicStroke.JOIN_ROUND,1f,new float[]{5,3},0));
                 drawPath(g,pa,lines[li],yrs,0,maxV,yrs);}
-            g.setFont(new Font("SansSerif",Font.PLAIN,10));
+            g.setFont(new Font("SansSerif",Font.PLAIN,12));
             for(int li=0;li<lbls.length;li++){
                 g.setColor(cols[li]);
                 g.fillRect((int)(pa.getX()+4+li*126),(int)(pa.getY()+4),10,10);
@@ -1747,7 +1748,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                         BorderFactory.createLineBorder(new Color(208,206,200),1),
                         BorderFactory.createEmptyBorder(8,10,8,10))));
         JLabel titleLbl = new JLabel(title.toUpperCase());
-        titleLbl.setFont(new Font("SansSerif",Font.BOLD,10));
+        titleLbl.setFont(new Font("SansSerif",Font.BOLD,12));
         titleLbl.setForeground(new Color(110,105,95));
         titleLbl.setBorder(BorderFactory.createEmptyBorder(0,0,6,0));
         titleLbl.setAlignmentX(LEFT_ALIGNMENT);
@@ -1756,7 +1757,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
             Object labelObj=items[i]; Object comp=items[i+1];
             if(labelObj!=null){
                 JLabel lbl=new JLabel((String)labelObj);
-                lbl.setFont(new Font("SansSerif",Font.PLAIN,12));
+                lbl.setFont(new Font("SansSerif",Font.PLAIN,14));
                 lbl.setForeground(new Color(75,75,75));
                 lbl.setBorder(BorderFactory.createEmptyBorder(5,0,1,0));
                 lbl.setAlignmentX(LEFT_ALIGNMENT); card.add(lbl);}
@@ -1777,16 +1778,16 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     private JSpinner spinI(int val,int min,int max,int step,String fmt){
         JSpinner s=new JSpinner(new SpinnerNumberModel(val,min,max,step));
         s.setEditor(new JSpinner.NumberEditor(s,fmt));
-        s.setFont(new Font("SansSerif",Font.PLAIN,12)); return s;}
+        s.setFont(new Font("SansSerif",Font.PLAIN,14)); return s;}
 
     private JSpinner spinD(double val,double min,double max,double step,String fmt){
         JSpinner s=new JSpinner(new SpinnerNumberModel(val,min,max,step));
         s.setEditor(new JSpinner.NumberEditor(s,fmt));
-        s.setFont(new Font("SansSerif",Font.PLAIN,12)); return s;}
+        s.setFont(new Font("SansSerif",Font.PLAIN,14)); return s;}
 
     private JLabel mkMetricLabel(){
         JLabel l=new JLabel("—");
-        l.setFont(new Font("SansSerif",Font.BOLD,17));
+        l.setFont(new Font("SansSerif",Font.BOLD,19));
         l.setForeground(new Color(30,30,30)); return l;}
 
     private JPanel wrapMetric(JLabel val,String title,String sub){
@@ -1795,9 +1796,9 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         p.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(210,208,203),1),
                 BorderFactory.createEmptyBorder(8,10,8,10)));
-        JLabel t=new JLabel(title); t.setFont(new Font("SansSerif",Font.PLAIN,10));
+        JLabel t=new JLabel(title); t.setFont(new Font("SansSerif",Font.PLAIN,12));
         t.setForeground(new Color(110,110,110));
-        JLabel s=new JLabel(sub); s.setFont(new Font("SansSerif",Font.PLAIN,10));
+        JLabel s=new JLabel(sub); s.setFont(new Font("SansSerif",Font.PLAIN,12));
         s.setForeground(new Color(140,140,140));
         p.add(t,BorderLayout.NORTH); p.add(val,BorderLayout.CENTER);
         p.add(s,BorderLayout.SOUTH); return p;}
@@ -1942,7 +1943,7 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
 
     private JButton sectionBtn(String label, Color fg) {
         JButton b = new JButton(label);
-        b.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        b.setFont(new Font("SansSerif", Font.PLAIN, 12));
         b.setForeground(fg);
         b.setBackground(new Color(248, 248, 245));
         b.setBorder(BorderFactory.createCompoundBorder(
