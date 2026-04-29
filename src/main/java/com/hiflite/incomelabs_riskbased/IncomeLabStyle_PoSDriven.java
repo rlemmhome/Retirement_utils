@@ -69,9 +69,10 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
     private JSpinner spWithdrawStartYear, spWithdrawStartMonth;
     private JSpinner spManBirthYear, spManBirthMonth;
     private JSpinner spWomanBirthYear, spWomanBirthMonth;
-    private JSpinner spManSSAmount, spManSSStartYear, spManSSStartMonth;
-    private JSpinner spWomanSSAmount, spWomanSSStartYear, spWomanSSStartMonth;
+    private JSpinner spManPIA, spManSSStartYear, spManSSStartMonth;
+    private JSpinner spWomanPIA, spWomanSSStartYear, spWomanSSStartMonth;
     private JSpinner spSSCola;
+    private JLabel   lblSSBenefits; // live computed monthly benefit display
     private JSpinner spAnnuity, spAnnuityStartYear, spAnnuityStartMonth;
     private JSpinner spNomReturn, spStdDev, spInflation, spInflationStdDev;
     private JSpinner spLivingExp, spMedical, spMedInflation;
@@ -270,35 +271,51 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 spManBirthYear, spManBirthMonth, spWomanBirthYear, spWomanBirthMonth})
             s.addChangeListener(ageWatcher);
         updateAgeLabels();
+        // Social Security — PIA based
+        spManPIA            = spinI(3_788,  0, 10_000, 1,   "#,###");
+        spManSSStartYear    = spinI(2027,   2024, 2045, 1,  "#");
+        spManSSStartMonth   = spinI(1,      1,    12,   1,  "#");
+        spWomanPIA          = spinI(3_897,  0, 10_000, 1,   "#,###");
+        spWomanSSStartYear  = spinI(2027,   2024, 2045, 1,  "#");
+        spWomanSSStartMonth = spinI(12,     1,    12,   1,  "#");
+        spSSCola            = spinD(2.3,    0.0,  6.0,  0.1,"0.0#");
 
-        // Social Security
-        spManSSAmount       = spinI(40_400, 0,    200_000, 100, "#,###");
-        spManSSStartYear    = spinI(2027,   2024, 2045,    1,   "#");
-        spManSSStartMonth   = spinI(1,      1,    12,      1,   "#");
-        spWomanSSAmount     = spinI(40_520, 0,    200_000, 100, "#,###");
-        spWomanSSStartYear  = spinI(2027,   2024, 2045,    1,   "#");
-        spWomanSSStartMonth = spinI(12,     1,    12,      1,   "#");
-        spSSCola            = spinD(2.3,    0.0,  6.0,     0.1, "0.0#");
-        JPanel cardSS = card("Social Security", new Object[]{
-                "Man SS amount ($/yr)",        spManSSAmount,
+        lblSSBenefits = new JLabel(" ");
+        lblSSBenefits.setFont(new Font("SansSerif", Font.BOLD, 13));
+        lblSSBenefits.setForeground(new Color(24, 95, 165));
+        lblSSBenefits.setAlignmentX(LEFT_ALIGNMENT);
+
+        // Update benefit label whenever any SS or birth-date spinner changes
+        ChangeListener ssWatcher = e -> updateSSBenefitLabel();
+        for (JSpinner s : new JSpinner[]{
+                spManPIA, spManSSStartYear, spManSSStartMonth,
+                spWomanPIA, spWomanSSStartYear, spWomanSSStartMonth,
+                spManBirthYear, spManBirthMonth, spWomanBirthYear, spWomanBirthMonth})
+            s.addChangeListener(ssWatcher);
+
+        JPanel cardSS = card("Social Security (PIA = Primary Insurance Amount)", new Object[]{
+                "Man PIA ($/month)",           spManPIA,
                 "Man SS start year",           spManSSStartYear,
                 "Man SS start month (1-12)",   spManSSStartMonth,
-                "Woman SS amount ($/yr)",      spWomanSSAmount,
+                "Woman PIA ($/month)",         spWomanPIA,
                 "Woman SS start year",         spWomanSSStartYear,
                 "Woman SS start month (1-12)", spWomanSSStartMonth,
+                null, lblSSBenefits,
                 "SS COLA rate (%/yr)",         spSSCola,
         });
         SpinnerDef[] sdSS = {
-                new SpinnerDef(spManSSAmount,       "manSSAmount",      40_400),
+                new SpinnerDef(spManPIA,            "manPIA",           3_788),
                 new SpinnerDef(spManSSStartYear,    "manSSStartYear",   2027),
                 new SpinnerDef(spManSSStartMonth,   "manSSStartMonth",  1),
-                new SpinnerDef(spWomanSSAmount,     "womanSSAmount",    40_520),
+                new SpinnerDef(spWomanPIA,          "womanPIA",         3_897),
                 new SpinnerDef(spWomanSSStartYear,  "womanSSStartYear", 2027),
                 new SpinnerDef(spWomanSSStartMonth, "womanSSStartMonth",12),
                 new SpinnerDef(spSSCola,            "ssCola",           2.3),
         };
         cardSS.add(sectionButtons("ss", sdSS, new CheckDef[0]));
         inner.add(cardSS);
+        // Initialize the benefit label now that all spinners exist
+        SwingUtilities.invokeLater(this::updateSSBenefitLabel);
 
         // Annuity
         spAnnuity          = spinI(22_599, 0, 500_000, 500, "#,###");
@@ -1002,10 +1019,10 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         i.manBirthMonth      = iv(spManBirthMonth);
         i.womanBirthYear     = iv(spWomanBirthYear);
         i.womanBirthMonth    = iv(spWomanBirthMonth);
-        i.manSSAmount        = iv(spManSSAmount);
+        i.manPIA             = iv(spManPIA);
         i.manSSStartYear     = iv(spManSSStartYear);
         i.manSSStartMonth    = iv(spManSSStartMonth);
-        i.womanSSAmount      = iv(spWomanSSAmount);
+        i.womanPIA           = iv(spWomanPIA);
         i.womanSSStartYear   = iv(spWomanSSStartYear);
         i.womanSSStartMonth  = iv(spWomanSSStartMonth);
         i.ssCola             = dv(spSSCola)          / 100.0;
@@ -1051,20 +1068,73 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         return tradBalance / factor;
     }
 
+    /**
+     * Calculate monthly SS benefit from PIA using SSA adjustment rules.
+     * FRA = 67 for born 1960 or later.
+     * Early: -5/9% per month for first 36 months before FRA, -5/12% per additional month.
+     * Delayed: +2/3% per month after FRA (max at age 70).
+     */
+    private double calcSSBenefit(int pia, int birthYear, int birthMonth,
+                                 int startYear, int startMonth) {
+        if (pia <= 0) return 0;
+        // FRA for born 1960+: age 67
+        int fraYear  = birthYear + 67;
+        int fraMonth = birthMonth; // FRA month = birth month (SSA day-before-birthday rule)
+        // Months from claim to FRA (negative = early, positive = delayed)
+        int monthsToFRA = (fraYear - startYear) * 12 + (fraMonth - startMonth);
+        double factor;
+        if (monthsToFRA > 0) {
+            // Claiming early
+            int earlyMonths = monthsToFRA;
+            int first36 = Math.min(earlyMonths, 36);
+            int beyond36 = Math.max(0, earlyMonths - 36);
+            factor = 1.0 - (first36 * 5.0/9.0 + beyond36 * 5.0/12.0) / 100.0;
+        } else if (monthsToFRA < 0) {
+            // Delayed credits — capped at age 70 (36 months past FRA for FRA=67)
+            int delayedMonths = Math.min(-monthsToFRA, 36);
+            factor = 1.0 + delayedMonths * (2.0/3.0) / 100.0;
+        } else {
+            factor = 1.0; // claiming exactly at FRA
+        }
+        return pia * factor;
+    }
+
+    /** Update the live SS benefit label in the SS card. */
+    private void updateSSBenefitLabel() {
+        if (lblSSBenefits == null) return;
+        try {
+            double manMonthly = calcSSBenefit(
+                    iv(spManPIA), iv(spManBirthYear), iv(spManBirthMonth),
+                    iv(spManSSStartYear), iv(spManSSStartMonth));
+            double womanMonthly = calcSSBenefit(
+                    iv(spWomanPIA), iv(spWomanBirthYear), iv(spWomanBirthMonth),
+                    iv(spWomanSSStartYear), iv(spWomanSSStartMonth));
+            lblSSBenefits.setText(String.format(
+                    "<html>Man: <b>%s/mo</b> · Woman: <b>%s/mo</b></html>",
+                    CURRENCY.format((long) manMonthly),
+                    CURRENCY.format((long) womanMonthly)));
+        } catch (Exception ignored) {}
+    }
     private double manSSThisYear(SimInputs inp, int y) {
         int calYear = BASE_YEAR + y;
         if (calYear < inp.manSSStartYear) return 0;
+        double monthlyBenefit = calcSSBenefit(inp.manPIA,
+                inp.manBirthYear, inp.manBirthMonth,
+                inp.manSSStartYear, inp.manSSStartMonth);
         if (calYear == inp.manSSStartYear)
-            return inp.manSSAmount * (13.0 - inp.manSSStartMonth) / 12.0;
-        return inp.manSSAmount * Math.pow(1 + inp.ssCola, calYear - inp.manSSStartYear);
+            return monthlyBenefit * 12.0 * (13.0 - inp.manSSStartMonth) / 12.0;
+        return monthlyBenefit * 12.0 * Math.pow(1 + inp.ssCola, calYear - inp.manSSStartYear);
     }
 
     private double womanSSThisYear(SimInputs inp, int y) {
         int calYear = BASE_YEAR + y;
         if (calYear < inp.womanSSStartYear) return 0;
+        double monthlyBenefit = calcSSBenefit(inp.womanPIA,
+                inp.womanBirthYear, inp.womanBirthMonth,
+                inp.womanSSStartYear, inp.womanSSStartMonth);
         if (calYear == inp.womanSSStartYear)
-            return inp.womanSSAmount * (13.0 - inp.womanSSStartMonth) / 12.0;
-        return inp.womanSSAmount * Math.pow(1 + inp.ssCola, calYear - inp.womanSSStartYear);
+            return monthlyBenefit * 12.0 * (13.0 - inp.womanSSStartMonth) / 12.0;
+        return monthlyBenefit * 12.0 * Math.pow(1 + inp.ssCola, calYear - inp.womanSSStartYear);
     }
 
     private double annuityThisYear(SimInputs inp, int y) {
@@ -1401,7 +1471,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                         + "  − Total spending:      %s\n"
                         + "  → %s of %s\n\n"
                         + "══ SOCIAL SECURITY ══\n"
-                        + "  Man: %s/yr from %02d/%d (age %d) · Woman: %s/yr from %02d/%d (age %d)\n"
+                        + "  Man:   PIA %s/mo → %s/mo (%s/yr) from %02d/%d (age %d)\n"
+                        + "  Woman: PIA %s/mo → %s/mo (%s/yr) from %02d/%d (age %d)\n"
                         + "  Both fully active from %d · COLA %.1f%%/yr\n\n"
                         + "══ ANNUITY ══\n"
                         + "  %s/yr from %d (non-COLA) · Loses ~%.0f%% real value by %d at %.1f%% inflation\n\n"
@@ -1424,9 +1495,15 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
                 CURRENCY.format(guar1), CURRENCY.format(inc1),
                 CURRENCY.format(spd1),
                 sur1 >= 0 ? "SURPLUS" : "GAP", CURRENCY.format(Math.abs(sur1)),
-                CURRENCY.format(inp.manSSAmount), inp.manSSStartMonth, inp.manSSStartYear,
+                CURRENCY.format(inp.manPIA),
+                CURRENCY.format((long) calcSSBenefit(inp.manPIA, inp.manBirthYear, inp.manBirthMonth, inp.manSSStartYear, inp.manSSStartMonth)),
+                CURRENCY.format((long)(calcSSBenefit(inp.manPIA, inp.manBirthYear, inp.manBirthMonth, inp.manSSStartYear, inp.manSSStartMonth) * 12)),
+                inp.manSSStartMonth, inp.manSSStartYear,
                 inp.manAge + (inp.manSSStartYear - BASE_YEAR),
-                CURRENCY.format(inp.womanSSAmount), inp.womanSSStartMonth, inp.womanSSStartYear,
+                CURRENCY.format(inp.womanPIA),
+                CURRENCY.format((long) calcSSBenefit(inp.womanPIA, inp.womanBirthYear, inp.womanBirthMonth, inp.womanSSStartYear, inp.womanSSStartMonth)),
+                CURRENCY.format((long)(calcSSBenefit(inp.womanPIA, inp.womanBirthYear, inp.womanBirthMonth, inp.womanSSStartYear, inp.womanSSStartMonth) * 12)),
+                inp.womanSSStartMonth, inp.womanSSStartYear,
                 inp.womanAge + (inp.womanSSStartYear - BASE_YEAR),
                 fullSSYear, inp.ssCola * 100,
                 CURRENCY.format(inp.annuity), inp.annuityStartYear,
@@ -1695,8 +1772,8 @@ public class IncomeLabStyle_PoSDriven extends JFrame {
         int withdrawStartYear, withdrawStartMonth;
         int manBirthYear, manBirthMonth, manAge;
         int womanBirthYear, womanBirthMonth, womanAge, currentAge;
-        int manSSAmount, manSSStartYear, manSSStartMonth;
-        int womanSSAmount, womanSSStartYear, womanSSStartMonth;
+        int manPIA, manSSStartYear, manSSStartMonth;
+        int womanPIA, womanSSStartYear, womanSSStartMonth;
         double ssCola;
         int annuity, annuityStartYear, annuityStartMonth;
         // Account balances
