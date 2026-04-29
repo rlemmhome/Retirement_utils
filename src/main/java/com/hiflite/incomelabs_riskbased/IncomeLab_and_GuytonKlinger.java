@@ -69,8 +69,9 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
     private JSpinner spWithdrawStartYear, spWithdrawStartMonth;
     private JSpinner spManBirthYear, spManBirthMonth;
     private JSpinner spWomanBirthYear, spWomanBirthMonth;
-    private JSpinner spManSSAmount, spManSSStartYear, spManSSStartMonth;
-    private JSpinner spWomanSSAmount, spWomanSSStartYear, spWomanSSStartMonth;
+    private JSpinner spManPIA, spManSSStartYear, spManSSStartMonth;
+    private JSpinner spWomanPIA, spWomanSSStartYear, spWomanSSStartMonth;
+    private JLabel   lblSSBenefitNote;   // live note: shows computed monthly benefits
     private JSpinner spSSCola;
     private JSpinner spAnnuity, spAnnuityStartYear, spAnnuityStartMonth;
     private JSpinner spNomReturn, spStdDev, spInflation, spInflationStdDev;
@@ -143,6 +144,8 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLocationRelativeTo(null);
         setVisible(true);
+        // Populate SS benefit note with initial values
+        SwingUtilities.invokeLater(this::updateSSBenefitNote);
         // No auto-run — user adjusts inputs then clicks Run Simulation
     }
 
@@ -290,27 +293,56 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         updateAgeLabels();
 
         // Social Security
-        spManSSAmount       = spinI(40_400, 0,    200_000, 100, "#,###");
-        spManSSStartYear    = spinI(2027,   2024, 2045,    1,   "#");
-        spManSSStartMonth   = spinI(1,      1,    12,      1,   "#");
-        spWomanSSAmount     = spinI(40_520, 0,    200_000, 100, "#,###");
-        spWomanSSStartYear  = spinI(2027,   2024, 2045,    1,   "#");
-        spWomanSSStartMonth = spinI(12,     1,    12,      1,   "#");
-        spSSCola            = spinD(2.3,    0.0,  6.0,     0.1, "0.0#");
+        spManPIA            = spinI(3_788,  0, 10_000, 1, "#,###");
+        spManSSStartYear    = spinI(2027,   2024, 2045, 1, "#");
+        spManSSStartMonth   = spinI(1,      1,    12,   1, "#");
+        spWomanPIA          = spinI(3_897,  0, 10_000, 1, "#,###");
+        spWomanSSStartYear  = spinI(2027,   2024, 2045, 1, "#");
+        spWomanSSStartMonth = spinI(12,     1,    12,   1, "#");
+        spSSCola            = spinD(2.3,    0.0,  6.0,  0.1, "0.0#");
+
+        spManPIA.setToolTipText("<html><b>Man's Primary Insurance Amount (PIA)</b><br>"
+                + "The monthly SS benefit payable at Full Retirement Age (FRA).<br>"
+                + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
+                + "The actual monthly benefit is calculated from PIA, birth date,<br>"
+                + "and claim date — reduced if claiming before FRA, increased if after.<br>"
+                + "FRA = 67 for those born in 1960 or later.</html>");
+        spWomanPIA.setToolTipText("<html><b>Woman's Primary Insurance Amount (PIA)</b><br>"
+                + "The monthly SS benefit payable at Full Retirement Age (FRA).<br>"
+                + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
+                + "The actual monthly benefit is calculated from PIA, birth date,<br>"
+                + "and claim date — reduced if claiming before FRA, increased if after.<br>"
+                + "FRA = 67 for those born in 1960 or later.</html>");
+
+        // Live note label — updated whenever any SS/birth spinner changes
+        lblSSBenefitNote = new JLabel(" ");
+        lblSSBenefitNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
+        lblSSBenefitNote.setForeground(new Color(60, 90, 150));
+
+        // Listener to recompute the benefit note whenever relevant spinners change
+        ChangeListener ssNoteUpdater = e -> updateSSBenefitNote();
+        for (JSpinner sp : new JSpinner[]{spManPIA, spManSSStartYear, spManSSStartMonth,
+                spWomanPIA, spWomanSSStartYear, spWomanSSStartMonth,
+                spManBirthYear, spManBirthMonth,
+                spWomanBirthYear, spWomanBirthMonth}) {
+            sp.addChangeListener(ssNoteUpdater);
+        }
+
         JPanel cardSS = card("Social Security", new Object[]{
-                "Man SS amount ($/yr)",        spManSSAmount,
-                "Man SS start year",           spManSSStartYear,
-                "Man SS start month (1-12)",   spManSSStartMonth,
-                "Woman SS amount ($/yr)",      spWomanSSAmount,
-                "Woman SS start year",         spWomanSSStartYear,
-                "Woman SS start month (1-12)", spWomanSSStartMonth,
-                "SS COLA rate (%/yr)",         spSSCola,
+                "Man PIA ($/mo at FRA)",          spManPIA,
+                "Man SS start year",              spManSSStartYear,
+                "Man SS start month (1-12)",      spManSSStartMonth,
+                "Woman PIA ($/mo at FRA)",        spWomanPIA,
+                "Woman SS start year",            spWomanSSStartYear,
+                "Woman SS start month (1-12)",    spWomanSSStartMonth,
+                null, lblSSBenefitNote,
+                "SS COLA rate (%/yr)",            spSSCola,
         });
         SpinnerDef[] sdSS = {
-                new SpinnerDef(spManSSAmount,       "manSSAmount",      40_400),
+                new SpinnerDef(spManPIA,            "manPIA",           3_788),
                 new SpinnerDef(spManSSStartYear,    "manSSStartYear",   2027),
                 new SpinnerDef(spManSSStartMonth,   "manSSStartMonth",  1),
-                new SpinnerDef(spWomanSSAmount,     "womanSSAmount",    40_520),
+                new SpinnerDef(spWomanPIA,          "womanPIA",         3_897),
                 new SpinnerDef(spWomanSSStartYear,  "womanSSStartYear", 2027),
                 new SpinnerDef(spWomanSSStartMonth, "womanSSStartMonth",12),
                 new SpinnerDef(spSSCola,            "ssCola",           2.3),
@@ -1292,13 +1324,20 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         i.manBirthMonth      = iv(spManBirthMonth);
         i.womanBirthYear     = iv(spWomanBirthYear);
         i.womanBirthMonth    = iv(spWomanBirthMonth);
-        i.manSSAmount        = iv(spManSSAmount);
         i.manSSStartYear     = iv(spManSSStartYear);
         i.manSSStartMonth    = iv(spManSSStartMonth);
-        i.womanSSAmount      = iv(spWomanSSAmount);
         i.womanSSStartYear   = iv(spWomanSSStartYear);
         i.womanSSStartMonth  = iv(spWomanSSStartMonth);
         i.ssCola             = dv(spSSCola)          / 100.0;
+        // Compute annual SS amounts from PIA, birth date, and claim date
+        i.manPIA             = iv(spManPIA);
+        i.womanPIA           = iv(spWomanPIA);
+        i.manSSMonthly       = calcSSMonthlyBenefit(i.manPIA,   i.manBirthYear,   i.manBirthMonth,
+                i.manSSStartYear,   i.manSSStartMonth);
+        i.womanSSMonthly     = calcSSMonthlyBenefit(i.womanPIA, i.womanBirthYear, i.womanBirthMonth,
+                i.womanSSStartYear, i.womanSSStartMonth);
+        i.manSSAmount        = (int) Math.round(i.manSSMonthly   * 12);
+        i.womanSSAmount      = (int) Math.round(i.womanSSMonthly * 12);
         i.annuity            = iv(spAnnuity);
         i.annuityStartYear   = iv(spAnnuityStartYear);
         i.annuityStartMonth  = iv(spAnnuityStartMonth);
@@ -1340,6 +1379,72 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         Double factor = ULT.get(Math.min(age, 100));
         if (factor == null) factor = 6.4; // age 100+
         return tradBalance / factor;
+    }
+
+    // ── Social Security benefit from PIA ─────────────────────────────────────
+    // Returns monthly benefit given PIA, birth date, and claim date.
+    // FRA schedule (SSA):  ≤1954→66y0m | 1955→66y2m | 1956→66y4m | 1957→66y6m
+    //                       1958→66y8m | 1959→66y10m | ≥1960→67y0m
+    // Early reduction: -5/9% per month for first 36 months; -5/12% per month beyond.
+    // Delayed credit:  +2/3% per month past FRA (≡ 8%/yr), capped at age 70.
+    private static int fraMonths(int birthYear) {
+        if (birthYear <= 1954) return 66 * 12;
+        if (birthYear == 1955) return 66 * 12 + 2;
+        if (birthYear == 1956) return 66 * 12 + 4;
+        if (birthYear == 1957) return 66 * 12 + 6;
+        if (birthYear == 1958) return 66 * 12 + 8;
+        if (birthYear == 1959) return 66 * 12 + 10;
+        return 67 * 12; // 1960+
+    }
+
+    private static double calcSSMonthlyBenefit(int pia,
+                                               int birthYear, int birthMonth,
+                                               int claimYear, int claimMonth) {
+        if (pia <= 0) return 0;
+        int ageMonths = (claimYear - birthYear) * 12 + (claimMonth - birthMonth);
+        int fra       = fraMonths(birthYear);
+        if (ageMonths <= fra) {
+            int monthsEarly = fra - ageMonths;
+            double reduction = monthsEarly <= 36
+                    ? monthsEarly * (5.0 / 900.0)
+                    : 36 * (5.0 / 900.0) + (monthsEarly - 36) * (5.0 / 1200.0);
+            return pia * (1.0 - reduction);
+        } else {
+            int monthsLate = Math.min(ageMonths - fra, 70 * 12 - fra);
+            return pia * (1.0 + monthsLate * (8.0 / 1200.0));
+        }
+    }
+
+    // Updates the live benefit note label in the SS card
+    private void updateSSBenefitNote() {
+        int manPIA          = iv(spManPIA);
+        int manBY           = iv(spManBirthYear);
+        int manBM           = iv(spManBirthMonth);
+        int manSY           = iv(spManSSStartYear);
+        int manSM           = iv(spManSSStartMonth);
+        double manMonthly   = calcSSMonthlyBenefit(manPIA,   manBY, manBM, manSY, manSM);
+
+        int womanPIA        = iv(spWomanPIA);
+        int womanBY         = iv(spWomanBirthYear);
+        int womanBM         = iv(spWomanBirthMonth);
+        int womanSY         = iv(spWomanSSStartYear);
+        int womanSM         = iv(spWomanSSStartMonth);
+        double womanMonthly = calcSSMonthlyBenefit(womanPIA, womanBY, womanBM, womanSY, womanSM);
+
+        int manFra   = fraMonths(manBY);
+        int womFra   = fraMonths(womanBY);
+        int manAgeM  = (manSY - manBY) * 12 + (manSM - manBM);
+        int womAgeM  = (womanSY - womanBY) * 12 + (womanSM - womanBM);
+        String manAdj  = manAgeM < manFra  ? String.format("%.1f%% early", (1.0 - manMonthly/manPIA)*100)
+                : manAgeM > manFra  ? String.format("+%.1f%% delayed", (manMonthly/manPIA - 1.0)*100)
+                  : "at FRA";
+        String womAdj  = womAgeM < womFra  ? String.format("%.1f%% early", (1.0 - womanMonthly/womanPIA)*100)
+                : womAgeM > womFra  ? String.format("+%.1f%% delayed", (womanMonthly/womanPIA - 1.0)*100)
+                  : "at FRA";
+
+        lblSSBenefitNote.setText(String.format(
+                "<html><i>Computed monthly: Man $%,.0f (%s) · Woman $%,.0f (%s)</i></html>",
+                manMonthly, manAdj, womanMonthly, womAdj));
     }
 
     private double manSSThisYear(SimInputs inp, int y) {
@@ -2219,6 +2324,8 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         int withdrawStartYear, withdrawStartMonth;
         int manBirthYear, manBirthMonth, manAge;
         int womanBirthYear, womanBirthMonth, womanAge, currentAge;
+        int manPIA, womanPIA;            // Primary Insurance Amount (monthly at FRA)
+        double manSSMonthly, womanSSMonthly; // computed monthly benefit at claim age
         int manSSAmount, manSSStartYear, manSSStartMonth;
         int womanSSAmount, womanSSStartYear, womanSSStartMonth;
         double ssCola;
