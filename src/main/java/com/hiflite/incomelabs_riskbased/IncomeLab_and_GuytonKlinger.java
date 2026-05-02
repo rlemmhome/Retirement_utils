@@ -28,7 +28,10 @@ import java.util.List;
  */
 public class IncomeLab_and_GuytonKlinger extends JFrame {
 
-    private static final int BASE_YEAR      = 2026;
+    // BASE_YEAR: simulation starts on Jan 1 of this year. Kept as a class constant
+    // for UI build-time defaults; overridden at runtime by spSimStartYear → inp.baseYear.
+    private static final int BASE_YEAR_DEFAULT = java.time.Year.now().getValue();
+    private static int BASE_YEAR = BASE_YEAR_DEFAULT; // mutable — updated from spinner in readInputs
     private static final int RMD_START_AGE  = 75; // SECURE 2.0: born 1960 or later
     // MC parameters — driven by spinners at runtime
     private int mcSolvePaths = 800;
@@ -66,6 +69,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
 
     // ── Input spinners ───────────────────────────────────────────────────────
     private JSpinner spPortfolio, spHorizon, spTargetPoS;
+    private JSpinner spSimStartYear;                           // simulation base year (default: current year)
     private JSpinner spWithdrawStartYear, spWithdrawStartMonth;
     private JSpinner spManBirthYear, spManBirthMonth;
     private JSpinner spWomanBirthYear, spWomanBirthMonth;
@@ -166,7 +170,16 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         inner.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         // Portfolio & Simulation
+        int curYear = java.time.Year.now().getValue();
+        spSimStartYear       = spinI(curYear, 2020, 2040, 1, "#");
+        spSimStartYear.setToolTipText("<html><b>Simulation start year</b><br>"
+                + "The calendar year used as year 0 of the simulation.<br>"
+                + "Defaults to the current year (" + curYear + ").<br><br>"
+                + "All other year-based inputs (withdrawal start, SS start,<br>"
+                + "annuity start) are interpreted relative to this base year.<br>"
+                + "Changing this shifts the entire simulation timeline forward or back.</html>");
         spPortfolio          = spinI(1_500_000, 10_000, 20_000_000, 10_000, "#,###");
+        spPortfolio.addChangeListener(e -> distributePortfolioDelta());
         spHorizon            = spinI(30, 10, 50, 1, "#");
         spTargetPoS          = spinI(80, 60, 99, 1, "#");
         spWithdrawStartYear  = spinI(2027, 2025, 2040, 1, "#");
@@ -221,6 +234,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
                 + "<b>Default: 4.0%</b></html>");
 
         JPanel cardPortfolio = card("Portfolio & Simulation", new Object[]{
+                "Simulation start year",                         spSimStartYear,
                 "Starting portfolio ($)",                        spPortfolio,
                 "Retirement horizon (years)",                    spHorizon,
                 "Target success rate (%)",                       spTargetPoS,
@@ -233,6 +247,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
                 "GK only — pre-anchor initial wd rate (%)",      spGkPreRate,
         });
         SpinnerDef[] sdPortfolio = {
+                new SpinnerDef(spSimStartYear,      "simStartYear", curYear),
                 new SpinnerDef(spPortfolio,         "portfolio",    1_500_000),
                 new SpinnerDef(spHorizon,           "horizon",      30),
                 new SpinnerDef(spTargetPoS,         "targetPoS",    80),
@@ -526,8 +541,60 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
             long total = (long)iv(spManTradIRA) + iv(spManRothIRA) + iv(spManTrad401K)
                     + iv(spWomanRoth401K) + iv(spWomanTradIRA) + iv(spWomanTrad401K);
             lblAccountTotal.setText("Account total: " + CURRENCY.format(total));
-            spPortfolio.setValue((int) Math.min(total, 20_000_000));
+            if (!distributing) {
+                distributing = true;
+                spPortfolio.setValue((int) Math.min(total, 20_000_000));
+                distributing = false;
+            }
         } catch (Exception ignored) {}
+    }
+
+    // Guard flag: prevents feedback loop between spPortfolio and account spinners
+    private boolean distributing = false;
+
+    /** Called when spPortfolio is edited directly — distributes the delta across
+     *  account spinners proportionally to their current shares. */
+    private void distributePortfolioDelta() {
+        if (distributing) return;
+        try {
+            long newTotal = iv(spPortfolio);
+            long oldTotal = (long)iv(spManTradIRA) + iv(spManRothIRA) + iv(spManTrad401K)
+                    + iv(spWomanRoth401K) + iv(spWomanTradIRA) + iv(spWomanTrad401K);
+            long delta = newTotal - oldTotal;
+            if (delta == 0 || oldTotal == 0) return;
+
+            distributing = true;
+
+            JSpinner[] accts = {spManTradIRA, spManRothIRA, spManTrad401K,
+                    spWomanRoth401K, spWomanTradIRA, spWomanTrad401K};
+            double[] shares = new double[accts.length];
+            for (int k = 0; k < accts.length; k++)
+                shares[k] = iv(accts[k]) / (double) oldTotal;
+
+            // Distribute proportionally; accumulate rounding error into largest account
+            long remaining = delta;
+            int largest = 0;
+            for (int k = 0; k < accts.length; k++) {
+                long add = Math.round(delta * shares[k]);
+                long cur = iv(accts[k]);
+                long nv  = Math.max(0, cur + add);
+                accts[k].setValue((int) Math.min(nv, 10_000_000));
+                remaining -= (nv - cur);
+                if (shares[k] > shares[largest]) largest = k;
+            }
+            // Apply any leftover rounding to the largest account
+            if (remaining != 0) {
+                long cur = iv(accts[largest]);
+                accts[largest].setValue((int) Math.min(Math.max(0, cur + remaining), 10_000_000));
+            }
+
+            // Recompute label to reflect new account values
+            long finalTotal = 0;
+            for (JSpinner s : accts) finalTotal += iv(s);
+            lblAccountTotal.setText("Account total: " + CURRENCY.format(finalTotal));
+
+            distributing = false;
+        } catch (Exception ignored) { distributing = false; }
     }
 
 
@@ -1053,10 +1120,13 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
                 switch (col) {
                     case 3 -> gkHeader.setToolTipText(
                             "<html><b>GK withdrawal</b><br>"
-                                    + "Guyton-Klinger rules-based withdrawal for this year.<br>"
-                                    + "Starts from prior year's withdrawal, inflation-adjusted,<br>"
-                                    + "then modified by Capital Preservation, Prosperity,<br>"
-                                    + "and Portfolio Management rules as needed.</html>");
+                                    + "Pre-anchor years: user-entered rate × current balance.<br>"
+                                    + "Anchor year: net spending need (spending minus guaranteed income).<br>"
+                                    + "Subsequent years: prior withdrawal, inflation-adjusted, then<br>"
+                                    + "modified by CPR, PR, and PMR rules as needed.<br><br>"
+                                    + "Guardrail comparisons (CPR▼ / PR▲) use the user-entered<br>"
+                                    + "pre-anchor rate as the initial-rate benchmark — not the<br>"
+                                    + "computed net-need / portfolio ratio.</html>");
                     case 7 -> gkHeader.setToolTipText(
                             "<html><b>Rule flags</b><br>"
                                     + "<b>X.X%</b> = Pre-anchor phase: user-defined initial rate × current balance.<br>"
@@ -1156,8 +1226,8 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         lblGkFinalBal = mkMetricLabel();
         JPanel gkMetrics = new JPanel(new GridLayout(1, 3, 8, 0));
         gkMetrics.setBackground(new Color(245, 245, 242));
-        gkMetrics.add(wrapMetric(lblGkInitWd,   "GK anchor withdrawal",  "net need at GK rules start"));
-        gkMetrics.add(wrapMetric(lblGkInitRate,  "GK initial rate",       "anchor year net need / portfolio"));
+        gkMetrics.add(wrapMetric(lblGkInitWd,   "GK anchor withdrawal",  "carried forward from pre-anchor at GK rules start"));
+        gkMetrics.add(wrapMetric(lblGkInitRate,  "GK guardrail anchor",   "user-entered pre-anchor rate (guardrail benchmark)"));
         gkMetrics.add(wrapMetric(lblGkFinalBal,  "Final portfolio bal",   "end of horizon (mean return)"));
 
         // Legend bar
@@ -1315,6 +1385,8 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
 
     private SimInputs readInputs() {
         SimInputs i = new SimInputs();
+        i.baseYear           = iv(spSimStartYear);
+        BASE_YEAR            = i.baseYear;   // keep class-level in sync for any UI code that uses it
         i.portfolio          = iv(spPortfolio);
         i.horizon            = iv(spHorizon);
         i.targetPoS          = iv(spTargetPoS) / 100.0;
@@ -1448,7 +1520,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
     }
 
     private double manSSThisYear(SimInputs inp, int y) {
-        int calYear = BASE_YEAR + y;
+        int calYear = inp.baseYear + y;
         if (calYear < inp.manSSStartYear) return 0;
         if (calYear == inp.manSSStartYear)
             return inp.manSSAmount * (13.0 - inp.manSSStartMonth) / 12.0;
@@ -1456,7 +1528,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
     }
 
     private double womanSSThisYear(SimInputs inp, int y) {
-        int calYear = BASE_YEAR + y;
+        int calYear = inp.baseYear + y;
         if (calYear < inp.womanSSStartYear) return 0;
         if (calYear == inp.womanSSStartYear)
             return inp.womanSSAmount * (13.0 - inp.womanSSStartMonth) / 12.0;
@@ -1464,7 +1536,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
     }
 
     private double annuityThisYear(SimInputs inp, int y) {
-        int calYear = BASE_YEAR + y;
+        int calYear = inp.baseYear + y;
         if (calYear < inp.annuityStartYear) return 0;
         if (calYear == inp.annuityStartYear)
             return inp.annuity * (13.0 - inp.annuityStartMonth) / 12.0;
@@ -1472,7 +1544,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
     }
 
     private double taxThisYear(SimInputs inp, int y) {
-        int calYear = BASE_YEAR + y;
+        int calYear = inp.baseYear + y;
         if (calYear < inp.withdrawStartYear) return 0;
         return inp.baseTax * Math.pow(1 + inp.taxInflation, calYear - inp.withdrawStartYear);
     }
@@ -1482,7 +1554,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         res.inp = inp;
         res.medianRows = new ArrayList<>();
 
-        int startY      = inp.withdrawStartYear - BASE_YEAR; // y-offset when draws begin
+        int startY      = inp.withdrawStartYear - inp.baseYear; // y-offset when draws begin
         int goGoAtStart = inp.goGoDuration; // full duration remaining at start
         int yr1Wd = solveWithdrawal(inp.portfolio, inp.horizon, inp, 999 + seed,
                 solvePaths, binIters, goGoAtStart);
@@ -1495,7 +1567,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         double womanTrad401K= inp.womanTrad401K;
 
         for (int y = 0; y < inp.horizon; y++) {
-            int calYear   = BASE_YEAR + y;
+            int calYear   = inp.baseYear + y;
             // Age reached during this calendar year (standard retirement planning convention)
             int manAge    = calYear - inp.manBirthYear;
             int womanAge  = calYear - inp.womanBirthYear;
@@ -1609,7 +1681,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
             res.fanInflFactors[p][0] = 1.0;
 
             for (int y = 0; y < inp.horizon; y++) {
-                int calYear = BASE_YEAR + y;
+                int calYear = inp.baseYear + y;
                 boolean drawing = calYear >= inp.withdrawStartYear;
 
                 double infl = Math.max(0,
@@ -1618,7 +1690,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
 
                 double ret = inp.nomReturn + inp.stdDev * rng.nextGaussian();
 
-                int fanStartY        = inp.withdrawStartYear - BASE_YEAR;
+                int fanStartY        = inp.withdrawStartYear - inp.baseYear;
                 int fanGoGoRemaining = Math.max(0, inp.goGoDuration - Math.max(0, y - fanStartY));
                 int fanManAge        = calYear - inp.manBirthYear;
                 int fanWomanAge      = calYear - inp.womanBirthYear;
@@ -1697,7 +1769,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         gk.inp  = inp;
         gk.rows = new ArrayList<>();
 
-        int startY = inp.withdrawStartYear - BASE_YEAR;
+        int startY = inp.withdrawStartYear - inp.baseYear;
 
         // ── Compute anchor year: first year all income sources are full (no proration) ──
         int manSSFullYear   = inp.manSSStartMonth   > 1 ? inp.manSSStartYear   + 1 : inp.manSSStartYear;
@@ -1706,7 +1778,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         if (inp.annuity == 0) annFullYear = inp.withdrawStartYear;
         int anchorCalYear   = Math.max(inp.withdrawStartYear,
                 Math.max(manSSFullYear, Math.max(womanSSFullYear, annFullYear)));
-        int anchorY         = anchorCalYear - BASE_YEAR;
+        int anchorY         = anchorCalYear - inp.baseYear;
         gk.anchorCalYear    = anchorCalYear;
 
         // ── GK initial rate: net spending need at anchor year / original portfolio ──
@@ -1718,9 +1790,10 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         double anchorTax     = taxThisYear(inp, anchorY);
         double anchorSpend   = anchorLiving + anchorMedical + anchorTax;
         double anchorNetNeed = Math.max(0, anchorSpend - anchorGuaranteed);
-        double initialWdRate = inp.portfolio > 0 ? anchorNetNeed / inp.portfolio : inp.gkPreRate;
+        double initialWdRate = inp.gkPreRate;  // guardrail anchor = user-entered pre-anchor rate
         gk.initialWdRate     = initialWdRate;
-        gk.yr1Withdrawal     = (int) anchorNetNeed;
+        // yr1Withdrawal will be set after the loop from the actual anchor-year wdGK value
+        gk.yr1Withdrawal     = 0; // placeholder — updated after loop
 
         double bal            = inp.portfolio;
         double wdGK           = 0;
@@ -1732,7 +1805,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         double womanTrad401K = inp.womanTrad401K;
 
         for (int y = 0; y < inp.horizon; y++) {
-            int calYear  = BASE_YEAR + y;
+            int calYear  = inp.baseYear + y;
             int manAge   = calYear - inp.manBirthYear;
             int womanAge = calYear - inp.womanBirthYear;
             boolean drawing      = calYear >= inp.withdrawStartYear;
@@ -1761,15 +1834,15 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
                 // ── Pre-anchor: user-defined initial rate × current balance ──
                 wdGK = bal * inp.gkPreRate * wdStartProration;
                 flags = String.format("%.1f%%", inp.gkPreRate * 100);
-            } else if (calYear == anchorCalYear) {
-                // ── Anchor year: set GK withdrawal from net spending need, no rules yet ──
-                wdGK = anchorNetNeed;
-                flags = "GK start";
             } else {
-                // ── GK rules phase ──
+                // ── GK rules phase (including anchor year) ──
+                // At the anchor year itself: carry forward the pre-anchor wdGK amount
+                // and apply full GK rules immediately — no hard reset to anchorNetNeed.
+                // This prevents the artificial Wd% drop caused by switching from gross
+                // withdrawal to net-of-guaranteed-income withdrawal at the anchor boundary.
                 boolean applyInflation = true;
                 double currentWdPctBeforeAdjust = bal > 0 ? wdGK / bal : 0;
-                if (prevYearLoss && currentWdPctBeforeAdjust > initialWdRate) {
+                if (prevYearLoss && currentWdPctBeforeAdjust > inp.gkPreRate) {
                     applyInflation = false;
                     flags = "PMR⁰";
                 }
@@ -1786,6 +1859,8 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
                     wdGK *= 1.10;
                     flags = flags.equals("—") ? "PR▲" : flags + " + PR▲";
                 }
+
+                if (calYear == anchorCalYear) flags = "GK start" + (flags.equals("—") ? "" : " + " + flags);
             }
 
             double manRmd   = calcRmd(manTradIRA,   manAge) + calcRmd(manTrad401K,  manAge);
@@ -1842,6 +1917,10 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         gk.finalBalance = gk.rows.isEmpty() ? 0
                 : gk.rows.get(gk.rows.size() - 1).balance
                   + gk.rows.get(gk.rows.size() - 1).balDelta;
+        // Capture the actual withdrawal at the anchor year as the headline figure
+        for (GkRow r : gk.rows) {
+            if (r.calYear == anchorCalYear) { gk.yr1Withdrawal = r.wdGK; break; }
+        }
         return gk;
     }
 
@@ -1991,7 +2070,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
             // Update GK metrics header
             double gkRate   = gk.initialWdRate * 100.0;
             double dEndGk   = !gk.rows.isEmpty() ? gk.rows.get(gk.rows.size()-1).inflFactor : 1.0;
-            double anchorInflFactor = Math.pow(1 + inp.inflation, gk.anchorCalYear - BASE_YEAR);
+            double anchorInflFactor = Math.pow(1 + inp.inflation, gk.anchorCalYear - inp.baseYear);
             lblGkInitWd.setText(CURRENCY.format((long)((double)gk.yr1Withdrawal
                     / (showRealDollars ? anchorInflFactor : 1.0))) + " / yr");
             lblGkInitRate.setText(String.format("%.2f%%  (from %d)", gkRate, gk.anchorCalYear));
@@ -2015,15 +2094,24 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         int spd1  = r1 != null ? r1.totalSpend : 0;
         int inc1  = yr1 + guar1;
         int sur1  = inc1 - spd1;
-        int fullSSYear = Math.max(inp.manSSStartYear, inp.womanSSStartYear);
+        int fullSSYear   = Math.max(inp.manSSStartYear, inp.womanSSStartYear);
         int manRmdYear   = inp.manBirthYear   + RMD_START_AGE;
         int womanRmdYear = inp.womanBirthYear + RMD_START_AGE;
 
-        return String.format(
-                "══ YEAR 2026 ══\n"
-                        + "  No portfolio draws. Woman's salary covers living expenses.\n"
-                        + "  Man (Sep %d, age %d) · Woman (Dec %d, age %d)\n\n"
-                        + "══ FIRST WITHDRAWAL YEAR (%d) ══\n"
+        // Pre-draw section: only shown when simulation starts before withdrawals begin
+        String preDrawSection = "";
+        if (inp.baseYear < inp.withdrawStartYear) {
+            preDrawSection = String.format(
+                    "══ YEAR %d ══\n"
+                            + "  No portfolio draws.\n"
+                            + "  Man (age %d) · Woman (age %d)\n\n",
+                    inp.baseYear,
+                    inp.manAge,
+                    inp.womanAge);
+        }
+
+        return preDrawSection + String.format(
+                "══ FIRST WITHDRAWAL YEAR (%d) ══\n"
                         + "  Portfolio withdrawal:  %s/yr  (%.2f%% of $%,.0f)\n"
                         + "  + Guaranteed income:   %s\n"
                         + "  = Total income:        %s\n"
@@ -2047,20 +2135,19 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
                         + "  Return: %.2f%% / %.2f%% std dev · Inflation: %.2f%% / %.2f%% std dev\n\n"
                         + "══ MEDIAN SCENARIO ══\n"
                         + "  Portfolio %s at year %d · Actual PoS: %.1f%% across %d paths",
-                inp.manBirthYear, inp.manAge, inp.womanBirthYear, inp.womanAge,
                 inp.withdrawStartYear,
                 CURRENCY.format(yr1), yr1/(double)inp.portfolio*100, (double)inp.portfolio,
                 CURRENCY.format(guar1), CURRENCY.format(inc1),
                 CURRENCY.format(spd1),
                 sur1 >= 0 ? "SURPLUS" : "GAP", CURRENCY.format(Math.abs(sur1)),
                 CURRENCY.format(inp.manSSAmount), inp.manSSStartMonth, inp.manSSStartYear,
-                inp.manAge + (inp.manSSStartYear - BASE_YEAR),
+                inp.manAge + (inp.manSSStartYear - inp.baseYear),
                 CURRENCY.format(inp.womanSSAmount), inp.womanSSStartMonth, inp.womanSSStartYear,
-                inp.womanAge + (inp.womanSSStartYear - BASE_YEAR),
+                inp.womanAge + (inp.womanSSStartYear - inp.baseYear),
                 fullSSYear, inp.ssCola * 100,
                 CURRENCY.format(inp.annuity), inp.annuityStartYear,
                 (1 - 1.0/Math.pow(1+inp.inflation, inp.horizon))*100,
-                BASE_YEAR + inp.horizon, inp.inflation * 100,
+                inp.baseYear + inp.horizon, inp.inflation * 100,
                 CURRENCY.format(inp.manTradIRA),    manRmdYear,
                 CURRENCY.format(inp.womanTradIRA) + " IRA + " + CURRENCY.format(inp.womanTrad401K) + " 401K", womanRmdYear,
                 CURRENCY.format(inp.manRothIRA) + " (man) + " + CURRENCY.format(inp.womanRoth401K) + " (woman)",
@@ -2320,6 +2407,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
     //  DATA CLASSES
     // ════════════════════════════════════════════════════════════════════════
     static class SimInputs {
+        int baseYear;          // simulation start year (Jan 1); drives all calYear calculations
         int portfolio, horizon; double targetPoS;
         int withdrawStartYear, withdrawStartMonth;
         int manBirthYear, manBirthMonth, manAge;
