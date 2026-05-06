@@ -67,6 +67,15 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
     private static final int COL_RMD_OVERAGE = 23;
     private static final int COL_WD          = 3;
 
+    // ── Font sizing ──────────────────────────────────────────────────────────
+    // BASE_FONT_SIZE is the Swing default (12pt). fontDelta shifts all fonts
+    // uniformly: a font declared at size N becomes N + fontDelta.
+    // Default delta = +2 (per user preference), range -4 to +4.
+    private static final int BASE_FONT_SIZE = 12;
+    private int fontDelta = 2;           // current delta; updated from spFontDelta
+    private JSpinner spFontDelta;        // Appearance card spinner
+    private javax.swing.Timer fontDebounceTimer; // 1.0s debounce before applying font change
+
     // ── Input spinners ───────────────────────────────────────────────────────
     private JSpinner spPortfolio, spHorizon, spTargetPoS;
     private JSpinner spSimStartYear;                           // simulation base year (default: current year)
@@ -169,6 +178,31 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         inner.setBackground(new Color(240, 240, 237));
         inner.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
+        // ── Appearance card ────────────────────────────────────────────────
+        spFontDelta = new JSpinner(new SpinnerNumberModel(2, -4, 4, 1));
+        spFontDelta.setFont(new Font("SansSerif", Font.PLAIN, BASE_FONT_SIZE + fontDelta));
+        spFontDelta.setToolTipText("<html><b>Font size adjustment (pt)</b><br>"
+                + "Shifts all application fonts by this many points relative to<br>"
+                + "the Swing default (12pt). Default = +2.<br>"
+                + "Range: −4 (smaller) to +4 (larger).<br>"
+                + "Font update applies ~1 second after you stop adjusting.</html>");
+
+        // Debounce timer: fires once 1.0s after the last spinner change
+        fontDebounceTimer = new javax.swing.Timer(1000, e -> {
+            fontDelta = (Integer) spFontDelta.getValue();
+            applyFonts(SwingUtilities.getWindowAncestor(spFontDelta));
+        });
+        fontDebounceTimer.setRepeats(false);
+        spFontDelta.addChangeListener(e -> {
+            fontDebounceTimer.restart();
+        });
+
+        JPanel cardAppearance = card("Appearance", new Object[]{
+                "Font size adjustment (pt)",  spFontDelta,
+        });
+        inner.add(cardAppearance);
+        inner.add(Box.createVerticalStrut(4));
+
         // Portfolio & Simulation
         int curYear = java.time.Year.now().getValue();
         spSimStartYear       = spinI(curYear, 2020, 2040, 1, "#");
@@ -223,14 +257,13 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
                 + "Each fan path re-solves withdrawal every year — very expensive.</html>");
 
         spGkPreRate = spinD(4.0, 1.0, 10.0, 0.1, "0.0#");
-        spGkPreRate.setToolTipText("<html><b>GK only — pre-anchor initial withdrawal rate (%)</b><br>"
+        spGkPreRate.setToolTipText("<html><b>GK only — initial withdrawal rate (%)</b><br>"
                 + "Used exclusively by the Guyton-Klinger simulation (Option C).<br>"
                 + "Has no effect on the Income Lab PoS tab.<br><br>"
-                + "Before the GK anchor year (first year all income sources pay a full<br>"
-                + "12-month amount), this percentage of the current portfolio balance<br>"
-                + "is used as the withdrawal amount each year.<br><br>"
-                + "The anchor year net spending need / original portfolio then becomes<br>"
-                + "the permanent GK initial rate for guardrail comparisons.<br><br>"
+                + "In the first withdrawal year, this percentage of the current portfolio<br>"
+                + "balance is used as the withdrawal amount (prorated by start month).<br>"
+                + "From year 2 onward, GK guardrail rules (CPR▼ / PR▲ / PMR⁰) engage,<br>"
+                + "using this rate as the permanent benchmark for all comparisons.<br><br>"
                 + "<b>Default: 4.0%</b></html>");
 
         JPanel cardPortfolio = card("Portfolio & Simulation", new Object[]{
@@ -244,7 +277,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
                 "MC solve paths (accuracy vs speed)",            spMcSolvePaths,
                 "Binary search iterations",                      spBinaryIters,
                 "Fan chart paths (chart quality)",               spMcFanPaths,
-                "GK only — pre-anchor initial wd rate (%)",      spGkPreRate,
+                "GK only — initial wd rate (%)",      spGkPreRate,
         });
         SpinnerDef[] sdPortfolio = {
                 new SpinnerDef(spSimStartYear,      "simStartYear", curYear),
@@ -534,6 +567,51 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
             lblManAge.setText("Man age: " + computeAge(iv(spManBirthYear), iv(spManBirthMonth)));
             lblWomanAge.setText("Woman age: " + computeAge(iv(spWomanBirthYear), iv(spWomanBirthMonth)));
         } catch (Exception ignored) {}
+    }
+
+    // ── Recursive font updater ────────────────────────────────────────────────
+    // Walks the entire component tree and shifts every font by (fontDelta - 2)
+    // relative to each component's current size. We track the "natural" size as
+    // the size the component was given at construction (BASE_FONT_SIZE + 2 default).
+    // When fontDelta changes, we compute: newSize = currentSize - oldDelta + newDelta.
+    // We store oldDelta via a client property so we can reverse it precisely.
+    private static final String FONT_DELTA_KEY = "app.fontDelta";
+
+    private void applyFonts(java.awt.Component root) {
+        if (root == null) return;
+        applyFontRecursive(root, fontDelta);
+        if (root instanceof java.awt.Window) {
+            ((java.awt.Window) root).pack();
+            // Don't resize — just revalidate to relayout without changing window size
+            ((java.awt.Window) root).revalidate();
+        }
+        // Also rescale table row heights
+        rescaleTableRowHeight(tblResults);
+        rescaleTableRowHeight(tblGk);
+    }
+
+    private void applyFontRecursive(java.awt.Component c, int newDelta) {
+        Font f = c.getFont();
+        if (f != null) {
+            Integer prevDelta = (c instanceof javax.swing.JComponent)
+                    ? (Integer)((javax.swing.JComponent)c).getClientProperty(FONT_DELTA_KEY)
+                    : null;
+            if (prevDelta == null) prevDelta = 2; // default delta at construction
+            int newSize = Math.max(8, f.getSize() - prevDelta + newDelta);
+            c.setFont(f.deriveFont((float) newSize));
+            if (c instanceof javax.swing.JComponent)
+                ((javax.swing.JComponent)c).putClientProperty(FONT_DELTA_KEY, newDelta);
+        }
+        if (c instanceof java.awt.Container) {
+            for (java.awt.Component child : ((java.awt.Container)c).getComponents())
+                applyFontRecursive(child, newDelta);
+        }
+    }
+
+    private void rescaleTableRowHeight(JTable tbl) {
+        if (tbl == null) return;
+        // Row height tracks font size: base 24 at delta=2, scales with delta
+        tbl.setRowHeight(Math.max(16, 22 + fontDelta));
     }
 
     private void updateAccountTotal() {
@@ -1129,11 +1207,8 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
                                     + "computed net-need / portfolio ratio.</html>");
                     case 7 -> gkHeader.setToolTipText(
                             "<html><b>Rule flags</b><br>"
-                                    + "<b>X.X%</b> = Pre-anchor phase: user-defined initial rate × current balance.<br>"
-                                    + "&nbsp;&nbsp;Used until all income sources pay a full 12-month amount.<br>"
+                                    + "<b>X.X%</b> = Year 1 of drawing: gkPreRate × current balance used.<br>"
                                     + "&nbsp;&nbsp;Set via 'GK only — pre-anchor initial wd rate' in the input panel.<br>"
-                                    + "<b>GK start</b> = anchor year: GK initial rate set from this year's<br>"
-                                    + "&nbsp;&nbsp;net spending need. No rule adjustments in this first year.<br>"
                                     + "<b>—</b> = GK rules phase, no rule triggered; normal inflation adjustment.<br>"
                                     + "<b>PMR⁰</b> = Portfolio Management Rule: inflation raise <i>skipped</i>.<br>"
                                     + "<b>CPR▼</b> = Capital Preservation Rule: withdrawal cut 10%.<br>"
@@ -1227,13 +1302,13 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         JPanel gkMetrics = new JPanel(new GridLayout(1, 3, 8, 0));
         gkMetrics.setBackground(new Color(245, 245, 242));
         gkMetrics.add(wrapMetric(lblGkInitWd,   "GK anchor withdrawal",  "carried forward from pre-anchor at GK rules start"));
-        gkMetrics.add(wrapMetric(lblGkInitRate,  "GK guardrail anchor",   "user-entered pre-anchor rate (guardrail benchmark)"));
+        gkMetrics.add(wrapMetric(lblGkInitRate,  "GK guardrail anchor",   "user-entered initial rate (CPR/PR benchmark)"));
         gkMetrics.add(wrapMetric(lblGkFinalBal,  "Final portfolio bal",   "end of horizon (mean return)"));
 
         // Legend bar
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 3));
         legend.setBackground(new Color(245, 245, 242));
-        legend.add(gkLegendChip(new Color(230, 222, 255), new Color(70, 40, 140),  "Pre-anchor initial rate"));
+        legend.add(gkLegendChip(new Color(230, 222, 255), new Color(70, 40, 140),  "Year 1 initial rate (gkPreRate × bal)"));
         legend.add(gkLegendChip(new Color(220, 235, 255), new Color(24, 95, 165),  "GK rules start"));
         legend.add(gkLegendChip(new Color(180, 230, 205), new Color(0, 90, 50),    "Go-go years"));
         legend.add(gkLegendChip(new Color(255, 235, 185), new Color(120, 70, 0),   "PMR⁰ — inflation frozen"));
@@ -1745,55 +1820,32 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
     //
     //  Uses mean return and mean inflation (deterministic — no MC).
     //
-    //  Phase 1 — Pre-anchor (before anchor year):
-    //    Withdrawal = gkPreRate (user input, default 4.0%) × current balance,
-    //    prorated in the first draw year by withdrawal start month.
-    //    No GK guardrail rules apply yet.
+    //  Three phases — boundary is withdrawStartYear only:
     //
-    //  Anchor year = first calendar year where ALL income sources pay a full
-    //    12-month amount (no start-month proration on any stream). Computed as:
-    //    max(wdStartYear, manSSFullYear, womanSSFullYear, annuityFullYear)
-    //    where fullYear = startYear + 1 if startMonth > 1, else startYear.
+    //  Phase 0 — Pre-withdrawal (baseYear to withdrawStartYear − 1):
+    //    Portfolio grows/shrinks at mean return. No withdrawal. No flags.
     //
-    //  Phase 2 — GK rules phase (anchor year onward):
-    //    Initial rate locked from anchor year net spending need / original portfolio.
-    //    Four rules per Guyton & Klinger (2006):
-    //      WRR — Withdrawal Rate Rule: annual inflation adjustment (base step).
-    //      PMR — Portfolio Management Rule: skip inflation raise when portfolio
-    //            lost money the prior year AND wd rate > initial wd rate.
-    //      CPR — Capital Preservation Rule: cut 10% when wd% > initialRate × (1 + upper).
-    //      PR  — Prosperity Rule: raise 10% when wd% < initialRate × (1 - lower).
+    //  Phase 1 — First withdrawal year (withdrawStartYear):
+    //    wdGK = balance × gkPreRate × wdStartProration.
+    //    Flag: "X.X%". No GK rule adjustments yet.
+    //
+    //  Phase 2 — Subsequent draw years (withdrawStartYear + 1 onward):
+    //    Full GK rules engage using gkPreRate as the guardrail anchor:
+    //      WRR — Inflation adjustment (base step).
+    //      PMR — Skip inflation raise when portfolio lost money prior year
+    //            AND wd rate > gkPreRate.
+    //      CPR — Cut 10% when wd% > gkPreRate x (1 + upperGuardrail).
+    //      PR  — Raise 10% when wd% < gkPreRate x (1 - lowerGuardrail).
     // ════════════════════════════════════════════════════════════════════════
     private GkResults simulateGK(SimInputs inp) {
         GkResults gk = new GkResults();
         gk.inp  = inp;
         gk.rows = new ArrayList<>();
 
-        int startY = inp.withdrawStartYear - inp.baseYear;
-
-        // ── Compute anchor year: first year all income sources are full (no proration) ──
-        int manSSFullYear   = inp.manSSStartMonth   > 1 ? inp.manSSStartYear   + 1 : inp.manSSStartYear;
-        int womanSSFullYear = inp.womanSSStartMonth > 1 ? inp.womanSSStartYear + 1 : inp.womanSSStartYear;
-        int annFullYear     = inp.annuityStartMonth > 1 ? inp.annuityStartYear + 1 : inp.annuityStartYear;
-        if (inp.annuity == 0) annFullYear = inp.withdrawStartYear;
-        int anchorCalYear   = Math.max(inp.withdrawStartYear,
-                Math.max(manSSFullYear, Math.max(womanSSFullYear, annFullYear)));
-        int anchorY         = anchorCalYear - inp.baseYear;
-        gk.anchorCalYear    = anchorCalYear;
-
-        // ── GK initial rate: net spending need at anchor year / original portfolio ──
-        double anchorGuaranteed = manSSThisYear(inp, anchorY)
-                + womanSSThisYear(inp, anchorY)
-                + annuityThisYear(inp, anchorY);
-        double anchorLiving  = inp.livingExp * Math.pow(1 + inp.inflation,   anchorY);
-        double anchorMedical = inp.medical   * Math.pow(1 + inp.medInflation, anchorY);
-        double anchorTax     = taxThisYear(inp, anchorY);
-        double anchorSpend   = anchorLiving + anchorMedical + anchorTax;
-        double anchorNetNeed = Math.max(0, anchorSpend - anchorGuaranteed);
-        double initialWdRate = inp.gkPreRate;  // guardrail anchor = user-entered pre-anchor rate
+        int startY           = inp.withdrawStartYear - inp.baseYear;
+        double initialWdRate = inp.gkPreRate;   // guardrail anchor throughout
         gk.initialWdRate     = initialWdRate;
-        // yr1Withdrawal will be set after the loop from the actual anchor-year wdGK value
-        gk.yr1Withdrawal     = 0; // placeholder — updated after loop
+        gk.yr1Withdrawal     = 0;               // updated when firstDrawYear is processed
 
         double bal            = inp.portfolio;
         double wdGK           = 0;
@@ -1809,7 +1861,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
             int manAge   = calYear - inp.manBirthYear;
             int womanAge = calYear - inp.womanBirthYear;
             boolean drawing      = calYear >= inp.withdrawStartYear;
-            boolean preAnchor    = calYear < anchorCalYear;
+            boolean firstDrawYear = calYear == inp.withdrawStartYear;
 
             int goGoRemaining = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
             double goGoMult   = (goGoRemaining > 0) ? inp.goGoMultiplier : 1.0;
@@ -1824,43 +1876,43 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
             double tax        = taxThisYear(inp, y);
             double totalSpend = drawing ? living + medical + tax : 0;
 
-            double wdStartProration = (drawing && calYear == inp.withdrawStartYear)
+            // Prorate first draw year by months remaining in year
+            double wdStartProration = firstDrawYear
                     ? (13.0 - inp.withdrawStartMonth) / 12.0 : 1.0;
 
             String flags = "—";
             if (!drawing) {
+                // Phase 0: portfolio growth only, no withdrawal
                 wdGK = 0;
-            } else if (preAnchor) {
-                // ── Pre-anchor: user-defined initial rate × current balance ──
+            } else if (firstDrawYear) {
+                // Phase 1: first withdrawal = gkPreRate x current balance (prorated)
                 wdGK = bal * inp.gkPreRate * wdStartProration;
                 flags = String.format("%.1f%%", inp.gkPreRate * 100);
+                gk.yr1Withdrawal = (int) wdGK;
             } else {
-                // ── GK rules phase (including anchor year) ──
-                // At the anchor year itself: carry forward the pre-anchor wdGK amount
-                // and apply full GK rules immediately — no hard reset to anchorNetNeed.
-                // This prevents the artificial Wd% drop caused by switching from gross
-                // withdrawal to net-of-guaranteed-income withdrawal at the anchor boundary.
+                // Phase 2: full GK rules from year 2 of drawing onward
+                // WRR: inflate by mean inflation (unless PMR overrides)
                 boolean applyInflation = true;
-                double currentWdPctBeforeAdjust = bal > 0 ? wdGK / bal : 0;
-                if (prevYearLoss && currentWdPctBeforeAdjust > inp.gkPreRate) {
+                double currentWdPct = bal > 0 ? wdGK / bal : 0;
+                if (prevYearLoss && currentWdPct > initialWdRate) {
                     applyInflation = false;
                     flags = "PMR⁰";
                 }
                 if (applyInflation) wdGK *= (1 + inp.inflation);
 
+                // CPR: cut 10% if wd rate exceeds upper guardrail
                 double wdPctCheck = bal > 0 ? wdGK / bal : 0;
                 if (wdPctCheck > initialWdRate * (1 + inp.upperGuardrail)) {
                     wdGK *= 0.90;
                     flags = flags.equals("—") ? "CPR▼" : flags + " + CPR▼";
                 }
 
+                // PR: raise 10% if wd rate falls below lower guardrail
                 wdPctCheck = bal > 0 ? wdGK / bal : 0;
                 if (wdPctCheck < initialWdRate * (1 - inp.lowerGuardrail)) {
                     wdGK *= 1.10;
                     flags = flags.equals("—") ? "PR▲" : flags + " + PR▲";
                 }
-
-                if (calYear == anchorCalYear) flags = "GK start" + (flags.equals("—") ? "" : " + " + flags);
             }
 
             double manRmd   = calcRmd(manTradIRA,   manAge) + calcRmd(manTrad401K,  manAge);
@@ -1901,7 +1953,7 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
             row.rmdOverage       = rmdOverage;
             row.drawing          = drawing;
             row.goGoActive       = goGoRemaining > 0;
-            row.preAnchor        = preAnchor && drawing;
+            row.preAnchor        = false; // anchor concept removed
             gk.rows.add(row);
 
             double nextBal = Math.max(0, bal * (1 + inp.nomReturn) - wdActual);
@@ -1917,10 +1969,6 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
         gk.finalBalance = gk.rows.isEmpty() ? 0
                 : gk.rows.get(gk.rows.size() - 1).balance
                   + gk.rows.get(gk.rows.size() - 1).balDelta;
-        // Capture the actual withdrawal at the anchor year as the headline figure
-        for (GkRow r : gk.rows) {
-            if (r.calYear == anchorCalYear) { gk.yr1Withdrawal = r.wdGK; break; }
-        }
         return gk;
     }
 
@@ -2070,10 +2118,10 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
             // Update GK metrics header
             double gkRate   = gk.initialWdRate * 100.0;
             double dEndGk   = !gk.rows.isEmpty() ? gk.rows.get(gk.rows.size()-1).inflFactor : 1.0;
-            double anchorInflFactor = Math.pow(1 + inp.inflation, gk.anchorCalYear - inp.baseYear);
+            double wd1InflFactor = Math.pow(1 + inp.inflation, inp.withdrawStartYear - inp.baseYear);
             lblGkInitWd.setText(CURRENCY.format((long)((double)gk.yr1Withdrawal
-                    / (showRealDollars ? anchorInflFactor : 1.0))) + " / yr");
-            lblGkInitRate.setText(String.format("%.2f%%  (from %d)", gkRate, gk.anchorCalYear));
+                    / (showRealDollars ? wd1InflFactor : 1.0))) + " / yr");
+            lblGkInitRate.setText(String.format("%.2f%%", gkRate));
             lblGkFinalBal.setText(showRealDollars
                     ? formatMoney((long)(gk.finalBalance / dEndGk)) + " (2026$)"
                     : formatMoney(gk.finalBalance) + " (nom.)");
@@ -2474,10 +2522,9 @@ public class IncomeLab_and_GuytonKlinger extends JFrame {
     static class GkResults {
         SimInputs inp;
         List<GkRow> rows;
-        int  yr1Withdrawal;   // anchor-year GK net withdrawal
-        double initialWdRate; // yr1Withdrawal / portfolio
+        int  yr1Withdrawal;   // first draw year GK withdrawal (gkPreRate x balance)
+        double initialWdRate; // = gkPreRate (guardrail anchor)
         int  finalBalance;    // end-of-horizon balance
-        int  anchorCalYear;   // first year GK rules are fully active
     }
 
     // ════════════════════════════════════════════════════════════════════════
