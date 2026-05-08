@@ -374,6 +374,16 @@ public class IncomeLab_Pro extends JFrame {
         spBaseTax      = spinI( 17_500, 0, 200_000, 1_000, "#,###");
         spTaxInflation = spinD(3.79,    0.0, 10.0,  0.01,  "0.00#");
         spGoGo         = spinD(1.300,   1.0,  2.0,  0.001, "0.000#");
+        spGoGo.setToolTipText("<html><b>Common multiplier ranges:</b><br><br>"
+                + "&nbsp;&nbsp;<b>1.2×&nbsp;(20% more)</b> — Conservative; suitable if you already have<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+                + "an active lifestyle baked into your baseline<br><br>"
+                + "&nbsp;&nbsp;<b>1.3×&nbsp;(30% more)</b> — The most commonly cited \"middle ground\"<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+                + "in retirement planning literature<br><br>"
+                + "&nbsp;&nbsp;<b>1.5×&nbsp;(50% more)</b> — Used for people expecting significant travel,<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+                + "bucket-list spending, or major lifestyle upgrades</html>");
         spGoGoDuration = spinI(10,      0,    20,    1,     "#");
         inner.add(card("Annual Spending (2027 Base $)", new Object[]{
                 "Living expenses ($/yr)",             spLivingExp,
