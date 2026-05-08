@@ -131,7 +131,7 @@ public class IncomeLab_Pro extends JFrame {
 
     private ProResults lastResults    = null;
     private boolean    showRealDollars = false;
-    private volatile long simCount    = 0;
+    private final java.util.concurrent.atomic.AtomicLong simCount = new java.util.concurrent.atomic.AtomicLong(0);
     private          long simTotal    = 0;
     private volatile java.util.function.LongConsumer simProgressCallback = null;
 
@@ -728,7 +728,7 @@ public class IncomeLab_Pro extends JFrame {
 
         simTotal = (long) fanPaths * horizon * binIters * solvePaths
                 + (long) horizon * binIters * solvePaths * (horizon + 1) / 2;
-        simCount = 0;
+        simCount.set(0);
         final long grandTotal  = simTotal;
         final long grandTotalM = Math.max(1, grandTotal / 1_000_000);
 
@@ -1028,9 +1028,14 @@ public class IncomeLab_Pro extends JFrame {
                     inp, seed + i * 31L, solvePaths, goGoYearsRemaining);
             if (rate > inp.targetPoS) lo = mid; else hi = mid;
         }
-        long running = (simCount += (long) binIters * solvePaths);
-        java.util.function.LongConsumer cb = simProgressCallback;
-        if (cb != null) cb.accept(running);
+        long added   = (long) binIters * solvePaths;
+        long running = simCount.addAndGet(added);
+        long prevM   = (running - added) / 1_000_000;
+        long currM   = running / 1_000_000;
+        if (currM > prevM) {
+            java.util.function.LongConsumer cb = simProgressCallback;
+            if (cb != null) cb.accept(running);
+        }
         return (int)((lo + hi) / 2.0);
     }
 
