@@ -953,8 +953,12 @@ public class IncomeLab_Pro extends JFrame {
             int wdActual   = drawing ? (int)(wd * goGoMult * startPror) : 0;
             int rmdOverage = drawing ? Math.max(0, (int) combRmd - wdActual) : 0;
 
-            // Use fan-path[0] inflation factor as the representative deflator
-            double inflFactor = res.fanInflFactors[0][y];
+            // Use true 50th-percentile inflation factor across all fan paths
+            // (consistent with the median balance — both are now genuine 50th percentiles)
+            double[] inflArr = new double[fanPaths];
+            for (int p = 0; p < fanPaths; p++) inflArr[p] = res.fanInflFactors[p][y];
+            Arrays.sort(inflArr);
+            double inflFactor = inflArr[fanPaths / 2];
 
             double[] nextBalArr = new double[fanPaths];
             for (int p = 0; p < fanPaths; p++) nextBalArr[p] = res.fanBalances[p][y + 1];
