@@ -1346,7 +1346,7 @@ public class IncomeLab_Pro extends JFrame {
             }
         }
 
-        private Rectangle2D pa() { return new Rectangle2D.Double(74,22,getWidth()-84,getHeight()-60); }
+        private Rectangle2D pa() { return new Rectangle2D.Double(74,22,getWidth()-140,getHeight()-60); }
         private double toY(Rectangle2D pa,double v,double mn,double mx){ return pa.getMaxY()-(v-mn)/(mx-mn)*pa.getHeight(); }
         private double toX(Rectangle2D pa,int yr,int tot){ return pa.getX()+yr/(double)tot*pa.getWidth(); }
 
@@ -1397,8 +1397,8 @@ public class IncomeLab_Pro extends JFrame {
             int step = Math.max(1, nPaths / 60);
             for (int p = 0; p < nPaths; p += step) {
                 boolean sv = data.fanBalances[p][yrs] > 0;
-                g.setColor(sv ? new Color(29,158,117,28) : new Color(226,75,74,18));
-                g.setStroke(new BasicStroke(0.7f));
+                g.setColor(sv ? new Color(29,158,117,50) : new Color(226,75,74,35));
+                g.setStroke(new BasicStroke(1.0f));
                 double[] vals = new double[pts];
                 for (int y = 0; y < pts; y++) {
                     double v = raw[p][Math.min(y, raw[p].length-1)];
@@ -1423,7 +1423,18 @@ public class IncomeLab_Pro extends JFrame {
                 g.setColor(PCTC[pi]); g.setStroke(new BasicStroke(2.2f));
                 drawPath(g, pa, pl, pts, 0, maxV, yrs);
                 g.setFont(new Font("SansSerif",Font.PLAIN,12));
-                g.drawString(lbls[pi], (float)(toX(pa,pts-1,yrs)+2), (float)toY(pa,pl[pts-1],0,maxV));
+                FontMetrics fmLbl = g.getFontMetrics();
+                float lblX = (float)(toX(pa,pts-1,yrs)+6);
+                float lblY = (float)toY(pa,pl[pts-1],0,maxV);
+                // clamp label so it never runs past the panel edge
+                float maxLblX = getWidth() - fmLbl.stringWidth(lbls[pi]) - 4;
+                if (lblX > maxLblX) lblX = maxLblX;
+                // clamp label vertically so it stays inside the plot area
+                float minLblY = (float)pa.getY() + fmLbl.getAscent();
+                float maxLblY = (float)pa.getMaxY();
+                if (lblY < minLblY) lblY = minLblY;
+                if (lblY > maxLblY) lblY = maxLblY;
+                g.drawString(lbls[pi], lblX, lblY);
             }
             axes(g, pa, 0, maxV, yrs, balMode ? "Portfolio balance" : "Annual withdrawal");
         }
