@@ -5,6 +5,7 @@ import javax.swing.event.ChangeListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.JTableHeader;
+import javax.swing.table.TableColumn;
 import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
@@ -17,7 +18,7 @@ import java.util.*;
 import java.util.List;
 
 /**
- * IncomeLab_Pro_withTaxes.java
+ * IncomeLab_and_GK2.java
  *
  * Standalone Income Lab Pro — PoS-Driven Withdrawal Simulator
  * (Enhanced stochastic engine; no Guyton-Klinger tab)
@@ -45,11 +46,11 @@ import java.util.List;
  *    • No tax drag / account-type modeling
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * Compile:  javac IncomeLab_Pro_withTaxes.java
- * Run:      java IncomeLab_Pro_withTaxes
+ * Compile:  javac IncomeLab_and_GK2.java
+ * Run:      java IncomeLab_and_GK2
  * Requires Java 11+. No external dependencies.
  */
-public class IncomeLab_Pro_withTaxes extends JFrame {
+public class IncomeLab_and_GK2 extends JFrame {
 
     private static final int BASE_YEAR_DEFAULT = java.time.Year.now().getValue();
     private static int BASE_YEAR = BASE_YEAR_DEFAULT;
@@ -128,10 +129,6 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
     private JToggleButton     tglDollars;
     private JButton           btnRun;
     private JProgressBar      progressBar;
-    // ── Tax estimate panel widgets ───────────────────────────────────────────
-    private JLabel lblTaxFedYr1, lblTaxFedYr2, lblTaxStateYr1, lblTaxStateYr2;
-    private JLabel lblTaxSsYr1,  lblTaxSsYr2;
-    private JPanel taxPanel;
 
     private ProResults lastResults    = null;
     private boolean    showRealDollars = false;
@@ -145,8 +142,15 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
     // ════════════════════════════════════════════════════════════════════════
     //  Constructor
     // ════════════════════════════════════════════════════════════════════════
-    public IncomeLab_Pro_withTaxes() {
-        super("IncomeLab Pro — Enhanced PoS-Driven Withdrawal Simulator");
+
+    // ── Guyton-Klinger fields ─────────────────────────────────────────────────
+    private JSpinner          spGkPreRate;
+    private JTable            tblGk;
+    private DefaultTableModel tblGkModel;
+    private JLabel            lblGkInitWd, lblGkInitRate, lblGkFinalBal;
+
+    public IncomeLab_and_GK2() {
+        super("IncomeLab Pro + Guyton-Klinger — Enhanced PoS-Driven Withdrawal Simulator");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout(0, 0));
         getContentPane().setBackground(new Color(245, 245, 242));
@@ -225,6 +229,16 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
         spMcFanPaths.addChangeListener(refreshRunTooltip);
         spHorizon.addChangeListener(refreshRunTooltip);
 
+        spGkPreRate = spinD(4.0, 1.0, 10.0, 0.1, "0.0#");
+        spGkPreRate.setToolTipText("<html><b>GK only — initial withdrawal rate (%)</b><br>"
+                + "Used exclusively by the Guyton-Klinger tab.<br>"
+                + "Has no effect on the Income Lab PoS tab.<br><br>"
+                + "In the first withdrawal year, this % of the current portfolio<br>"
+                + "balance sets the GK withdrawal (prorated by start month).<br>"
+                + "From year 2 onward, CPR\u25bc / PR\u25b2 / PMR\u2070 guardrail rules engage,<br>"
+                + "using this rate as the permanent benchmark for all comparisons.<br><br>"
+                + "<b>Default: 4.0%</b></html>");
+
         inner.add(card("Portfolio & Simulation", new Object[]{
                 "Simulation start year",       spSimStartYear,
                 "Target probability of success (%)", spTargetPoS,
@@ -234,6 +248,7 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
                 "MC solve paths",              spMcSolvePaths,
                 "Binary search iterations",    spBinaryIters,
                 "Fan chart paths",             spMcFanPaths,
+                "GK only — initial wd rate (%)", spGkPreRate,
         }));
         inner.add(Box.createVerticalStrut(4));
 
@@ -409,6 +424,21 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
 
+        // ── Guardrails card (GK tab) ──────────────────────────────────────
+        spUpperGuardrail = spinD(20.0, 5.0, 60.0, 1.0, "0.0#");
+        spUpperGuardrail.setToolTipText("<html><b>Upper guardrail — Prosperity Rule (PR▲)</b><br>"
+                + "If the GK withdrawal rate falls more than this % below the initial rate,<br>"
+                + "the withdrawal is raised 10%.<br><b>Default: 20%</b></html>");
+        spLowerGuardrail = spinD(25.0, 5.0, 60.0, 1.0, "0.0#");
+        spLowerGuardrail.setToolTipText("<html><b>Lower guardrail — Capital Preservation Rule (CPR▼)</b><br>"
+                + "If the GK withdrawal rate rises more than this % above the initial rate,<br>"
+                + "the withdrawal is cut 10%.<br><b>Default: 25%</b></html>");
+        inner.add(card("Guardrail Alerts (GK tab)", new Object[]{
+                "Upper guardrail — raise alert (%)", spUpperGuardrail,
+                "Lower guardrail — cut alert (%)",   spLowerGuardrail,
+        }));
+        inner.add(Box.createVerticalStrut(4));
+
         // ── Run button ────────────────────────────────────────────────────
         btnRun = new JButton("▶  Run Simulation");
         btnRun.setFont(new Font("SansSerif", Font.BOLD, 16));
@@ -516,21 +546,12 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
         // ── Tabs: table / chart / summary ────────────────────────────────
         JTabbedPane tabs = new JTabbedPane();
         tabs.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        tabs.addTab("Pro PoS Table",      buildTablePanel());
-        tabs.addTab("Simulation Chart",   buildChartPanel());
-        tabs.addTab("Summary",            buildSummaryPanel());
+        tabs.addTab("Pro PoS Table",                buildTablePanel());
+        tabs.addTab("Guyton-Klinger (Option C)",     buildGkTablePanel());
+        tabs.addTab("Simulation Chart",              buildChartPanel());
+        tabs.addTab("Summary",                       buildSummaryPanel());
 
-        // ── Tax estimate panel ───────────────────────────────────────────────
-        taxPanel = buildTaxPanel();
-
-        JPanel northStack = new JPanel();
-        northStack.setLayout(new javax.swing.BoxLayout(northStack, javax.swing.BoxLayout.Y_AXIS));
-        northStack.setBackground(new Color(245, 245, 242));
-        northStack.add(topSection);
-        northStack.add(Box.createVerticalStrut(4));
-        northStack.add(taxPanel);
-
-        panel.add(northStack, BorderLayout.NORTH);
+        panel.add(topSection, BorderLayout.NORTH);
         panel.add(tabs,       BorderLayout.CENTER);
         return panel;
     }
@@ -758,9 +779,12 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
 
         SwingWorker<ProResults, Long> worker = new SwingWorker<>() {
             @Override protected ProResults doInBackground() {
-                final long interval = Math.max(solvePaths, grandTotal / 100);
+                // Publish every solve-path batch. Swing's EDT coalesces rapid calls
+                // naturally, so this is safe even on fast machines — and ensures the
+                // progress bar visibly moves on slower ones.
+                final long batchSize = solvePaths;
                 simProgressCallback = running -> {
-                    if (running % interval < solvePaths) publish(running);
+                    if (running % batchSize < batchSize) publish(running);
                 };
                 ProResults r = simulatePro(readInputs(), seed, solvePaths, fanPaths, binIters);
                 simProgressCallback = null;
@@ -844,6 +868,9 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
         i.taxInflation       = dv(spTaxInflation)    / 100.0;
         i.goGoMultiplier     = dv(spGoGo);
         i.goGoDuration       = iv(spGoGoDuration);
+        i.upperGuardrail     = dv(spUpperGuardrail) / 100.0;
+        i.lowerGuardrail     = dv(spLowerGuardrail) / 100.0;
+        i.gkPreRate          = dv(spGkPreRate)       / 100.0;
         i.upperGuardrail     = dv(spUpperGuardrail)  / 100.0;
         i.lowerGuardrail     = dv(spLowerGuardrail)  / 100.0;
         i.manAge             = computeAge(i.manBirthYear,   i.manBirthMonth);
@@ -1038,6 +1065,7 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
             row.investmentGrowth = (int)(medBal * inp.nomReturn);
             res.medianRows.add(row);
         }
+        res.gkResults = simulateGK(inp);
         return res;
     }
 
@@ -1159,8 +1187,8 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
             });
         }
 
+        updateGkTable(res);
         refreshChart();
-        updateTaxPanel(res);
         txaSummary.setText(buildSummary(res));
         txaSummary.setCaretPosition(0);
     }
@@ -1330,422 +1358,449 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  TAX ESTIMATE PANEL
+    //  GUYTON-KLINGER 2006 RULES ENGINE
+    //  Deterministic (mean-return path). Three phases:
+    //  Phase 0  — pre-withdrawal: portfolio grows, no draws.
+    //  Phase 1  — first draw year: wdGK = balance × gkPreRate × proration.
+    //  Phase 2  — subsequent years: WRR / PMR / CPR / PR rules engage.
     // ════════════════════════════════════════════════════════════════════════
+    private GkResults simulateGK(SimInputs inp) {
+        GkResults gk  = new GkResults();
+        gk.inp        = inp;
+        gk.rows       = new java.util.ArrayList<>();
 
-    static class TaxDetail {
-        int year;
-        long tradWithdrawal, ssIncome, annuityIncome;
-        long provisionalIncome, taxableSS, agi, stdDeduction;
-        long federalTaxable, federalTax, azTaxable, azTax, totalTax;
-        int  ssBracket;
-        String bracketDetail;
-    }
+        int startY           = inp.withdrawStartYear - inp.baseYear;
+        double initialWdRate = inp.gkPreRate;
+        gk.initialWdRate     = initialWdRate;
+        gk.yr1Withdrawal     = 0;
 
-    // bracket overrides — declared here so updateTaxPanel / computeTax can read them
-    private javax.swing.JSpinner spTaxYear, spStdDedBase, spStdDed65, spAzRate;
-    private javax.swing.JSpinner[] spBracketTop  = new javax.swing.JSpinner[7];
-    private javax.swing.JSpinner[] spBracketRate = new javax.swing.JSpinner[7];
-    // 2025 MFJ bracket defaults (thresholds / rates)
-    private static final long[]   DEF_TOPS  = {23_850,96_950,206_700,394_600,501_050,751_600,Long.MAX_VALUE};
-    private static final int[]    DEF_RATES = {10,12,22,24,32,35,37};
+        double bal            = inp.portfolio;
+        double wdGK           = 0;
+        boolean prevYearLoss  = false;
 
-    private JPanel buildTaxPanel() {
-        // ── outer wrapper (always visible) ──────────────────────────────────
-        JPanel wrapper = new JPanel(new BorderLayout(0, 0));
-        wrapper.setBackground(new Color(255, 252, 235));
-        wrapper.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(210, 185, 90), 1),
-                BorderFactory.createEmptyBorder(0, 0, 0, 0)));
-        wrapper.setVisible(false);   // hidden until first simulation run
+        double manTradIRA    = inp.manTradIRA;
+        double manTrad401K   = inp.manTrad401K;
+        double womanTradIRA  = inp.womanTradIRA;
+        double womanTrad401K = inp.womanTrad401K;
 
-        // ── header bar (always visible inside wrapper) ───────────────────────
-        JPanel header = new JPanel(new BorderLayout(8, 0));
-        header.setBackground(new Color(245, 235, 195));
-        header.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        for (int y = 0; y < inp.horizon; y++) {
+            int calYear   = inp.baseYear + y;
+            int manAge    = calYear - inp.manBirthYear;
+            int womanAge  = calYear - inp.womanBirthYear;
+            boolean drawing       = calYear >= inp.withdrawStartYear;
+            boolean firstDrawYear = calYear == inp.withdrawStartYear;
 
-        JButton btnToggle = new JButton("\u25BC  Near-Term Tax Estimate (Federal + AZ)");
-        btnToggle.setFont(new Font("SansSerif", Font.BOLD, 13));
-        btnToggle.setForeground(new Color(80, 55, 5));
-        btnToggle.setBorderPainted(false);
-        btnToggle.setContentAreaFilled(false);
-        btnToggle.setFocusPainted(false);
-        btnToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btnToggle.setHorizontalAlignment(SwingConstants.LEFT);
+            int goGoRemaining = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
+            double goGoMult   = (goGoRemaining > 0) ? inp.goGoMultiplier : 1.0;
+            double inflFactor = Math.pow(1 + inp.inflation, y);
 
-        JButton btnInfo = new JButton("\u24d8  How is this calculated?");
-        btnInfo.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        btnInfo.setForeground(new Color(30, 80, 160));
-        btnInfo.setBorderPainted(false);
-        btnInfo.setContentAreaFilled(false);
-        btnInfo.setFocusPainted(false);
-        btnInfo.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btnInfo.addActionListener(e -> showTaxExplanationDialog());
+            double manSS      = manSSThisYear(inp, y);
+            double womanSS    = womanSSThisYear(inp, y);
+            double ann        = annuityThisYear(inp, y);
+            double guaranteed = manSS + womanSS + ann;
+            double living     = drawing ? inp.livingExp   * Math.pow(1 + inp.inflation,    y) : 0;
+            double medical    = drawing ? inp.medical     * Math.pow(1 + inp.medInflation,  y) : 0;
+            double tax        = taxThisYear(inp, y);
+            double totalSpend = drawing ? living + medical + tax : 0;
 
-        header.add(btnToggle, BorderLayout.WEST);
-        header.add(btnInfo,   BorderLayout.EAST);
+            double wdStartProration = firstDrawYear
+                    ? (13.0 - inp.withdrawStartMonth) / 12.0 : 1.0;
 
-        // ── collapsible body ─────────────────────────────────────────────────
-        JPanel body = new JPanel(new BorderLayout(10, 6));
-        body.setBackground(new Color(255, 252, 235));
-        body.setBorder(BorderFactory.createEmptyBorder(6, 12, 8, 12));
-
-        // results grid
-        lblTaxFedYr1   = taxLbl(); lblTaxFedYr2   = taxLbl();
-        lblTaxStateYr1 = taxLbl(); lblTaxStateYr2 = taxLbl();
-        lblTaxSsYr1    = taxLbl(); lblTaxSsYr2    = taxLbl();
-
-        JPanel grid = new JPanel(new java.awt.GridLayout(4, 3, 20, 3));
-        grid.setOpaque(false);
-        grid.add(new JLabel("")); grid.add(taxHdr("Year 1")); grid.add(taxHdr("Year 2"));
-        grid.add(taxRowLbl("Federal income tax:"));
-        grid.add(lblTaxFedYr1); grid.add(lblTaxFedYr2);
-        grid.add(taxRowLbl("Arizona state tax:"));
-        grid.add(lblTaxStateYr1); grid.add(lblTaxStateYr2);
-        grid.add(taxRowLbl("Taxable Social Security:"));
-        grid.add(lblTaxSsYr1); grid.add(lblTaxSsYr2);
-
-        // ── bracket override panel ───────────────────────────────────────────
-        JPanel overridePanel = new JPanel();
-        overridePanel.setLayout(new BoxLayout(overridePanel, BoxLayout.Y_AXIS));
-        overridePanel.setBackground(new Color(250, 248, 225));
-        overridePanel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(200, 175, 80), 1),
-                BorderFactory.createEmptyBorder(6, 10, 6, 10)));
-
-        JLabel overrideTitle = new JLabel("  Annual Bracket Overrides  (update each November when IRS publishes next year\'s figures)");
-        overrideTitle.setFont(new Font("SansSerif", Font.BOLD, 11));
-        overrideTitle.setForeground(new Color(90, 65, 5));
-        overridePanel.add(overrideTitle);
-        overridePanel.add(Box.createVerticalStrut(5));
-
-        // tax year + std deduction row
-        JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 2));
-        topRow.setOpaque(false);
-        spTaxYear   = new javax.swing.JSpinner(new javax.swing.SpinnerNumberModel(2025,2020,2040,1));
-        spStdDedBase= new javax.swing.JSpinner(new javax.swing.SpinnerNumberModel(30000,20000,60000,100));
-        spStdDed65  = new javax.swing.JSpinner(new javax.swing.SpinnerNumberModel(1600,0,5000,50));
-        spAzRate    = new javax.swing.JSpinner(new javax.swing.SpinnerNumberModel(2.5,0.0,15.0,0.1));
-        ((javax.swing.JSpinner.NumberEditor) spAzRate.getEditor()).getFormat().setMinimumFractionDigits(1);
-        Dimension spSz = new Dimension(80, 22);
-        for (javax.swing.JSpinner sp : new javax.swing.JSpinner[]{spTaxYear,spStdDedBase,spStdDed65}) {
-            ((javax.swing.JSpinner.DefaultEditor)sp.getEditor()).getTextField().setColumns(6);
-            sp.setMaximumSize(spSz); sp.setPreferredSize(spSz);
-        }
-        spAzRate.setMaximumSize(spSz); spAzRate.setPreferredSize(spSz);
-        topRow.add(overrideLbl("Tax year:")); topRow.add(spTaxYear);
-        topRow.add(overrideLbl("  Std. deduction MFJ ($):")); topRow.add(spStdDedBase);
-        topRow.add(overrideLbl("  Extra per 65+ spouse ($):")); topRow.add(spStdDed65);
-        topRow.add(overrideLbl("  AZ flat rate (%):")); topRow.add(spAzRate);
-        overridePanel.add(topRow);
-        overridePanel.add(Box.createVerticalStrut(4));
-
-        // bracket rows
-        JPanel bracketGrid = new JPanel(new java.awt.GridLayout(0, 7, 6, 2));
-        bracketGrid.setOpaque(false);
-        String[] rateLabels = {"10%","12%","22%","24%","32%","35%","37%"};
-        for (int i = 0; i < 7; i++) {
-            boolean isTop = (i == 6);
-            long defTop   = isTop ? 999_999_999L : DEF_TOPS[i];
-            spBracketTop[i]  = new javax.swing.JSpinner(
-                    new javax.swing.SpinnerNumberModel((int)Math.min(defTop,999_999_999),0,999_999_999,100));
-            spBracketRate[i] = new javax.swing.JSpinner(
-                    new javax.swing.SpinnerNumberModel(DEF_RATES[i],0,50,1));
-            if (isTop) { spBracketTop[i].setEnabled(false); }
-            Dimension bSz = new Dimension(100, 22);
-            spBracketTop[i].setPreferredSize(bSz); spBracketTop[i].setMaximumSize(bSz);
-            Dimension rSz = new Dimension(50, 22);
-            spBracketRate[i].setPreferredSize(rSz); spBracketRate[i].setMaximumSize(rSz);
-            JPanel cell = new JPanel(new FlowLayout(FlowLayout.CENTER, 3, 0));
-            cell.setOpaque(false);
-            cell.add(overrideLbl(rateLabels[i] + " up to $"));
-            cell.add(spBracketTop[i]);
-            bracketGrid.add(cell);
-        }
-        overridePanel.add(bracketGrid);
-        overridePanel.add(Box.createVerticalStrut(2));
-
-        JLabel resetNote = new JLabel("  Rates (10/12/22/24/32/35/37%) rarely change — only thresholds and deductions shift annually.");
-        resetNote.setFont(new Font("SansSerif", Font.ITALIC, 10));
-        resetNote.setForeground(new Color(120, 95, 20));
-        overridePanel.add(resetNote);
-
-        body.add(grid,          BorderLayout.NORTH);
-        body.add(overridePanel, BorderLayout.CENTER);
-
-        JLabel footNote = new JLabel("  Based on current law \u00b7 thresholds adjust annually \u00b7 rates require an act of Congress to change");
-        footNote.setFont(new Font("SansSerif", Font.ITALIC, 11));
-        footNote.setForeground(new Color(130, 100, 30));
-        body.add(footNote, BorderLayout.SOUTH);
-
-        // ── toggle logic — starts collapsed ──────────────────────────────────
-        final boolean[] expanded = {false};
-        body.setVisible(false);
-        btnToggle.setText("\u25B6  Near-Term Tax Estimate (Federal + AZ)");
-        btnToggle.addActionListener(e -> {
-            expanded[0] = !expanded[0];
-            body.setVisible(expanded[0]);
-            btnToggle.setText((expanded[0] ? "\u25BC" : "\u25B6")
-                    + "  Near-Term Tax Estimate (Federal + AZ)");
-            wrapper.revalidate(); wrapper.repaint();
-        });
-
-        wrapper.add(header, BorderLayout.NORTH);
-        wrapper.add(body,   BorderLayout.CENTER);
-        return wrapper;
-    }
-
-    private JLabel overrideLbl(String t) {
-        JLabel l = new JLabel(t);
-        l.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        l.setForeground(new Color(80, 60, 10));
-        return l;
-    }
-
-    private JLabel taxLbl() {
-        JLabel l = new JLabel("\u2014");
-        l.setFont(new Font("SansSerif", Font.BOLD, 13));
-        l.setForeground(new Color(60, 40, 0));
-        return l;
-    }
-
-    private JLabel taxHdr(String t) {
-        JLabel l = new JLabel(t, SwingConstants.LEFT);
-        l.setFont(new Font("SansSerif", Font.BOLD, 12));
-        l.setForeground(new Color(100, 75, 10));
-        return l;
-    }
-
-    private JLabel taxRowLbl(String t) {
-        JLabel l = new JLabel(t);
-        l.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        l.setForeground(new Color(80, 60, 10));
-        return l;
-    }
-
-    private void updateTaxPanel(ProResults res) {
-        if (res == null || res.medianRows.isEmpty()) { taxPanel.setVisible(false); return; }
-        TaxDetail yr1 = computeTax(res, 0);
-        TaxDetail yr2 = computeTax(res, 1);
-        if (yr1 == null) { taxPanel.setVisible(false); return; }
-
-        lblTaxFedYr1.setText(CURRENCY.format(yr1.federalTax));
-        lblTaxFedYr2.setText(yr2 != null ? CURRENCY.format(yr2.federalTax) : "\u2014");
-        lblTaxStateYr1.setText(CURRENCY.format(yr1.azTax));
-        lblTaxStateYr2.setText(yr2 != null ? CURRENCY.format(yr2.azTax) : "\u2014");
-        lblTaxSsYr1.setText(CURRENCY.format(yr1.taxableSS) + "  (" + yr1.ssBracket + "% taxable)");
-        lblTaxSsYr2.setText(yr2 != null
-                ? CURRENCY.format(yr2.taxableSS) + "  (" + yr2.ssBracket + "% taxable)" : "\u2014");
-
-        taxPanel.putClientProperty("yr1detail", yr1);
-        taxPanel.putClientProperty("yr2detail", yr2);
-        taxPanel.setVisible(true);
-        taxPanel.revalidate();
-    }
-
-    private TaxDetail computeTax(ProResults res, int yearIdx) {
-        int drawIdx = -1;
-        for (int i = 0; i < res.medianRows.size(); i++) {
-            if (res.medianRows.get(i).drawing) { drawIdx = i; break; }
-        }
-        int idx = drawIdx + yearIdx;
-        if (idx < 0 || idx >= res.medianRows.size()) return null;
-        EnhRow r = res.medianRows.get(idx);
-        if (!r.drawing) return null;
-
-        SimInputs inp = res.inp;
-        TaxDetail d   = new TaxDetail();
-        d.year        = r.calYear;
-
-        long totalStart = (long)(inp.manTradIRA + inp.manRothIRA + inp.manTrad401K + inp.manRoth401K
-                + inp.womanTradIRA + inp.womanRothIRA + inp.womanTrad401K + inp.womanRoth401K);
-        long tradStart  = (long)(inp.manTradIRA + inp.manTrad401K + inp.womanTradIRA + inp.womanTrad401K);
-        double tradFrac = totalStart > 0 ? (double) tradStart / totalStart : 1.0;
-
-        d.tradWithdrawal = Math.round(r.wdActual * tradFrac);
-        d.ssIncome       = (long)(r.manSS + r.womanSS);
-        d.annuityIncome  = r.annuity;
-
-        long agiExSS        = d.tradWithdrawal + d.annuityIncome;
-        d.provisionalIncome = agiExSS + d.ssIncome / 2;
-
-        if (d.provisionalIncome <= 32_000) {
-            d.taxableSS = 0; d.ssBracket = 0;
-        } else if (d.provisionalIncome <= 44_000) {
-            d.taxableSS = Math.min((long)(0.50 * d.ssIncome),
-                    (long)(0.50 * (d.provisionalIncome - 32_000)));
-            d.ssBracket = 50;
-        } else {
-            long tier2  = (long)(0.85 * (d.provisionalIncome - 44_000));
-            long tier1  = Math.min(6_000, (long)(0.50 * (44_000 - 32_000)));
-            d.taxableSS = Math.min((long)(0.85 * d.ssIncome), tier1 + tier2);
-            d.ssBracket = 85;
-        }
-
-        d.agi = agiExSS + d.taxableSS;
-
-        int manAge   = d.year - inp.manBirthYear;
-        int womanAge = d.year - inp.womanBirthYear;
-        long baseStdDed = spStdDedBase != null ? ((Number)spStdDedBase.getValue()).longValue() : 30_000L;
-        long extra65    = spStdDed65   != null ? ((Number)spStdDed65.getValue()).longValue()   : 1_600L;
-        d.stdDeduction  = baseStdDed
-                + (manAge   >= 65 ? extra65 : 0)
-                + (womanAge >= 65 ? extra65 : 0);
-
-        d.federalTaxable = Math.max(0, d.agi - d.stdDeduction);
-        d.federalTax     = applyFederalBrackets(d.federalTaxable);
-        d.bracketDetail  = buildBracketDetail(d.federalTaxable);
-        d.azTaxable      = d.federalTaxable;
-        double azRate    = spAzRate != null ? ((Number)spAzRate.getValue()).doubleValue() / 100.0 : 0.025;
-        d.azTax          = Math.round(d.azTaxable * azRate);
-        d.totalTax       = d.federalTax + d.azTax;
-        return d;
-    }
-
-    private long applyFederalBrackets(long taxable) {
-        if (taxable <= 0) return 0;
-        // Read bracket tops from spinners if available, fall back to 2025 defaults
-        long[] tops  = new long[7];
-        int[]  rates = new int[7];
-        for (int i = 0; i < 7; i++) {
-            tops[i]  = (spBracketTop[i]  != null) ? ((Number)spBracketTop[i].getValue()).longValue()  : DEF_TOPS[i];
-            rates[i] = (spBracketRate[i] != null) ? ((Number)spBracketRate[i].getValue()).intValue()  : DEF_RATES[i];
-        }
-        tops[6] = Long.MAX_VALUE; // top bracket always unbounded
-        long tax = 0, prev = 0;
-        for (int i = 0; i < 7; i++) {
-            if (taxable <= prev) break;
-            tax += (Math.min(taxable, tops[i]) - prev) * rates[i] / 100;
-            prev = tops[i];
-        }
-        return tax;
-    }
-
-    private String buildBracketDetail(long taxable) {
-        if (taxable <= 0) return "  No federal income tax (below standard deduction).\n";
-        long[] tops  = new long[7];
-        int[]  rates = new int[7];
-        for (int i = 0; i < 7; i++) {
-            tops[i]  = (spBracketTop[i]  != null) ? ((Number)spBracketTop[i].getValue()).longValue()  : DEF_TOPS[i];
-            rates[i] = (spBracketRate[i] != null) ? ((Number)spBracketRate[i].getValue()).intValue()  : DEF_RATES[i];
-        }
-        tops[6] = Long.MAX_VALUE;
-        StringBuilder sb = new StringBuilder();
-        long prev = 0;
-        for (int i = 0; i < 7; i++) {
-            if (taxable <= prev) break;
-            long inBracket = Math.min(taxable, tops[i]) - prev;
-            sb.append(String.format("    %2d%% on %s  =  %s%n",
-                    rates[i], CURRENCY.format(inBracket), CURRENCY.format(inBracket * rates[i] / 100)));
-            prev = tops[i];
-        }
-        return sb.toString();
-    }
-
-    private void showTaxExplanationDialog() {
-        TaxDetail yr1 = (TaxDetail) taxPanel.getClientProperty("yr1detail");
-        TaxDetail yr2 = (TaxDetail) taxPanel.getClientProperty("yr2detail");
-        if (yr1 == null) {
-            JOptionPane.showMessageDialog(this,
-                    "Run the simulation first to see tax details.",
-                    "Tax Estimate", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        JTextArea ta = new JTextArea(buildTaxExplanation(yr1, yr2));
-        ta.setEditable(false);
-        ta.setFont(new Font("Monospaced", Font.PLAIN, 13));
-        ta.setBackground(new Color(255, 252, 240));
-        ta.setBorder(BorderFactory.createEmptyBorder(10, 14, 10, 14));
-        JScrollPane sp = new JScrollPane(ta);
-        sp.setPreferredSize(new java.awt.Dimension(700, 580));
-        JOptionPane.showMessageDialog(this, sp,
-                "How Your Tax Estimate Is Calculated", JOptionPane.INFORMATION_MESSAGE);
-    }
-
-    private String buildTaxExplanation(TaxDetail y1, TaxDetail y2) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("HOW YOUR TAX ESTIMATE IS CALCULATED\n");
-        sb.append("=================================================================\n\n");
-        sb.append("This estimate covers YEAR 1 (").append(y1.year).append(")");
-        if (y2 != null) sb.append(" and YEAR 2 (").append(y2.year).append(")");
-        sb.append(".\nIt uses IRS rules for a Married Filing Jointly couple.\n\n");
-
-        TaxDetail[] years = (y2 != null) ? new TaxDetail[]{y1, y2} : new TaxDetail[]{y1};
-        for (TaxDetail y : years) {
-            sb.append("-----------------------------------------------------------------\n");
-            sb.append("  YEAR ").append(y.year).append("\n");
-            sb.append("-----------------------------------------------------------------\n\n");
-
-            sb.append("STEP 1 — What counts as taxable income?\n\n");
-            sb.append(String.format("  Traditional IRA/401K withdrawals  %s%n", fmt(y.tradWithdrawal)));
-            sb.append("  (Roth withdrawals are TAX-FREE and not included here)\n");
-            sb.append(String.format("  Annuity income                    %s%n", fmt(y.annuityIncome)));
-            sb.append(String.format("  Social Security — combined        %s%n%n", fmt(y.ssIncome)));
-
-            sb.append("STEP 2 — How much of your Social Security is taxable?\n\n");
-            sb.append("  The IRS uses 'Provisional Income' to decide:\n");
-            sb.append("    (Your non-SS income) + (50% of your SS)\n");
-            sb.append(String.format("    = %s + %s = %s%n%n",
-                    fmt(y.tradWithdrawal + y.annuityIncome),
-                    fmt(y.ssIncome / 2),
-                    fmt(y.provisionalIncome)));
-
-            if (y.ssBracket == 0) {
-                sb.append("  Provisional Income is below $32,000\n");
-                sb.append("  -> NONE of your Social Security is taxable. Good news!\n\n");
-            } else if (y.ssBracket == 50) {
-                sb.append("  Provisional Income is between $32,000 and $44,000\n");
-                sb.append("  -> Up to 50% of your Social Security may be taxable.\n");
-                sb.append(String.format("  Taxable SS:                       %s%n%n", fmt(y.taxableSS)));
+            String flags = "—";
+            if (!drawing) {
+                wdGK = 0;
+            } else if (firstDrawYear) {
+                wdGK = bal * inp.gkPreRate * wdStartProration;
+                flags = String.format("%.1f%%", inp.gkPreRate * 100);
+                gk.yr1Withdrawal = (int) wdGK;
             } else {
-                sb.append("  Provisional Income is above $44,000\n");
-                sb.append("  -> Up to 85% of your Social Security may be taxable.\n");
-                sb.append(String.format("  Taxable SS:                       %s%n%n", fmt(y.taxableSS)));
+                boolean applyInflation = true;
+                double currentWdPct = bal > 0 ? wdGK / bal : 0;
+                if (prevYearLoss && currentWdPct > initialWdRate) {
+                    applyInflation = false;
+                    flags = "PMR\u2070";
+                }
+                if (applyInflation) wdGK *= (1 + inp.inflation);
+
+                double wdPctCheck = bal > 0 ? wdGK / bal : 0;
+                if (wdPctCheck > initialWdRate * (1 + inp.lowerGuardrail)) {
+                    wdGK *= 0.90;
+                    flags = flags.equals("—") ? "CPR\u25bc" : flags + " + CPR\u25bc";
+                }
+                wdPctCheck = bal > 0 ? wdGK / bal : 0;
+                if (wdPctCheck < initialWdRate * (1 - inp.upperGuardrail)) {
+                    wdGK *= 1.10;
+                    flags = flags.equals("—") ? "PR\u25b2" : flags + " + PR\u25b2";
+                }
             }
 
-            sb.append("STEP 3 — Adjusted Gross Income (AGI)\n\n");
-            sb.append(String.format("  Non-SS income + taxable SS = %s + %s = %s%n%n",
-                    fmt(y.tradWithdrawal + y.annuityIncome), fmt(y.taxableSS), fmt(y.agi)));
+            double manRmd   = calcRmd(manTradIRA,   manAge) + calcRmd(manTrad401K,  manAge);
+            double womanRmd = calcRmd(womanTradIRA, womanAge) + calcRmd(womanTrad401K, womanAge);
+            double combRmd  = manRmd + womanRmd;
 
-            sb.append("STEP 4 — Standard Deduction (Married Filing Jointly, age 65+)\n\n");
-            sb.append("  Base MFJ deduction:                $30,000\n");
-            sb.append(String.format("  Age 65+ add-on ($1,600/person):   %s%n", fmt(y.stdDeduction - 30_000)));
-            sb.append(String.format("  Total standard deduction:         %s%n%n", fmt(y.stdDeduction)));
+            int wdActual   = drawing ? (int)(wdGK * goGoMult) : 0;
+            int rmdOverage = drawing ? Math.max(0, (int) combRmd - wdActual) : 0;
+            double wdPct   = (drawing && bal > 0) ? wdActual / (double) bal * 100.0 : 0.0;
 
-            sb.append("STEP 5 — Federal Taxable Income\n\n");
-            sb.append(String.format("  AGI minus standard deduction = %s - %s = %s%n%n",
-                    fmt(y.agi), fmt(y.stdDeduction), fmt(y.federalTaxable)));
+            double totalIncome = guaranteed + wdActual;
+            double surplus     = totalIncome - totalSpend;
 
-            sb.append("STEP 6 — Federal Income Tax (2025 MFJ Brackets)\n\n");
-            sb.append(y.bracketDetail);
-            sb.append(String.format("  Total federal tax:                %s%n%n", fmt(y.federalTax)));
+            GkRow row = new GkRow();
+            row.calYear = calYear; row.manAge = manAge; row.womanAge = womanAge;
+            row.balance = (int) Math.max(0, bal);
+            row.investmentGrowth = (int)(bal * inp.nomReturn);
+            row.wdGK = (int) wdGK; row.wdActual = wdActual;
+            row.wdPct = wdPct; row.ruleFlags = flags;
+            row.manSS = (int) manSS; row.womanSS = (int) womanSS;
+            row.annuity = (int) ann; row.guaranteed = (int) guaranteed;
+            row.living = (int) living; row.medical = (int) medical;
+            row.tax = (int) tax; row.totalSpend = (int) totalSpend;
+            row.totalIncome = (int) totalIncome; row.surplus = (int) surplus;
+            row.inflFactor = inflFactor;
+            row.manRmd = (int) manRmd; row.womanRmd = (int) womanRmd;
+            row.combRmd = (int) combRmd; row.rmdOverage = rmdOverage;
+            row.drawing = drawing; row.goGoActive = goGoRemaining > 0;
+            row.preAnchor = false;
 
-            sb.append("STEP 7 — Arizona State Tax (Flat 2.5%)\n\n");
-            sb.append("  Arizona uses the same taxable income base as federal.\n");
-            sb.append(String.format("  %s x 2.5%% = %s%n%n", fmt(y.azTaxable), fmt(y.azTax)));
+            double nextBal = Math.max(0, bal * (1 + inp.nomReturn) - wdActual);
+            row.balDelta   = (int)(nextBal - bal);
+            prevYearLoss   = (nextBal < bal);
+            bal            = nextBal;
+            gk.rows.add(row);
 
-            sb.append(String.format("  TOTAL ESTIMATED TAX:              %s%n%n", fmt(y.totalTax)));
+            manTradIRA    = Math.max(0, manTradIRA   * (1 + inp.nomReturn) - calcRmd(manTradIRA,   manAge));
+            manTrad401K   = Math.max(0, manTrad401K  * (1 + inp.nomReturn) - calcRmd(manTrad401K,  manAge));
+            womanTradIRA  = Math.max(0, womanTradIRA * (1 + inp.nomReturn) - calcRmd(womanTradIRA, womanAge));
+            womanTrad401K = Math.max(0, womanTrad401K*(1 + inp.nomReturn) - calcRmd(womanTrad401K, womanAge));
         }
 
-        sb.append("=================================================================\n");
-        sb.append("IMPORTANT NOTES\n\n");
-        sb.append("  * Brackets shown are 2025 law. They adjust for inflation each\n");
-        sb.append("    year and may change if Congress modifies the rates.\n\n");
-        sb.append("  * The TCJA rate schedule was set to expire after 2025 unless\n");
-        sb.append("    extended. Future rates could be different.\n\n");
-        sb.append("  * This does NOT include capital gains, IRMAA surcharges, or\n");
-        sb.append("    state itemized deductions.\n\n");
-        sb.append("  * Roth IRA and Roth 401K withdrawals are completely tax-free\n");
-        sb.append("    and are not included in any calculation above.\n\n");
-        sb.append("  * Use these numbers to calibrate the 'Base Tax ($)' field in\n");
-        sb.append("    the input panel, which drives long-term tax estimates.\n\n");
-        sb.append("  * Always verify with your tax professional before making\n");
-        sb.append("    estimated quarterly tax payments.\n");
-        return sb.toString();
+        gk.finalBalance = gk.rows.isEmpty() ? 0
+                : gk.rows.get(gk.rows.size()-1).balance + gk.rows.get(gk.rows.size()-1).balDelta;
+        return gk;
     }
 
-    private String fmt(long v) {
-        return String.format("%,12d", v);
+    private JPanel buildGkTablePanel() {
+        // GK column layout:
+        // 0=ManAge 1=CalYr 2=PortBal 3=GK-Wd 4=ActualWd 5=WdPct
+        // 6=RuleApplied(hidden) 7=RuleFlags
+        // 8=ManSS 9=WomanSS 10=Annuity 11=Guaranteed
+        // 12=Living 13=Medical 14=Tax
+        // 15=TotalSpend 16=TotalIncome 17=SurplusGap
+        // 18=InflFactor 19=ManRMD 20=WomanRMD 21=CombRMD 22=→Roth/MM 23=BalΔ
+        String[] gkCols = {
+                "Man age", "Cal yr", "Portfolio bal",                        // 0 1 2
+                "GK withdrawal", "Actual wd", "Wd %",                       // 3 4 5
+                "Rules (raw)",                                                // 6 hidden
+                "Rule flags",                                                 // 7 visible
+                "Man SS", "Woman SS", "Annuity", "Guaranteed",               // 8 9 10 11
+                "Living", "Medical", "Tax (est)",                            // 12 13 14
+                "Total spend", "Total income", "Surplus/gap",                // 15 16 17
+                "Infl factor",                                                // 18
+                "Man RMD", "Woman RMD", "Combined RMD", "→ Roth/MM",         // 19 20 21 22
+                "Bal Δ"                                                        // 23
+        };
+        tblGkModel = new DefaultTableModel(gkCols, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+
+        tblGk = new JTable(tblGkModel) {
+            @Override public String getToolTipText(MouseEvent e) {
+                int col = columnAtPoint(e.getPoint());
+                int row = rowAtPoint(e.getPoint());
+                if (row < 0 || lastResults == null || lastResults.gkResults == null) return null;
+                List<GkRow> rows = lastResults.gkResults.rows;
+                if (row >= rows.size()) return null;
+                GkRow gr = rows.get(row);
+
+                if (col == 7) { // Rule flags
+                    String raw = gr.ruleFlags;
+                    if (raw == null || raw.equals("—")) return null;
+                    StringBuilder sb = new StringBuilder("<html>");
+                    // Pre-anchor: flags look like "4.0%" — contains '%' but not a GK rule keyword
+                    if (raw.endsWith("%") && !raw.contains("CPR") && !raw.contains("PR▲") && !raw.contains("PMR")) {
+                        sb.append("<b>Pre-anchor phase (").append(raw).append(" of current balance)</b><br>")
+                                .append("All income sources are not yet fully active (SS or annuity<br>")
+                                .append("start-month proration still in effect).<br>")
+                                .append("Using the user-defined initial rate against the current portfolio<br>")
+                                .append("balance as a bridge. Set via 'GK only — pre-anchor initial wd rate'.<br>")
+                                .append("GK guardrail rules engage at the anchor year when all income<br>")
+                                .append("streams are paying a full 12-month amount.");
+                    } else if (raw.equals("GK start")) {
+                        sb.append("<b>GK rules start — anchor year</b><br>")
+                                .append("This is the first year all income sources are paying a full<br>")
+                                .append("12-month amount (no start-month proration on any stream).<br>")
+                                .append("The net spending need this year sets the GK initial rate<br>")
+                                .append("used as the guardrail benchmark for all future years.");
+                    } else {
+                        sb.append("<b>Guyton-Klinger rules applied this year:</b><br>");
+                        if (raw.contains("PMR")) sb.append("<br><b>PMR⁰ — Portfolio Management Rule:</b><br>")
+                                .append("Inflation adjustment was <i>skipped</i> because the portfolio<br>")
+                                .append("lost money last year AND the withdrawal rate exceeds the initial rate.<br>")
+                                .append("Result: withdrawal held flat (no inflation raise).<br>");
+                        if (raw.contains("CPR")) sb.append("<br><b>CPR▼ — Capital Preservation Rule:</b><br>")
+                                .append("Withdrawal rate exceeded the upper guardrail threshold.<br>")
+                                .append("Withdrawal was reduced by 10% to protect capital.<br>");
+                        if (raw.contains("PR▲")) sb.append("<br><b>PR▲ — Prosperity Rule:</b><br>")
+                                .append("Withdrawal rate fell below the lower guardrail threshold.<br>")
+                                .append("Withdrawal was increased by 10% to share in portfolio growth.<br>");
+                    }
+                    sb.append("</html>");
+                    return sb.toString();
+                }
+                if (col == 22 && gr.rmdOverage > 0) { // Roth/MM
+                    return "<html><b>RMD overage → Roth/MM</b><br>"
+                            + "Combined RMD (" + CURRENCY.format(gr.combRmd) + ")<br>"
+                            + "exceeds planned GK withdrawal (" + CURRENCY.format(gr.wdActual) + ").<br>"
+                            + "Overage (" + CURRENCY.format(gr.rmdOverage) + ") goes to Roth/MM — not spent.</html>";
+                }
+                if (col == 23) { // Bal Δ tooltip
+                    double d = showRealDollars ? gr.inflFactor : 1.0;
+                    return String.format("<html><b>Portfolio change: %s%s</b><br>"
+                                    + "&nbsp;&nbsp;Market growth: +%s<br>"
+                                    + "&nbsp;&nbsp;Withdrawal:   −%s<br>",
+                            gr.balDelta >= 0 ? "+" : "",
+                            CURRENCY.format((long)(gr.balDelta / d)),
+                            CURRENCY.format((long)(gr.investmentGrowth / d)),
+                            CURRENCY.format((long)(gr.wdActual / d)));
+                }
+                return super.getToolTipText(e);
+            }
+        };
+
+        tblGk.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        tblGk.setRowHeight(24);
+        tblGk.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
+        tblGk.setGridColor(new Color(220, 220, 215));
+        tblGk.setShowGrid(true);
+        tblGk.setSelectionBackground(new Color(210, 230, 250));
+        tblGk.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+
+        // col widths — col 6 hidden
+        int[] gkw = {
+                55, 55, 105, 115, 105, 68,   // 0-5
+                0,                            // 6 hidden
+                90,                           // 7 rule flags
+                75, 80, 72, 90,              // 8-11
+                72, 72, 78,                  // 12-14
+                88, 95, 85,                  // 15-17
+                72,                          // 18 infl
+                80, 85, 90, 85,              // 19-22 RMDs
+                90                           // 23 Bal Δ
+        };
+        for (int i = 0; i < gkw.length && i < tblGk.getColumnCount(); i++) {
+            TableColumn tc = tblGk.getColumnModel().getColumn(i);
+            tc.setPreferredWidth(gkw[i]);
+            if (gkw[i] == 0) { tc.setMinWidth(0); tc.setMaxWidth(0); }
+        }
+
+        // Header tooltips
+        JTableHeader gkHeader = tblGk.getTableHeader();
+        gkHeader.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override public void mouseMoved(MouseEvent e) {
+                int col = gkHeader.columnAtPoint(e.getPoint());
+                switch (col) {
+                    case 3 -> gkHeader.setToolTipText(
+                            "<html><b>GK withdrawal</b><br>"
+                                    + "Pre-anchor years: user-entered rate × current balance.<br>"
+                                    + "Anchor year: net spending need (spending minus guaranteed income).<br>"
+                                    + "Subsequent years: prior withdrawal, inflation-adjusted, then<br>"
+                                    + "modified by CPR, PR, and PMR rules as needed.<br><br>"
+                                    + "Guardrail comparisons (CPR▼ / PR▲) use the user-entered<br>"
+                                    + "pre-anchor rate as the initial-rate benchmark — not the<br>"
+                                    + "computed net-need / portfolio ratio.</html>");
+                    case 7 -> gkHeader.setToolTipText(
+                            "<html><b>Rule flags</b><br>"
+                                    + "<b>X.X%</b> = Year 1 of drawing: gkPreRate × current balance used.<br>"
+                                    + "&nbsp;&nbsp;Set via 'GK only — pre-anchor initial wd rate' in the input panel.<br>"
+                                    + "<b>—</b> = GK rules phase, no rule triggered; normal inflation adjustment.<br>"
+                                    + "<b>PMR⁰</b> = Portfolio Management Rule: inflation raise <i>skipped</i>.<br>"
+                                    + "<b>CPR▼</b> = Capital Preservation Rule: withdrawal cut 10%.<br>"
+                                    + "<b>PR▲</b> = Prosperity Rule: withdrawal raised 10%.</html>");
+                    case 22 -> gkHeader.setToolTipText(
+                            "<html><b>→ Roth/MM — RMD overage redirected</b><br>"
+                                    + "= max(0, Combined RMD − GK actual withdrawal).<br>"
+                                    + "Excess RMD above planned GK spending is redirected<br>"
+                                    + "to Roth IRA or money market — NOT spent.</html>");
+                    case 23 -> gkHeader.setToolTipText(
+                            "<html><b>Bal Δ — portfolio balance change</b><br>"
+                                    + "= market growth − GK spending withdrawal.<br>"
+                                    + "Green = grew · Red = shrank.</html>");
+                    default -> gkHeader.setToolTipText(null);
+                }
+            }
+        });
+
+        // Cell renderer
+        tblGk.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+            private final Color AMBER_BG   = new Color(255, 220, 100);
+            private final Color AMBER_FG   = new Color(130, 80, 0);
+            private final Color GOGO_BG    = new Color(232, 248, 240);
+            private final Color GOGO_WD_BG = new Color(180, 230, 205);
+            private final Color PMR_BG     = new Color(255, 235, 185);  // gold — freeze
+            private final Color PMR_FG     = new Color(120, 70, 0);
+            private final Color CPR_BG     = new Color(255, 210, 210);  // red — cut
+            private final Color CPR_FG     = new Color(150, 30, 30);
+            private final Color PR_BG      = new Color(210, 240, 210);  // green — raise
+            private final Color PR_FG      = new Color(30, 110, 30);
+            private final Color BENGEN_BG  = new Color(230, 222, 255);  // lavender — Bengen phase
+            private final Color BENGEN_FG  = new Color(70, 40, 140);
+
+            @Override public Component getTableCellRendererComponent(
+                    JTable t, Object v, boolean sel, boolean foc, int row, int col) {
+                Component c = super.getTableCellRendererComponent(t, v, sel, foc, row, col);
+                if (!sel && lastResults != null && lastResults.gkResults != null) {
+                    List<GkRow> rows = lastResults.gkResults.rows;
+                    boolean goGo      = row < rows.size() && rows.get(row).goGoActive;
+                    GkRow gr          = row < rows.size() ? rows.get(row) : null;
+                    boolean preAnchor = gr != null && gr.preAnchor;
+
+                    Color defaultBg = preAnchor ? BENGEN_BG
+                            : goGo ? GOGO_BG
+                              : (row % 2 == 0 ? Color.WHITE : new Color(248, 248, 245));
+                    c.setBackground(defaultBg);
+                    c.setForeground(preAnchor ? BENGEN_FG : Color.BLACK);
+
+                    String flags = gr != null ? (gr.ruleFlags != null ? gr.ruleFlags : "—") : "—";
+
+                    if ((col == 3 || col == 4) && goGo && !preAnchor) {
+                        c.setBackground(GOGO_WD_BG); c.setForeground(new Color(0, 90, 50));
+                    } else if ((col == 3 || col == 4) && goGo && preAnchor) {
+                        c.setBackground(new Color(200, 190, 240)); c.setForeground(new Color(60, 30, 120));
+                    } else if (col == 7) {
+                        if      (preAnchor)               { c.setBackground(BENGEN_BG); c.setForeground(BENGEN_FG); }
+                        else if (flags.contains("CPR"))   { c.setBackground(CPR_BG);    c.setForeground(CPR_FG); }
+                        else if (flags.contains("PR▲"))   { c.setBackground(PR_BG);     c.setForeground(PR_FG); }
+                        else if (flags.contains("PMR"))   { c.setBackground(PMR_BG);    c.setForeground(PMR_FG); }
+                        else if (flags.equals("GK start")){ c.setBackground(new Color(220,235,255)); c.setForeground(new Color(24,95,165)); }
+                    } else if ((col == 21 || col == 22) && gr != null && gr.rmdOverage > 0) {
+                        c.setBackground(new Color(255, 200, 120));
+                        c.setForeground(new Color(140, 60, 0));
+                    } else if ((col == 19 || col == 20) && gr != null) {
+                        Object rmdV = tblGkModel.getValueAt(row, col);
+                        Object wdV  = tblGkModel.getValueAt(row, 3);
+                        if (rmdV != null && wdV != null && !"—".equals(rmdV.toString()) && !"—".equals(wdV.toString())) {
+                            try {
+                                double rmd = Double.parseDouble(rmdV.toString().replaceAll("[^0-9.]", ""));
+                                double wd  = Double.parseDouble(wdV.toString().replaceAll("[^0-9.]", ""));
+                                if (rmd > wd) { c.setBackground(AMBER_BG); c.setForeground(AMBER_FG); }
+                            } catch (NumberFormatException ignored) {}
+                        }
+                    } else if (col == 17) {
+                        String s = v == null ? "" : v.toString();
+                        if (!preAnchor) c.setForeground(s.startsWith("-") ? new Color(180,30,30) : new Color(59,109,17));
+                    } else if (col == 23) {
+                        String s = v == null ? "" : v.toString();
+                        if (!preAnchor) c.setForeground(s.startsWith("-") ? new Color(180,30,30) : new Color(59,109,17));
+                    }
+                }
+                ((JLabel) c).setHorizontalAlignment(col <= 1 ? LEFT : RIGHT);
+                return c;
+            }
+        });
+
+        // Metrics header for GK tab
+        lblGkInitWd   = mkMetricLabel();
+        lblGkInitRate = mkMetricLabel();
+        lblGkFinalBal = mkMetricLabel();
+        JPanel gkMetrics = new JPanel(new GridLayout(1, 3, 8, 0));
+        gkMetrics.setBackground(new Color(245, 245, 242));
+        gkMetrics.add(wrapMetric(lblGkInitWd,   "GK anchor withdrawal",  "carried forward from pre-anchor at GK rules start"));
+        gkMetrics.add(wrapMetric(lblGkInitRate,  "GK guardrail anchor",   "user-entered initial rate (CPR/PR benchmark)"));
+        gkMetrics.add(wrapMetric(lblGkFinalBal,  "Final portfolio bal",   "end of horizon (mean return)"));
+
+        // Legend bar
+        JPanel legend = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 3));
+        legend.setBackground(new Color(245, 245, 242));
+        legend.add(gkLegendChip(new Color(230, 222, 255), new Color(70, 40, 140),  "Year 1 initial rate (gkPreRate × bal)"));
+        legend.add(gkLegendChip(new Color(220, 235, 255), new Color(24, 95, 165),  "GK rules start"));
+        legend.add(gkLegendChip(new Color(180, 230, 205), new Color(0, 90, 50),    "Go-go years"));
+        legend.add(gkLegendChip(new Color(255, 235, 185), new Color(120, 70, 0),   "PMR⁰ — inflation frozen"));
+        legend.add(gkLegendChip(new Color(255, 210, 210), new Color(150, 30, 30),  "CPR▼ — cut 10%"));
+        legend.add(gkLegendChip(new Color(210, 240, 210), new Color(30, 110, 30),  "PR▲  — raised 10%"));
+        legend.add(gkLegendChip(new Color(255, 200, 120), new Color(140, 60, 0),   "RMD overage → Roth/MM"));
+
+        JPanel topGk = new JPanel(new BorderLayout(0, 4));
+        topGk.setBackground(new Color(245, 245, 242));
+        topGk.add(gkMetrics, BorderLayout.NORTH);
+        topGk.add(legend,    BorderLayout.SOUTH);
+
+        JScrollPane gkScroll = new JScrollPane(tblGk);
+        gkScroll.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+
+        JPanel gkPanel = new JPanel(new BorderLayout(0, 4));
+        gkPanel.setBackground(new Color(245, 245, 242));
+        gkPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        gkPanel.add(topGk,    BorderLayout.NORTH);
+        gkPanel.add(gkScroll, BorderLayout.CENTER);
+        return gkPanel;
+    }
+
+    private JLabel gkLegendChip(Color bg, Color fg, String text) {
+        JLabel lbl = new JLabel("  " + text + "  ") {
+            @Override protected void paintComponent(Graphics g) {
+                g.setColor(bg);
+                g.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
+                super.paintComponent(g);
+            }
+        };
+        lbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        lbl.setForeground(fg);
+        lbl.setOpaque(false);
+        return lbl;
+    }
+
+
+    private void updateGkTable(ProResults res) {
+        if (tblGkModel == null) return;
+        SimInputs inp = res.inp;
+        boolean showRealDollars = this.showRealDollars;
+        if (res.gkResults != null) {
+            GkResults gk = res.gkResults;
+            tblGkModel.setRowCount(0);
+            for (GkRow gr : gk.rows) {
+                double d = showRealDollars ? gr.inflFactor : 1.0;
+                tblGkModel.addRow(new Object[]{
+                        gr.manAge,                                                              // 0
+                        gr.calYear,                                                             // 1
+                        CURRENCY.format((long)(gr.balance  / d)),                               // 2
+                        gr.drawing ? CURRENCY.format((long)(gr.wdGK    / d)) : "—",            // 3
+                        gr.drawing ? CURRENCY.format((long)(gr.wdActual/ d)) : "—",            // 4
+                        gr.drawing ? String.format("%.2f%%", gr.wdPct) : "—",                  // 5
+                        gr.ruleFlags,                                                           // 6 hidden
+                        gr.ruleFlags,                                                           // 7 visible flags
+                        gr.manSS   > 0 ? CURRENCY.format((long)(gr.manSS   / d)) : "—",        // 8
+                        gr.womanSS > 0 ? CURRENCY.format((long)(gr.womanSS / d)) : "—",        // 9
+                        gr.annuity > 0 ? CURRENCY.format((long)(gr.annuity / d)) : "—",        // 10
+                        gr.guaranteed > 0 ? CURRENCY.format((long)(gr.guaranteed / d)) : "—", // 11
+                        gr.drawing ? CURRENCY.format((long)(gr.living    / d)) : "—",          // 12
+                        gr.drawing ? CURRENCY.format((long)(gr.medical   / d)) : "—",          // 13
+                        gr.tax > 0  ? CURRENCY.format((long)(gr.tax      / d)) : "—",          // 14
+                        gr.drawing ? CURRENCY.format((long)(gr.totalSpend/ d)) : "—",          // 15
+                        CURRENCY.format((long)(gr.totalIncome / d)),                            // 16
+                        gr.drawing
+                                ? (gr.surplus >= 0 ? "+" : "-")
+                                  + CURRENCY.format((long)(Math.abs(gr.surplus) / d))
+                                : "—",                                                              // 17
+                        String.format("%.3f", gr.inflFactor),                                  // 18
+                        gr.manRmd   > 0 ? CURRENCY.format((long)(gr.manRmd   / d)) : "—",      // 19
+                        gr.womanRmd > 0 ? CURRENCY.format((long)(gr.womanRmd / d)) : "—",      // 20
+                        gr.combRmd  > 0 ? CURRENCY.format((long)(gr.combRmd  / d)) : "—",      // 21
+                        gr.rmdOverage>0  ? CURRENCY.format((long)(gr.rmdOverage/d)) : "—",     // 22
+                        (gr.balDelta >= 0 ? "+" : "-")
+                                + CURRENCY.format((long)(Math.abs(gr.balDelta) / d)),              // 23
+                });
+            }
+            // Update GK metrics header
+            double gkRate   = gk.initialWdRate * 100.0;
+            double dEndGk   = !gk.rows.isEmpty() ? gk.rows.get(gk.rows.size()-1).inflFactor : 1.0;
+            double wd1InflFactor = Math.pow(1 + inp.inflation, inp.withdrawStartYear - inp.baseYear);
+            lblGkInitWd.setText(CURRENCY.format((long)((double)gk.yr1Withdrawal
+                    / (showRealDollars ? wd1InflFactor : 1.0))) + " / yr");
+            lblGkInitRate.setText(String.format("%.2f%%", gkRate));
+            lblGkFinalBal.setText(showRealDollars
+                    ? formatMoney((long)(gk.finalBalance / dEndGk)) + " (2026$)"
+                    : formatMoney(gk.finalBalance) + " (nom.)");
+        }
     }
 
 
@@ -1921,6 +1976,29 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
         }
     }
 
+    static class GkRow {
+        int  calYear, manAge, womanAge;
+        int  balance;
+        int  wdGK;            // GK-computed withdrawal (pre-go-go)
+        int  wdActual;        // wdGK × go-go multiplier
+        double wdPct;
+        String ruleFlags;     // "X.X%", "—", "PMR⁰", "CPR▼", "PR▲", combinations
+        int  manSS, womanSS, annuity, guaranteed;
+        int  living, medical, tax, totalSpend, totalIncome, surplus;
+        double inflFactor;
+        int  manRmd, womanRmd, combRmd, rmdOverage;
+        int  investmentGrowth, balDelta;
+        boolean drawing, goGoActive, preAnchor;
+    }
+
+    static class GkResults {
+        SimInputs inp;
+        List<GkRow> rows;
+        int  yr1Withdrawal;
+        double initialWdRate;
+        int  finalBalance;
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  RNG
     // ════════════════════════════════════════════════════════════════════════
@@ -1960,6 +2038,7 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
         int baseTax; double taxInflation;
         double goGoMultiplier; int goGoDuration;
         double upperGuardrail, lowerGuardrail;
+        double gkPreRate;
     }
 
     static class EnhRow {
@@ -1982,6 +2061,7 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
         double[][] fanBalances, fanWithdrawals, fanInflFactors;
         double actualPoS;
         int medianFinalBalance, fanPathCount;
+        GkResults gkResults;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -2235,7 +2315,7 @@ public class IncomeLab_Pro_withTaxes extends JFrame {
         SwingUtilities.invokeLater(() -> {
             try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
             catch (Exception ignored) {}
-            new IncomeLab_Pro_withTaxes();
+            new IncomeLab_and_GK2();
         });
     }
 }
