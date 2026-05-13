@@ -20,8 +20,8 @@ import java.util.List;
 /**
  * IncomeLab_and_GK2.java
  *
- * Standalone Income Lab Pro — PoS-Driven Withdrawal Simulator
- * (Enhanced stochastic engine; no Guyton-Klinger tab)
+ * Income Lab Pro + Guyton-Klinger Withdrawal Simulator
+ * (Enhanced stochastic engine with Guyton-Klinger Option C tab)
  *
  * ── METHODOLOGY ───────────────────────────────────────────────────────────────
  *
@@ -173,7 +173,7 @@ public class IncomeLab_and_GK2 extends JFrame {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  INPUT PANEL  (identical to IncomeLab_Enhanced; GK spinner removed)
+    //  INPUT PANEL  (includes GK initial rate and guardrail spinners)
     // ════════════════════════════════════════════════════════════════════════
     private JPanel buildInputPanel() {
         JPanel outer = new JPanel(new BorderLayout());
@@ -756,7 +756,7 @@ public class IncomeLab_and_GK2 extends JFrame {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  SIMULATION  (dispatches Enhanced engine only; no GK)
+    //  SIMULATION  (dispatches Enhanced Pro engine + Guyton-Klinger engine)
     // ════════════════════════════════════════════════════════════════════════
     private void runSimulation() {
         btnRun.setEnabled(false);
