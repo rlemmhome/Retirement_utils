@@ -189,6 +189,10 @@ public class IncomeLab_and_GK2 extends JFrame {
 
         // ── Appearance ────────────────────────────────────────────────────
         spFontDelta = new JSpinner(new SpinnerNumberModel(2, -4, 4, 1));
+        spFontDelta.setToolTipText("<html><b>Font size adjustment (pt)</b><br>"
+                + "Shifts all application fonts by this many points relative to<br>"
+                + "the Swing default. Default = +2. Range: −4 to +4.<br>"
+                + "Font update applies ~1 second after you stop adjusting.</html>");
         spFontDelta.setFont(new Font("SansSerif", Font.PLAIN, BASE_FONT_SIZE + fontDelta));
         fontDebounceTimer = new javax.swing.Timer(1000, e -> {
             fontDelta = (Integer) spFontDelta.getValue();
@@ -202,6 +206,11 @@ public class IncomeLab_and_GK2 extends JFrame {
         // ── Portfolio & Simulation ─────────────────────────────────────────
         int curYear = java.time.Year.now().getValue();
         spSimStartYear       = spinI(curYear, 2020, 2040, 1, "#");
+        spSimStartYear.setToolTipText("<html><b>Simulation start year</b><br>"
+                + "The calendar year used as year 0 of the simulation.<br>"
+                + "All other year-based inputs (withdrawal start, SS start,<br>"
+                + "annuity start) are interpreted relative to this base year.<br>"
+                + "Changing this shifts the entire simulation timeline forward or back.</html>");
         spPortfolio          = spinI(1_500_000, 10_000, 20_000_000, 10_000, "#,###");
         spPortfolio.addChangeListener(e -> distributePortfolioDelta());
         spHorizon            = spinI(30, 10, 50, 1, "#");
@@ -214,14 +223,36 @@ public class IncomeLab_and_GK2 extends JFrame {
         spWithdrawStartMonth = spinI(1, 1, 12, 1, "#");
 
         chkRandomize = new JCheckBox("Re-randomize each run", true);
+        chkRandomize.setToolTipText("<html><b>Re-randomize each run</b><br>"
+                + "Checked: each run uses a different random seed — natural MC variance.<br>"
+                + "Unchecked: same seed every run — identical results for same inputs.<br>"
+                + "Use unchecked for scenario comparison; checked to explore uncertainty.</html>");
         chkRandomize.setFont(new Font("SansSerif", Font.PLAIN, 14));
         chkRandomize.setForeground(new Color(75, 75, 75));
         chkRandomize.setOpaque(false);
         chkRandomize.setAlignmentX(LEFT_ALIGNMENT);
 
         spMcSolvePaths = spinI(800, 50, 5000, 50, "#,###");
+        spMcSolvePaths.setToolTipText("<html><b>Monte Carlo solve paths</b><br>"
+                + "Number of simulation paths per binary-search iteration<br>"
+                + "used to find the target PoS withdrawal amount.<br><br>"
+                + "<b>Default: 800</b> — high accuracy.<br>"
+                + "200 = ~4× faster, ~$500 variance. 100 = ~8× faster, ~$1,000 variance.<br>"
+                + "Biggest single driver of total runtime.</html>");
         spBinaryIters  = spinI(22, 8, 30, 1, "#");
+        spBinaryIters.setToolTipText("<html><b>Binary search iterations</b><br>"
+                + "Number of iterations to narrow the withdrawal amount that<br>"
+                + "achieves the target probability of success.<br><br>"
+                + "<b>Default: 22</b> — converges to within ~$1.<br>"
+                + "16 = within ~$50. 12 = within ~$500.<br>"
+                + "Smallest runtime impact of the three parameters.</html>");
         spMcFanPaths   = spinI(400, 20, 2000, 20, "#,###");
+        spMcFanPaths.setToolTipText("<html><b>Fan chart paths</b><br>"
+                + "Full simulation paths used to draw the fan chart and<br>"
+                + "compute the actual PoS metric shown at the top.<br><br>"
+                + "<b>Default: 400</b> — smooth fan chart, stable PoS reading.<br>"
+                + "100 = ~4× faster but noisier. 50 = rough but usable for quick checks.<br>"
+                + "Each fan path re-solves withdrawal every year — most expensive per path.</html>");
 
         ChangeListener refreshRunTooltip = e -> updateRunTooltip();
         spMcSolvePaths.addChangeListener(refreshRunTooltip);
@@ -334,9 +365,19 @@ public class IncomeLab_and_GK2 extends JFrame {
 
         // ── Social Security ───────────────────────────────────────────────
         spManPIA           = spinI(3_788, 0, 6_000, 50, "#,###");
+        spManPIA.setToolTipText("<html><b>Man’s Primary Insurance Amount (PIA)</b><br>"
+                + "Monthly SS benefit payable at Full Retirement Age (FRA).<br>"
+                + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
+                + "Reduced if claiming before FRA; increased if after FRA.<br>"
+                + "FRA = 67 for those born 1960 or later.</html>");
         spManSSStartYear   = spinI(2027,  2020, 2040, 1, "#");
         spManSSStartMonth  = spinI(1,     1,    12,   1, "#");
         spWomanPIA         = spinI(3_897, 0, 6_000, 50, "#,###");
+        spWomanPIA.setToolTipText("<html><b>Woman’s Primary Insurance Amount (PIA)</b><br>"
+                + "Monthly SS benefit payable at Full Retirement Age (FRA).<br>"
+                + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
+                + "Reduced if claiming before FRA; increased if after FRA.<br>"
+                + "FRA = 67 for those born 1960 or later.</html>");
         spWomanSSStartYear = spinI(2027,  2020, 2040, 1, "#");
         spWomanSSStartMonth= spinI(12,    1,    12,   1, "#");
         spSSCola           = spinD(2.3,   0.0,  5.0,  0.1, "0.0#");
@@ -404,6 +445,11 @@ public class IncomeLab_and_GK2 extends JFrame {
                 + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
                 + "bucket-list spending, or major lifestyle upgrades</html>");
         spGoGoDuration = spinI(10,      0,    20,    1,     "#");
+        spGoGoDuration.setToolTipText("<html><b>Go-go years duration</b><br>"
+                + "Number of years from withdrawal start that the go-go<br>"
+                + "spending multiplier applies.<br><br>"
+                + "<b>Default: 10 years</b> — roughly covers ages 65–75 for a typical<br>"
+                + "early retiree. Set to 0 to disable the go-go multiplier entirely.</html>");
         inner.add(card("Annual Spending (2027 Base $)", new Object[]{
                 "Living expenses ($/yr)",             spLivingExp,
                 "Medical ($/yr)",                     spMedical,
@@ -429,7 +475,7 @@ public class IncomeLab_and_GK2 extends JFrame {
         spUpperGuardrail.setToolTipText("<html><b>Upper guardrail — Prosperity Rule (PR▲)</b><br>"
                 + "If the GK withdrawal rate falls more than this % below the initial rate,<br>"
                 + "the withdrawal is raised 10%.<br><b>Default: 20%</b></html>");
-        spLowerGuardrail = spinD(25.0, 5.0, 60.0, 1.0, "0.0#");
+        spLowerGuardrail = spinD(20.0, 5.0, 60.0, 1.0, "0.0#");
         spLowerGuardrail.setToolTipText("<html><b>Lower guardrail — Capital Preservation Rule (CPR▼)</b><br>"
                 + "If the GK withdrawal rate rises more than this % above the initial rate,<br>"
                 + "the withdrawal is cut 10%.<br><b>Default: 25%</b></html>");
@@ -562,8 +608,8 @@ public class IncomeLab_and_GK2 extends JFrame {
                 "Man age", "Cal yr", "Portfolio bal (50th%)",           // 0 1 2
                 "Pro PoS withdrawal", "Actual wd", "Wd %",              // 3 4 5
                 "Alert",                                                  // 6
-                "Man SS", "Woman SS", "Annuity", "Guaranteed",           // 7 8 9 10
-                "Living", "Medical", "Tax (est)",                        // 11 12 13
+                "Man SS", "Woman SS", "Annuity", "Fixed Inc",            // 7 8 9 10
+                "Living Exp", "Medical", "Tax (est)",                    // 11 12 13
                 "Total spend", "Total income", "Surplus/gap",            // 14 15 16
                 "Infl factor",                                           // 17
                 "Man RMD", "Woman RMD", "Combined RMD", "→ Roth/MM",    // 18 19 20 21
@@ -590,6 +636,55 @@ public class IncomeLab_and_GK2 extends JFrame {
                             + "Binary-search solved where each trial path re-solves<br>"
                             + "the optimal withdrawal <i>every year</i> (not fixed + inflated).<br>"
                             + "Captures path-dependent sequence-of-returns adaptation.</html>"; }
+                    case 9 -> {
+                        // Annuity — fixed nominal, erodes in real terms
+                        double d = showRealDollars ? er.inflFactor : 1.0;
+                        return String.format(
+                                "<html><b>Annuity / pension income</b><br>"
+                                        + "This is a <b>fixed nominal amount</b> — it does not adjust for inflation.<br><br>"
+                                        + "Its purchasing power erodes every year. At a 3.79%% inflation rate,<br>"
+                                        + "it retains only about <b>67%% of its starting-year buying power</b><br>"
+                                        + "after 10 years — and roughly 50%% after 18 years.<br><br>"
+                                        + "Toggle the <b>Real $</b> button (top right) to see this erosion<br>"
+                                        + "directly: the annuity column will visibly shrink year over year<br>"
+                                        + "while SS and portfolio withdrawals (which are inflation-adjusted)<br>"
+                                        + "remain relatively stable in real-dollar terms.<br><br>"
+                                        + "This year’s nominal value: %s</html>",
+                                CURRENCY.format((long)(er.annuity / d)));
+                    }
+                    case 4 -> {
+                        // Actual wd — show the go-go breakdown if active
+                        double d = showRealDollars ? er.inflFactor : 1.0;
+                        String wdStr     = CURRENCY.format((long)(er.wdActual  / d));
+                        String posWdStr  = CURRENCY.format((long)(er.withdrawal / d));
+                        if (er.goGoActive) {
+                            return String.format(
+                                    "<html><b>Actual wd — go-go years active</b><br>"
+                                            + "&nbsp;&nbsp;Pro PoS withdrawal: %s<br>"
+                                            + "&nbsp;&nbsp;× go-go multiplier:&nbsp;&nbsp;%.3f×<br>"
+                                            + "&nbsp;&nbsp;= Actual wd:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br><br>"
+                                            + "Go-go multiplier increases spending during your<br>"
+                                            + "active early-retirement travel years.</html>",
+                                    posWdStr, er.goGoMult, wdStr);
+                        } else {
+                            return "<html><b>Actual wd</b><br>"
+                                    + "Go-go years have ended — multiplier = 1.0×.<br>"
+                                    + "Actual wd = Pro PoS withdrawal.</html>";
+                        }
+                    }
+                    case 17 -> {
+                        // Infl factor — show what it means for this row's dollars
+                        return String.format(
+                                "<html><b>Inflation factor: %.3f</b><br>"
+                                        + "Prices have risen %.1f%% since the simulation start year.<br><br>"
+                                        + "To convert this year’s nominal dollars to today’s purchasing power,<br>"
+                                        + "divide by %.3f — or toggle the ‘Real $’ button above the table.<br><br>"
+                                        + "Example: $100,000 nominal = %s in today’s dollars.</html>",
+                                er.inflFactor,
+                                (er.inflFactor - 1.0) * 100.0,
+                                er.inflFactor,
+                                CURRENCY.format((long)(100_000 / er.inflFactor)));
+                    }
                     case COL_ALERT -> {
                         if ("▲ raise alert".equals(er.alert))
                             return "<html><b>▲ Raise alert</b><br>"
@@ -645,21 +740,52 @@ public class IncomeLab_and_GK2 extends JFrame {
         for (int i = 0; i < cw.length && i < tblPro.getColumnCount(); i++)
             tblPro.getColumnModel().getColumn(i).setPreferredWidth(cw[i]);
 
-        // Header tooltips
-        JTableHeader hdr = tblPro.getTableHeader();
-        hdr.addMouseMotionListener(new MouseMotionAdapter() {
-            @Override public void mouseMoved(MouseEvent e) {
-                int col = hdr.columnAtPoint(e.getPoint());
-                switch (col) {
-                    case 18 -> hdr.setToolTipText("<html><b>Man RMD</b><br>Required Minimum Distribution from man's trad IRA + 401K.<br>Begins age 75 (SECURE 2.0).</html>");
-                    case 19 -> hdr.setToolTipText("<html><b>Woman RMD</b><br>Required Minimum Distribution from woman's trad IRA + 401K.<br>Begins age 75 (SECURE 2.0).</html>");
-                    case 20 -> hdr.setToolTipText("<html><b>Combined RMD</b><br>Sum of man + woman RMDs.<br>Orange = RMD exceeds planned withdrawal.</html>");
-                    case 21 -> hdr.setToolTipText("<html><b>→ Roth/MM — RMD overage</b><br>= max(0, Combined RMD − Actual wd).<br>Excess RMD redirected to Roth/MM — not spent.</html>");
-                    case 22 -> hdr.setToolTipText("<html><b>Bal Δ — portfolio change</b><br>= market growth − spending withdrawal.<br>Green = grew · Red = shrank.</html>");
-                    default -> hdr.setToolTipText(null);
-                }
+        // Header tooltips — override getToolTipText directly for reliable per-column display
+        JTableHeader hdr = new JTableHeader(tblPro.getColumnModel()) {
+            @Override public String getToolTipText(MouseEvent e) {
+                int col = columnAtPoint(e.getPoint());
+                return switch (col) {
+                    case 4  -> "<html><b>Actual wd — spending withdrawal</b><br>"
+                            + "= 80% PoS withdrawal × go-go multiplier (if applicable).<br>"
+                            + "This is the amount spent and deducted from the portfolio each year.<br>"
+                            + "During go-go years: Actual wd = Pro PoS wd × go-go multiplier.<br>"
+                            + "After go-go years: Actual wd = Pro PoS wd (multiplier = 1.0).<br>"
+                            + "RMD overage above this goes to Roth/MM, not spent.</html>";
+                    case 5  -> "<html><b>Wd % — effective withdrawal rate</b><br>"
+                            + "= Actual wd ÷ portfolio balance.<br>"
+                            + "Shows what percentage of the portfolio is being spent this year.<br>"
+                            + "Hover individual cells for guardrail status.</html>";
+                    case 17 -> "<html><b>Infl factor — cumulative inflation multiplier</b><br>"
+                            + "= the factor by which prices have risen since the simulation start year.<br><br>"
+                            + "To convert a <i>future</i> dollar amount to <i>today’s</i> purchasing power,<br>"
+                            + "divide by this number (or toggle the ‘Real $’ button to do it automatically).<br><br>"
+                            + "To convert a <i>today’s</i> dollar amount to <i>that year’s</i> nominal dollars,<br>"
+                            + "multiply by this number.<br><br>"
+                            + "Example: Infl factor = 1.450 in Year 10 means $1.00 today<br>"
+                            + "costs $1.45 in that year — or a $100K withdrawal is worth only $69K today.</html>";
+                    case 18 -> "<html><b>Man RMD</b><br>"
+                            + "Required Minimum Distribution from man’s traditional IRA + 401K.<br>"
+                            + "Begins age 75 (SECURE 2.0, born after 1960).</html>";
+                    case 19 -> "<html><b>Woman RMD</b><br>"
+                            + "Required Minimum Distribution from woman’s traditional IRA + 401K.<br>"
+                            + "Begins age 75 (SECURE 2.0, born after 1960).</html>";
+                    case 20 -> "<html><b>Combined RMD</b><br>"
+                            + "Sum of man + woman RMDs.<br>"
+                            + "Orange = RMD exceeds planned withdrawal; overage → Roth/MM.</html>";
+                    case 21 -> "<html><b>→ Roth/MM — RMD overage redirected</b><br>"
+                            + "= max(0, Combined RMD − Actual wd).<br>"
+                            + "When RMD exceeds the planned spending withdrawal, the excess must<br>"
+                            + "still be taken but is redirected to Roth/MM — not spent.<br>"
+                            + "This is effectively an involuntary Roth conversion opportunity.</html>";
+                    case 22 -> "<html><b>Bal Δ — portfolio balance change</b><br>"
+                            + "= end-of-year balance − start-of-year balance.<br>"
+                            + "= market growth − spending withdrawal.<br>"
+                            + "Green = portfolio grew · Red = portfolio shrank.</html>";
+                    default -> null;
+                };
             }
-        });
+        };
+        tblPro.setTableHeader(hdr);
 
         // Cell renderer
         tblPro.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
@@ -1060,6 +1186,7 @@ public class IncomeLab_and_GK2 extends JFrame {
             row.inflFactor    = inflFactor;
             row.drawing       = drawing;
             row.goGoActive    = goGoRem > 0;
+            row.goGoMult      = goGoMult;
             row.alert         = alert;
             row.balDelta      = nextMedBal - medBal;
             row.investmentGrowth = (int)(medBal * inp.nomReturn);
@@ -1492,8 +1619,8 @@ public class IncomeLab_and_GK2 extends JFrame {
                 "GK withdrawal", "Actual wd", "Wd %",                       // 3 4 5
                 "Rules (raw)",                                                // 6 hidden
                 "Rule flags",                                                 // 7 visible
-                "Man SS", "Woman SS", "Annuity", "Guaranteed",               // 8 9 10 11
-                "Living", "Medical", "Tax (est)",                            // 12 13 14
+                "Man SS", "Woman SS", "Annuity", "Fixed Inc",                // 8 9 10 11
+                "Living Exp", "Medical", "Tax (est)",                        // 12 13 14
                 "Total spend", "Total income", "Surplus/gap",                // 15 16 17
                 "Infl factor",                                                // 18
                 "Man RMD", "Woman RMD", "Combined RMD", "→ Roth/MM",         // 19 20 21 22
@@ -2050,6 +2177,7 @@ public class IncomeLab_and_GK2 extends JFrame {
         int  living, medical, tax, totalSpend, totalIncome, surplus;
         double inflFactor;
         boolean drawing, goGoActive;
+        double goGoMult;
         String alert;
         int  balDelta, investmentGrowth;
     }
