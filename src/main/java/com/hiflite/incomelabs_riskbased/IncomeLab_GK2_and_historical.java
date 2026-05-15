@@ -1199,7 +1199,9 @@ public class IncomeLab_GK2_and_historical extends JFrame {
             double womanSS    = womanSSThisYear(inp, y);
             double ann        = annuityThisYear(inp, y);
             double guaranteed = manSS + womanSS + ann;
-            double living     = drawing ? inp.livingExp * Math.pow(1 + inp.inflation, y) : 0;
+            // Use actual cumulative inflation factor (50th pct of fan paths) so that
+            // historical stress scenarios deflate/inflate living expenses correctly
+            double living     = drawing ? inp.livingExp * inflFactor : 0;
             double medical    = drawing ? inp.medical   * Math.pow(1 + inp.medInflation, y) : 0;
             double tax        = taxThisYear(inp, y);
             double totalSpend = drawing ? living + medical + tax : 0;
@@ -1561,6 +1563,7 @@ public class IncomeLab_GK2_and_historical extends JFrame {
         double bal            = inp.portfolio;
         double wdGK           = 0;
         boolean prevYearLoss  = false;
+        double inflFactor     = 1.0; // updated each year from actual yearInfl
 
         double manTradIRA    = inp.manTradIRA;
         double manTrad401K   = inp.manTrad401K;
@@ -1576,14 +1579,24 @@ public class IncomeLab_GK2_and_historical extends JFrame {
 
             int goGoRemaining = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
             double goGoMult   = (goGoRemaining > 0) ? inp.goGoMultiplier : 1.0;
-            double inflFactor = Math.pow(1 + inp.inflation, y);
+
+            // Resolve this year's return and inflation from historical scenario or random mean
+            double[][] histSeq = HistoricalScenarios.getSequence(inp.scenarioIndex);
+            double yearReturn = (histSeq != null && y < histSeq.length)
+                    ? histSeq[y][1] : inp.nomReturn;
+            double yearInfl   = (histSeq != null && y < histSeq.length)
+                    ? histSeq[y][2] : inp.inflation;
+
+            // Cumulative inflation factor from actual per-year inflation
+            if (y == 0) inflFactor = 1.0;
+            else        inflFactor *= (1 + yearInfl);
 
             double manSS      = manSSThisYear(inp, y);
             double womanSS    = womanSSThisYear(inp, y);
             double ann        = annuityThisYear(inp, y);
             double guaranteed = manSS + womanSS + ann;
-            double living     = drawing ? inp.livingExp   * Math.pow(1 + inp.inflation,    y) : 0;
-            double medical    = drawing ? inp.medical     * Math.pow(1 + inp.medInflation,  y) : 0;
+            double living     = drawing ? inp.livingExp   * inflFactor : 0;
+            double medical    = drawing ? inp.medical     * Math.pow(1 + inp.medInflation, y) : 0;
             double tax        = taxThisYear(inp, y);
             double totalSpend = drawing ? living + medical + tax : 0;
 
@@ -1604,7 +1617,7 @@ public class IncomeLab_GK2_and_historical extends JFrame {
                     applyInflation = false;
                     flags = "PMR\u2070";
                 }
-                if (applyInflation) wdGK *= (1 + inp.inflation);
+                if (applyInflation) wdGK *= (1 + yearInfl);
 
                 double wdPctCheck = bal > 0 ? wdGK / bal : 0;
                 if (wdPctCheck > initialWdRate * (1 + inp.lowerGuardrail)) {
@@ -1632,7 +1645,7 @@ public class IncomeLab_GK2_and_historical extends JFrame {
             GkRow row = new GkRow();
             row.calYear = calYear; row.manAge = manAge; row.womanAge = womanAge;
             row.balance = (int) Math.max(0, bal);
-            row.investmentGrowth = (int)(bal * inp.nomReturn);
+            row.investmentGrowth = (int)(bal * yearReturn);
             row.wdGK = (int) wdGK; row.wdActual = wdActual;
             row.wdPct = wdPct; row.ruleFlags = flags;
             row.manSS = (int) manSS; row.womanSS = (int) womanSS;
@@ -1646,16 +1659,16 @@ public class IncomeLab_GK2_and_historical extends JFrame {
             row.drawing = drawing; row.goGoActive = goGoRemaining > 0;
             row.preAnchor = false;
 
-            double nextBal = Math.max(0, bal * (1 + inp.nomReturn) - wdActual);
+            double nextBal = Math.max(0, bal * (1 + yearReturn) - wdActual);
             row.balDelta   = (int)(nextBal - bal);
             prevYearLoss   = (nextBal < bal);
             bal            = nextBal;
             gk.rows.add(row);
 
-            manTradIRA    = Math.max(0, manTradIRA   * (1 + inp.nomReturn) - calcRmd(manTradIRA,   manAge));
-            manTrad401K   = Math.max(0, manTrad401K  * (1 + inp.nomReturn) - calcRmd(manTrad401K,  manAge));
-            womanTradIRA  = Math.max(0, womanTradIRA * (1 + inp.nomReturn) - calcRmd(womanTradIRA, womanAge));
-            womanTrad401K = Math.max(0, womanTrad401K*(1 + inp.nomReturn) - calcRmd(womanTrad401K, womanAge));
+            manTradIRA    = Math.max(0, manTradIRA   * (1 + yearReturn) - calcRmd(manTradIRA,   manAge));
+            manTrad401K   = Math.max(0, manTrad401K  * (1 + yearReturn) - calcRmd(manTrad401K,  manAge));
+            womanTradIRA  = Math.max(0, womanTradIRA * (1 + yearReturn) - calcRmd(womanTradIRA, womanAge));
+            womanTrad401K = Math.max(0, womanTrad401K*(1 + yearReturn) - calcRmd(womanTrad401K, womanAge));
         }
 
         gk.finalBalance = gk.rows.isEmpty() ? 0
