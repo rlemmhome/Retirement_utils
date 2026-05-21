@@ -158,8 +158,8 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         spManBirthMonth   = spinI(9,    1,    12,   1, "#");
         spWomanBirthYear  = spinI(1962, 1940, 2000, 1, "#");
         spWomanBirthMonth = spinI(12,   1,    12,   1, "#");
-        spManPlanAge      = spinI(90, 70, 110, 1, "#");
-        spWomanPlanAge    = spinI(92, 70, 110, 1, "#");
+        spManPlanAge      = spinI(95, 70, 110, 1, "#");
+        spWomanPlanAge    = spinI(95, 70, 110, 1, "#");
         lblHorizonNote = new JLabel(" ");
         lblHorizonNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblHorizonNote.setForeground(new Color(100,100,100));
@@ -688,8 +688,8 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
     static final String[] COL_NAMES = {
             "Rank", "Bob SS Start", "Bob Age", "Bob Monthly",
             "Jo SS Start", "Jo Age", "Jo Monthly",
-            "Combined SS/yr", "Year-1 Port Wd", "Init Rate %",
-            "Yr-1 Total Income", "Median Final Bal", "Actual PoS %",
+            "Combined SS/yr", "Portfolio Draw", "Init Rate %",
+            "Total Income Yr1", "Median Final Bal", "Actual PoS %",
             "Floor OK?",
             "Rank (Spend)", "Rank (Legacy)", "Rank (Survival)"
     };
@@ -1204,15 +1204,26 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             Arrays.sort(finals);
             res.medianFinalBalance=(int)finals[fanPaths/2];
 
-            int yr1Wd=solveWithdrawalPro(inp.portfolio,inp.baseYear,inp.horizon,
-                    inp,999L+seed,solvePaths,binIters,inp.goGoDuration);
-            res.yr1Withdrawal=yr1Wd;
+            // Compute yr1Withdrawal at the WITHDRAWAL START YEAR vantage point --
+            // same as IL's first drawing row: solve from the median fan-path balance
+            // at withdrawStartYear against the remaining horizon from that year.
+            // This makes Portfolio Draw match IL's "80% PoS wd" in the first drawing year.
+            int wdStartY = inp.withdrawStartYear - inp.baseYear;
+            double[] wdStartBalArr = new double[fanPaths];
+            for (int p=0; p<fanPaths; p++) wdStartBalArr[p] = fanBalances[p][wdStartY];
+            Arrays.sort(wdStartBalArr);
+            int wdStartMedBal = (int) wdStartBalArr[fanPaths/2];
+            int remainingHorizon = inp.horizon - wdStartY;
+            int goGoAtWdStart = inp.goGoDuration; // full go-go still ahead at wd start
+            int yr1Wd = solveWithdrawalPro(wdStartMedBal, inp.withdrawStartYear,
+                    remainingHorizon, inp, 999L+seed, solvePaths, binIters, goGoAtWdStart);
+            res.yr1Withdrawal = yr1Wd;
 
-            // Compute yr1TotalIncome = portfolio withdrawal + guaranteed income in year 1
-            double yr1ManSS=manSSThisYear(inp,0);
-            double yr1WomanSS=womanSSThisYear(inp,0);
-            double yr1Ann=annuityThisYear(inp,0);
-            res.yr1TotalIncome=(int)Math.round(yr1Wd+yr1ManSS+yr1WomanSS+yr1Ann);
+            // yr1TotalIncome = 80% PoS wd + SS + annuity at the withdrawal start year
+            double yr1ManSS   = manSSThisYear(inp,   wdStartY);
+            double yr1WomanSS = womanSSThisYear(inp,  wdStartY);
+            double yr1Ann     = annuityThisYear(inp,  wdStartY);
+            res.yr1TotalIncome = (int)Math.round(yr1Wd + yr1ManSS + yr1WomanSS + yr1Ann);
 
             // Build median path (Step 4)
             for (int y=0; y<inp.horizon; y++) {
