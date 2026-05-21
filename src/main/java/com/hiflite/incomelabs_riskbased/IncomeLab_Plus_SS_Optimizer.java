@@ -16,21 +16,19 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * IncomeLab_Plus_SS_Optimizer.java
+ * IncomeLab_Plus_SS_Optimizer.java  -- v3 single-phase rewrite
  *
- * Social Security Claiming Age Optimizer built on the Income Lab MC engine.
- * Ported from IncomeLab_GK2_and_historical.java.
+ * Strategy: run the FULL IL simulatePro engine for every SS combination.
+ * No Phase 1 approximation. No two-phase split. No shortcut solver.
+ * The three scoring tabs show real yr1Withdrawal, medianFinalBalance,
+ * and actualPoS computed identically to IncomeLab_GK2_and_historical.
  *
- * Three scoring tabs:
- *   Max Spending  -- yr1Withdrawal primary, medianFinalBalance tiebreaker
- *   Max Legacy    -- medianFinalBalance primary, yr1Withdrawal tiebreaker
- *   Max Survival  -- actualPoS primary, yr1Withdrawal tiebreaker
+ * Clicking any row opens a DetailWindow showing the full IL year-by-year
+ * median path table (already cached from the scan, instant display).
  *
- * Phase 1: fast scan of all SS combinations.
- * Phase 2: full fidelity confirmation of top-N from each tab.
- * Historical stress scenario applies to Phase 1, Phase 2, and DetailWindow (Option C).
- *
- * Click any Phase-2-confirmed row to open the full IL year-by-year table.
+ * Optional minimum-income floor: SS combinations whose year-1 total income
+ * falls below the user-specified floor are excluded from ranking (but shown
+ * in the table marked "[below floor]" so you can see they were considered).
  *
  * Compile: javac IncomeLab_Plus_SS_Optimizer.java
  * Run:     java com.hiflite.incomelabs_riskbased.IncomeLab_Plus_SS_Optimizer
@@ -41,7 +39,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
     private static final NumberFormat CURRENCY = NumberFormat.getCurrencyInstance(Locale.US);
     static { CURRENCY.setMaximumFractionDigits(0); }
 
-    // Font sizing (identical to IL)
+    // Font sizing
     private static final int BASE_FONT_SIZE = 12;
     private int fontDelta = 2;
     private JSpinner spFontDelta;
@@ -63,8 +61,8 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
     private JSpinner spGoGo, spGoGoDuration;
     private JSpinner spTargetPoS, spHorizon;
     private JLabel   lblHorizonNote, lblManAge, lblWomanAge;
-    private JSpinner spPhase1Paths, spPhase1BinIters;
-    private JSpinner spPhase2Paths, spPhase2BinIters, spPhase2FanPaths, spPhase2TopN;
+    private JSpinner spSolvePaths, spBinIters, spFanPaths;
+    private JSpinner spMinIncomeFloor;
     private JComboBox<String> cmbScenario;
 
     // Run control
@@ -77,21 +75,15 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
     private ResultTab   tabSpend, tabLegacy, tabSurvival;
 
     // Progress tracking
-    private final AtomicInteger phase1Done  = new AtomicInteger(0);
-    private final AtomicInteger phase2Done  = new AtomicInteger(0);
-    private volatile int        phase1Total = 0;
-    private volatile int        phase2Total = 0;
-    private volatile int        currentPhase = 0;
-    private volatile long       runStartMs   = 0;
-    private volatile long       phaseStartMs = 0;
-    private final long[]        lastComboDurMs = new long[20];
+    private final AtomicInteger scanDone = new AtomicInteger(0);
+    private volatile int        scanTotal = 0;
+    private volatile long       runStartMs = 0;
+    private final long[]        lastComboDurMs = new long[40];
     private int                 lastComboDurIdx = 0;
     private ScheduledExecutorService scheduler;
 
-    // Detail window cache
-    private final Map<String, ILEngine.ProResults> detailCache = new ConcurrentHashMap<>();
-    private volatile SimInputs lastBaseInputs = null;
-    private volatile int lastP2Paths = 1000, lastP2Fan = 500, lastP2BinIters = 22;
+    // Full results cache (key -> ProResults), populated during scan
+    private final Map<String, ILEngine.ProResults> resultCache = new ConcurrentHashMap<>();
 
     // ==============================
     // Constructor
@@ -121,7 +113,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         JPanel outer = new JPanel(new BorderLayout());
         outer.setBackground(new Color(240, 240, 237));
         outer.setBorder(BorderFactory.createMatteBorder(0,0,0,1,new Color(200,198,193)));
-        outer.setPreferredSize(new Dimension(420, 0));
+        outer.setPreferredSize(new Dimension(430, 0));
         outer.setMinimumSize(new Dimension(380, 0));
 
         JPanel inner = new ScrollablePanel();
@@ -129,12 +121,10 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         inner.setBackground(new Color(240, 240, 237));
         inner.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
-        // -- Font size
+        // Appearance
         spFontDelta = new JSpinner(new SpinnerNumberModel(2, -6, 6, 1));
         spFontDelta.setFont(new Font("SansSerif", Font.PLAIN, BASE_FONT_SIZE + fontDelta));
-        spFontDelta.setToolTipText("<html><b>Font size adjustment (pt)</b><br>"
-                + "Shifts all application fonts by this many points.<br>"
-                + "Default = +2. Update applies ~1 second after adjusting.</html>");
+        spFontDelta.setToolTipText("<html><b>Font size adjustment (pt)</b><br>Default = +2.</html>");
         fontDebounceTimer = new javax.swing.Timer(1000, e -> {
             fontDelta = (Integer) spFontDelta.getValue();
             applyFonts(SwingUtilities.getWindowAncestor(spFontDelta));
@@ -144,7 +134,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         inner.add(card("Appearance", new Object[]{ "Font size adjustment (pt)", spFontDelta }));
         inner.add(Box.createVerticalStrut(4));
 
-        // -- Simulation timeline
+        // Simulation timeline
         int curYear = java.time.Year.now().getValue();
         spSimStartYear       = spinI(curYear, 2020, 2040, 1, "#");
         spWithdrawStartYear  = spinI(2027, 2025, 2040, 1, "#");
@@ -163,7 +153,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
 
-        // -- People
+        // People
         spManBirthYear    = spinI(1961, 1940, 2000, 1, "#");
         spManBirthMonth   = spinI(9,    1,    12,   1, "#");
         spWomanBirthYear  = spinI(1962, 1940, 2000, 1, "#");
@@ -196,7 +186,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
 
-        // -- Social Security
+        // Social Security
         spManPIA   = spinI(3788, 0, 10000, 1, "#,###");
         spWomanPIA = spinI(3897, 0, 10000, 1, "#,###");
         spSSCola   = spinD(2.3, 0.0, 10.0, 0.1, "0.0#");
@@ -213,7 +203,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
 
-        // -- Annuity
+        // Annuity
         spAnnuity           = spinI(22599, 0, 500000, 100, "#,###");
         spAnnuityStartYear  = spinI(2028, 2025, 2060, 1, "#");
         spAnnuityStartMonth = spinI(4, 1, 12, 1, "#");
@@ -224,7 +214,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
 
-        // -- Accounts
+        // Accounts
         spManTradIRA    = spinI(880000, 0, 10000000, 1000, "#,###");
         spManRothIRA    = spinI( 10000, 0, 10000000, 1000, "#,###");
         spManTrad401K   = spinI(     0, 0, 10000000, 1000, "#,###");
@@ -254,7 +244,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
 
-        // -- Market assumptions
+        // Market assumptions
         spNomReturn       = spinD(6.70, 0.0, 20.0, 0.01, "0.00#");
         spStdDev          = spinD(10.79, 0.0, 40.0, 0.01, "0.00#");
         spInflation       = spinD(3.79, 0.0, 15.0, 0.01, "0.00#");
@@ -267,7 +257,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
 
-        // -- Spending
+        // Spending
         spLivingExp    = spinI(105000, 0, 500000, 1000, "#,###");
         spMedical      = spinI( 16000, 0, 100000,  500, "#,###");
         spMedInflation = spinD(4.5, 0.0, 15.0, 0.1, "0.0#");
@@ -286,14 +276,11 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
 
-        // -- Historical stress scenario (identical to IL)
+        // Historical stress scenario
         cmbScenario = new JComboBox<>(HistoricalScenarios.SCENARIO_NAMES);
         cmbScenario.setToolTipText(HistoricalScenarios.getDescription(0));
-        cmbScenario.addActionListener(e -> {
-            int idx = cmbScenario.getSelectedIndex();
-            cmbScenario.setToolTipText(HistoricalScenarios.getDescription(idx));
-        });
-
+        cmbScenario.addActionListener(e ->
+                cmbScenario.setToolTipText(HistoricalScenarios.getDescription(cmbScenario.getSelectedIndex())));
         JPanel cardScen = new JPanel();
         cardScen.setLayout(new BoxLayout(cardScen, BoxLayout.Y_AXIS));
         cardScen.setBackground(Color.WHITE);
@@ -320,7 +307,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         JLabel scenNote = new JLabel(
                 "<html><i>Historical years replay actual S&P 500 returns + CPI.<br>"
                         + "After sequence ends, reverts to random distribution.<br>"
-                        + "Applies to Phase 1 scan, Phase 2, and Detail Window.</i></html>");
+                        + "Applies to entire scan and Detail Window.</i></html>");
         scenNote.setFont(new Font("SansSerif", Font.ITALIC, 11));
         scenNote.setForeground(new Color(90,70,10));
         scenNote.setBorder(BorderFactory.createEmptyBorder(4,0,0,0));
@@ -329,24 +316,40 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         inner.add(cardScen);
         inner.add(Box.createVerticalStrut(4));
 
-        // -- Optimizer parameters
-        spPhase1Paths    = spinI(200,   50, 2000,  50, "#,###");
-        spPhase1BinIters = spinI(15,     8,   25,   1, "#");
-        spPhase2Paths    = spinI(1000, 100, 5000, 100, "#,###");
-        spPhase2BinIters = spinI(22,    8,   30,   1, "#");
-        spPhase2FanPaths = spinI(500,  50, 2000,  50, "#,###");
-        spPhase2TopN     = spinI(20,    5,   60,   5, "#");
-        inner.add(card("Optimizer Parameters", new Object[]{
-                "Phase 1 - solve paths (fast scan)",      spPhase1Paths,
-                "Phase 1 - binary iterations",            spPhase1BinIters,
-                "Phase 2 - solve paths (full fidelity)",  spPhase2Paths,
-                "Phase 2 - binary iterations",            spPhase2BinIters,
-                "Phase 2 - fan chart paths",              spPhase2FanPaths,
-                "Phase 2 - top-N per tab to confirm",     spPhase2TopN,
+        // Simulation parameters
+        spSolvePaths = spinI(500,  50, 5000, 50, "#,###");
+        spBinIters   = spinI(22,    8,   30,  1, "#");
+        spFanPaths   = spinI(200,  20, 2000, 20, "#,###");
+        spSolvePaths.setToolTipText("<html><b>Solve paths</b><br>"
+                + "MC paths per binary-search iteration. Default 500.<br>"
+                + "Increase to 1000 for production-quality results.<br>"
+                + "Biggest driver of runtime.</html>");
+        spBinIters.setToolTipText("<html><b>Binary search iterations</b><br>"
+                + "Depth of withdrawal binary search. Default 22 (~$1 precision).</html>");
+        spFanPaths.setToolTipText("<html><b>Fan paths</b><br>"
+                + "Paths for actual PoS and median final balance. Default 200.<br>"
+                + "Increase to 400 for smoother results. Each fan path re-solves annually.</html>");
+
+        // Minimum income floor
+        spMinIncomeFloor = spinI(0, 0, 500000, 1000, "#,###");
+        spMinIncomeFloor.setToolTipText("<html><b>Minimum year-1 total income floor ($/yr)</b><br>"
+                + "SS combinations whose year-1 total income (portfolio draw<br>"
+                + "+ SS + annuity) falls below this amount are excluded from<br>"
+                + "the ranked results and shown as [below floor] in the table.<br><br>"
+                + "Set to your required minimum (e.g. 162000 for $162K/yr).<br>"
+                + "Set to 0 to disable (all combinations ranked).<br><br>"
+                + "This is the safety constraint: the optimizer only recommends<br>"
+                + "SS timings that actually cover your spending floor.</html>");
+
+        inner.add(card("Simulation Parameters", new Object[]{
+                "Solve paths (per binary iteration)", spSolvePaths,
+                "Binary search iterations",           spBinIters,
+                "Fan chart paths (for PoS + median)", spFanPaths,
+                "Min year-1 total income floor ($/yr, 0=off)", spMinIncomeFloor,
         }));
         inner.add(Box.createVerticalStrut(8));
 
-        // -- Buttons (ASCII labels only)
+        // Buttons
         btnRun = new JButton("Run Optimizer");
         btnRun.setFont(new Font("SansSerif", Font.BOLD, 16));
         btnRun.setBackground(new Color(24, 95, 165));
@@ -418,14 +421,13 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
     }
 
     // ==============================
-    // FONT HELPERS (identical to IL)
+    // FONT HELPERS
     // ==============================
     private void applyFonts(java.awt.Component root) {
         if (root == null) return;
         applyFontRecursive(root, fontDelta);
         if (root instanceof java.awt.Window w) { w.pack(); w.revalidate(); }
     }
-
     private void applyFontRecursive(java.awt.Component c, int newDelta) {
         Font f = c.getFont();
         if (f != null) {
@@ -442,42 +444,34 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
     }
 
     // ==============================
-    // OPTIMIZER ENTRY POINT
+    // OPTIMIZER -- single-phase full simulatePro
     // ==============================
     private void startOptimizer() {
-        SimInputs inp = readInputs();
-        lastBaseInputs = inp;
-        lastP2Paths    = iv(spPhase2Paths);
-        lastP2Fan      = iv(spPhase2FanPaths);
-        lastP2BinIters = iv(spPhase2BinIters);
+        SimInputs baseInp = readInputs();
+        int solvePaths = iv(spSolvePaths);
+        int binIters   = iv(spBinIters);
+        int fanPaths   = iv(spFanPaths);
+        int minFloor   = iv(spMinIncomeFloor);
+        int scenIdx    = cmbScenario != null ? cmbScenario.getSelectedIndex() : 0;
 
         btnRun.setEnabled(false);
         btnCancel.setEnabled(true);
         cancelRequested = false;
-        phase1Done.set(0); phase2Done.set(0);
-        currentPhase = 1;
-        runStartMs = phaseStartMs = System.currentTimeMillis();
+        scanDone.set(0);
+        runStartMs = System.currentTimeMillis();
         Arrays.fill(lastComboDurMs, 0); lastComboDurIdx = 0;
-        detailCache.clear();
-
+        resultCache.clear();
         tabSpend.reset(); tabLegacy.reset(); tabSurvival.reset();
 
-        List<SSCandidate> candidates = buildCandidateGrid(inp);
-        phase1Total = candidates.size();
-
-        int p1Paths    = iv(spPhase1Paths);
-        int p1BinIters = iv(spPhase1BinIters);
-        int p2Paths    = lastP2Paths;
-        int p2BinIters = lastP2BinIters;
-        int p2Fan      = lastP2Fan;
-        int topN       = iv(spPhase2TopN);
-        int scenIdx    = cmbScenario != null ? cmbScenario.getSelectedIndex() : 0;
+        List<SSCandidate> candidates = buildCandidateGrid(baseInp);
+        scanTotal = candidates.size();
 
         String scenLabel = scenIdx > 0
                 ? " [Stress: " + HistoricalScenarios.SCENARIO_NAMES[scenIdx].split(" \\(")[0] + "]" : "";
+        String floorLabel = minFloor > 0 ? "  |  Floor: " + CURRENCY.format(minFloor) + "/yr" : "";
         setStatus(String.format(
-                "Phase 1 starting - %,d combinations to scan (%d paths x %d iters per combo)%s...",
-                phase1Total, p1Paths, p1BinIters, scenLabel));
+                "Starting scan of %,d SS combinations (%d paths x %d iters x %d fan paths)%s%s...",
+                scanTotal, solvePaths, binIters, fanPaths, scenLabel, floorLabel));
 
         if (scheduler != null && !scheduler.isShutdown()) scheduler.shutdownNow();
         scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -485,99 +479,73 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         });
         scheduler.scheduleAtFixedRate(this::updateStatusLine, 500, 500, TimeUnit.MILLISECONDS);
 
-        SwingWorker<Void, Void> worker = new SwingWorker<>() {
-            @Override protected Void doInBackground() {
+        SwingWorker<List<CandidateResult>, Void> worker = new SwingWorker<>() {
+            @Override
+            protected List<CandidateResult> doInBackground() {
                 int threads = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
-
-                // Phase 1
-                List<CandidateResult> phase1Results = new CopyOnWriteArrayList<>();
-                ForkJoinPool pool1 = new ForkJoinPool(threads);
+                List<CandidateResult> results = new CopyOnWriteArrayList<>();
+                ForkJoinPool pool = new ForkJoinPool(threads);
                 try {
-                    pool1.submit(() -> candidates.parallelStream().forEach(cand -> {
+                    pool.submit(() -> candidates.parallelStream().forEach(cand -> {
                         if (cancelRequested) return;
                         long t0 = System.currentTimeMillis();
-                        SimInputs ci = inp.withSS(cand.bobStartYear, cand.bobStartMonth,
-                                cand.joStartYear, cand.joStartMonth, scenIdx);
-                        int yr1 = ILEngine.solveWithdrawalPro(ci.portfolio, ci.baseYear,
-                                ci.horizon, ci, 42L, p1Paths, p1BinIters, ci.goGoDuration);
-                        phase1Results.add(new CandidateResult(cand, yr1, 0, 0.0, false));
-                        phase1Done.incrementAndGet();
+                        SimInputs ci = baseInp.withSS(
+                                cand.bobStartYear, cand.bobStartMonth,
+                                cand.joStartYear,  cand.joStartMonth, scenIdx);
+                        // Full simulatePro -- identical engine to IL
+                        ILEngine.ProResults pr = ILEngine.simulatePro(ci, 42L,
+                                solvePaths, fanPaths, binIters);
+                        resultCache.put(cand.key(), pr);
+
+                        // Year-1 total income for floor check
+                        int yr1TotalIncome = pr.yr1TotalIncome;
+                        boolean belowFloor = (minFloor > 0 && yr1TotalIncome < minFloor);
+
+                        results.add(new CandidateResult(cand,
+                                pr.yr1Withdrawal, pr.medianFinalBalance,
+                                pr.actualPoS, yr1TotalIncome, belowFloor));
+                        scanDone.incrementAndGet();
                         recordDuration(System.currentTimeMillis() - t0);
                     })).get();
                 } catch (Exception ex) { ex.printStackTrace(); }
-                finally { pool1.shutdown(); }
-
-                if (cancelRequested) return null;
-
-                List<CandidateResult> bySpend1    = sortedBy(phase1Results, ScoringMode.MAX_SPENDING);
-                List<CandidateResult> byLegacy1   = sortedBy(phase1Results, ScoringMode.MAX_LEGACY);
-                List<CandidateResult> bySurvival1 = sortedBy(phase1Results, ScoringMode.MAX_SURVIVAL);
-
-                Set<String> seen = new LinkedHashSet<>();
-                List<SSCandidate> p2Cands = new ArrayList<>();
-                for (List<CandidateResult> list : List.of(bySpend1, byLegacy1, bySurvival1))
-                    list.stream().limit(topN).forEach(cr -> { if (seen.add(cr.cand.key())) p2Cands.add(cr.cand); });
-
-                // Phase 2
-                currentPhase = 2;
-                phaseStartMs = System.currentTimeMillis();
-                Arrays.fill(lastComboDurMs, 0); lastComboDurIdx = 0;
-                phase2Total = p2Cands.size();
-                phase2Done.set(0);
-
-                List<CandidateResult> phase2Results = new CopyOnWriteArrayList<>();
-                ForkJoinPool pool2 = new ForkJoinPool(threads);
-                try {
-                    pool2.submit(() -> p2Cands.parallelStream().forEach(cand -> {
-                        if (cancelRequested) return;
-                        long t0 = System.currentTimeMillis();
-                        SimInputs ci = inp.withSS(cand.bobStartYear, cand.bobStartMonth,
-                                cand.joStartYear, cand.joStartMonth, scenIdx);
-                        ILEngine.ProResults fr = ILEngine.simulatePro(ci, 42L, p2Paths, p2Fan, p2BinIters);
-                        detailCache.put(cand.key(), fr);
-                        phase2Results.add(new CandidateResult(cand,
-                                fr.yr1Withdrawal, fr.medianFinalBalance, fr.actualPoS, true));
-                        phase2Done.incrementAndGet();
-                        recordDuration(System.currentTimeMillis() - t0);
-                    })).get();
-                } catch (Exception ex) { ex.printStackTrace(); }
-                finally { pool2.shutdown(); }
-
-                if (cancelRequested) return null;
-
-                Map<String, CandidateResult> p2Map = new HashMap<>();
-                for (CandidateResult cr : phase2Results) p2Map.put(cr.cand.key(), cr);
-                List<CandidateResult> merged = new ArrayList<>();
-                for (CandidateResult cr : phase1Results) {
-                    CandidateResult confirmed = p2Map.get(cr.cand.key());
-                    merged.add(confirmed != null ? confirmed : cr);
-                }
-
-                List<CandidateResult> finalSpend    = sortedBy(merged, ScoringMode.MAX_SPENDING);
-                List<CandidateResult> finalLegacy   = sortedBy(merged, ScoringMode.MAX_LEGACY);
-                List<CandidateResult> finalSurvival = sortedBy(merged, ScoringMode.MAX_SURVIVAL);
-                Map<String, int[]> crossRanks = buildCrossRanks(finalSpend, finalLegacy, finalSurvival);
-
-                SwingUtilities.invokeLater(() -> {
-                    tabSpend.populate(finalSpend,    inp, crossRanks, ScoringMode.MAX_SPENDING,  topN);
-                    tabLegacy.populate(finalLegacy,  inp, crossRanks, ScoringMode.MAX_LEGACY,   topN);
-                    tabSurvival.populate(finalSurvival, inp, crossRanks, ScoringMode.MAX_SURVIVAL, topN);
-                });
-                return null;
+                finally { pool.shutdown(); }
+                return new ArrayList<>(results);
             }
 
-            @Override protected void done() {
+            @Override
+            protected void done() {
                 if (scheduler != null) scheduler.shutdownNow();
-                currentPhase = 0;
                 boolean cancelled = cancelRequested;
                 long totalMs = System.currentTimeMillis() - runStartMs;
+                try {
+                    if (!cancelled) {
+                        List<CandidateResult> all = get();
+                        List<CandidateResult> finalSpend    = sortedBy(all, ScoringMode.MAX_SPENDING);
+                        List<CandidateResult> finalLegacy   = sortedBy(all, ScoringMode.MAX_LEGACY);
+                        List<CandidateResult> finalSurvival = sortedBy(all, ScoringMode.MAX_SURVIVAL);
+                        Map<String, int[]> crossRanks = buildCrossRanks(finalSpend, finalLegacy, finalSurvival);
+                        long belowFloorCount = all.stream().filter(r -> r.belowFloor).count();
+
+                        SwingUtilities.invokeLater(() -> {
+                            tabSpend.populate(finalSpend,    baseInp, crossRanks, ScoringMode.MAX_SPENDING,  minFloor);
+                            tabLegacy.populate(finalLegacy,  baseInp, crossRanks, ScoringMode.MAX_LEGACY,   minFloor);
+                            tabSurvival.populate(finalSurvival, baseInp, crossRanks, ScoringMode.MAX_SURVIVAL, minFloor);
+                        });
+
+                        String floorMsg = minFloor > 0
+                                ? String.format("  |  %,d below income floor", belowFloorCount) : "";
+                        setStatus(String.format(
+                                "Complete - %,d combinations evaluated in %s%s  |  Click any row to open IL year-by-year table",
+                                scanTotal, formatDuration(totalMs), floorMsg));
+                    } else {
+                        setStatus("Cancelled by user.");
+                    }
+                } catch (Exception ex) {
+                    setStatus("Error: " + ex.getMessage());
+                }
                 SwingUtilities.invokeLater(() -> {
                     btnRun.setEnabled(true);
                     btnCancel.setEnabled(false);
-                    setStatus(cancelled
-                            ? "Cancelled by user."
-                            : String.format("Complete - %,d combinations scanned, %,d confirmed at full fidelity, total time: %s",
-                            phase1Total, phase2Total, formatDuration(totalMs)));
                 });
             }
         };
@@ -592,20 +560,16 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
     }
 
     private void updateStatusLine() {
-        int phase = currentPhase;
-        if (phase == 0) return;
-        long elapsedMs = System.currentTimeMillis() - phaseStartMs;
-        int done  = phase == 1 ? phase1Done.get() : phase2Done.get();
-        int total = phase == 1 ? phase1Total       : phase2Total;
-        double pct = total > 0 ? done * 100.0 / total : 0;
+        int done  = scanDone.get();
+        int total = scanTotal;
+        if (total == 0) return;
+        long elapsedMs = System.currentTimeMillis() - runStartMs;
+        double pct = done * 100.0 / total;
         long etaMs = estimateEta(done, total, elapsedMs);
         String eta = etaMs >= 0 ? "~" + formatDuration(etaMs) + " remaining" : "estimating...";
         String s = String.format(
-                "Phase %d of 2 - %s   %,d / %,d  (%.1f%%)   |   %s   |   %s elapsed",
-                phase,
-                phase == 1 ? "Scanning combinations..." : "Full fidelity confirmation...",
-                done, total, pct, eta,
-                formatDuration(System.currentTimeMillis() - runStartMs));
+                "Scanning...   %,d / %,d  (%.1f%%)   |   %s   |   %s elapsed",
+                done, total, pct, eta, formatDuration(elapsedMs));
         SwingUtilities.invokeLater(() -> setStatus(s));
     }
 
@@ -660,23 +624,28 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
     }
 
     // ==============================
-    // SORTING & CROSS-RANK HELPERS
+    // SORTING & CROSS-RANK
     // ==============================
     private List<CandidateResult> sortedBy(List<CandidateResult> list, ScoringMode mode) {
         List<CandidateResult> sorted = new ArrayList<>(list);
-        sorted.sort((a, b) -> switch (mode) {
-            case MAX_SPENDING -> {
-                int c = Integer.compare(b.yr1Withdrawal, a.yr1Withdrawal);
-                yield c != 0 ? c : Integer.compare(b.medianFinalBalance, a.medianFinalBalance);
-            }
-            case MAX_LEGACY -> {
-                int c = Integer.compare(b.medianFinalBalance, a.medianFinalBalance);
-                yield c != 0 ? c : Integer.compare(b.yr1Withdrawal, a.yr1Withdrawal);
-            }
-            case MAX_SURVIVAL -> {
-                int c = Double.compare(b.actualPoS, a.actualPoS);
-                yield c != 0 ? c : Integer.compare(b.yr1Withdrawal, a.yr1Withdrawal);
-            }
+        sorted.sort((a, b) -> {
+            // Below-floor rows always sort to the bottom
+            if (a.belowFloor && !b.belowFloor) return 1;
+            if (!a.belowFloor && b.belowFloor) return -1;
+            return switch (mode) {
+                case MAX_SPENDING -> {
+                    int c = Integer.compare(b.yr1Withdrawal, a.yr1Withdrawal);
+                    yield c != 0 ? c : Integer.compare(b.medianFinalBalance, a.medianFinalBalance);
+                }
+                case MAX_LEGACY -> {
+                    int c = Integer.compare(b.medianFinalBalance, a.medianFinalBalance);
+                    yield c != 0 ? c : Integer.compare(b.yr1Withdrawal, a.yr1Withdrawal);
+                }
+                case MAX_SURVIVAL -> {
+                    int c = Double.compare(b.actualPoS, a.actualPoS);
+                    yield c != 0 ? c : Integer.compare(b.yr1Withdrawal, a.yr1Withdrawal);
+                }
+            };
         });
         return sorted;
     }
@@ -685,42 +654,27 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
                                                List<CandidateResult> byLegacy,
                                                List<CandidateResult> bySurvival) {
         Map<String, int[]> map = new HashMap<>();
-        for (int i = 0; i < bySpend.size();    i++) map.computeIfAbsent(bySpend.get(i).cand.key(),    k -> new int[3])[0] = i+1;
-        for (int i = 0; i < byLegacy.size();   i++) map.computeIfAbsent(byLegacy.get(i).cand.key(),   k -> new int[3])[1] = i+1;
-        for (int i = 0; i < bySurvival.size(); i++) map.computeIfAbsent(bySurvival.get(i).cand.key(), k -> new int[3])[2] = i+1;
+        for (int i=0; i<bySpend.size();    i++) map.computeIfAbsent(bySpend.get(i).cand.key(),    k->new int[3])[0]=i+1;
+        for (int i=0; i<byLegacy.size();   i++) map.computeIfAbsent(byLegacy.get(i).cand.key(),   k->new int[3])[1]=i+1;
+        for (int i=0; i<bySurvival.size(); i++) map.computeIfAbsent(bySurvival.get(i).cand.key(), k->new int[3])[2]=i+1;
         return map;
     }
 
     // ==============================
     // DETAIL WINDOW
     // ==============================
-    void openDetailWindow(CandidateResult cr, SimInputs baseInp, int scenIdx) {
-        String key = cr.cand.key();
-        String title = String.format("IL Detail - Bob %02d/%d  Jo %02d/%d",
+    void openDetailWindow(CandidateResult cr, SimInputs baseInp) {
+        ILEngine.ProResults pr = resultCache.get(cr.cand.key());
+        String title = String.format("IL Detail - Bob %02d/%d (age %s)  |  Jo %02d/%d (age %s)%s",
                 cr.cand.bobStartMonth, cr.cand.bobStartYear,
-                cr.cand.joStartMonth,  cr.cand.joStartYear);
+                ageStr((cr.cand.bobStartYear-baseInp.manBirthYear)*12+(cr.cand.bobStartMonth-baseInp.manBirthMonth)),
+                cr.cand.joStartMonth,  cr.cand.joStartYear,
+                ageStr((cr.cand.joStartYear-baseInp.womanBirthYear)*12+(cr.cand.joStartMonth-baseInp.womanBirthMonth)),
+                cr.belowFloor ? "  [BELOW INCOME FLOOR]" : "");
         DetailWindow win = new DetailWindow(title);
+        if (pr != null) win.populate(pr);
+        else            win.setError("Result not found in cache - this should not happen.");
         win.setVisible(true);
-
-        ILEngine.ProResults cached = detailCache.get(key);
-        if (cached != null) { win.populate(cached); return; }
-
-        SimInputs ci = baseInp.withSS(cr.cand.bobStartYear, cr.cand.bobStartMonth,
-                cr.cand.joStartYear, cr.cand.joStartMonth, scenIdx);
-        int p2p = lastP2Paths, p2f = lastP2Fan, p2b = lastP2BinIters;
-        SwingWorker<ILEngine.ProResults, Void> w = new SwingWorker<>() {
-            @Override protected ILEngine.ProResults doInBackground() {
-                return ILEngine.simulatePro(ci, 42L, p2p, p2f, p2b);
-            }
-            @Override protected void done() {
-                try {
-                    ILEngine.ProResults res = get();
-                    detailCache.put(key, res);
-                    win.populate(res);
-                } catch (Exception ex) { win.setError(ex.getMessage()); }
-            }
-        };
-        w.execute();
     }
 
     // ==============================
@@ -731,27 +685,27 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
     // ==============================
     // RESULT TAB
     // ==============================
-    static final int COL_PHASE2 = 12;
-    static final String CONFIRMED_MARKER = "Y";
-
     static final String[] COL_NAMES = {
             "Rank", "Bob SS Start", "Bob Age", "Bob Monthly",
             "Jo SS Start", "Jo Age", "Jo Monthly",
-            "Combined SS/yr", "Year-1 Withdrawal", "Init Rate %",
-            "Median Final Bal", "Actual PoS %", "Full Fidelity",
+            "Combined SS/yr", "Year-1 Port Wd", "Init Rate %",
+            "Yr-1 Total Income", "Median Final Bal", "Actual PoS %",
+            "Floor OK?",
             "Rank (Spend)", "Rank (Legacy)", "Rank (Survival)"
     };
+    // column indices
+    static final int COL_FLOOR  = 13;
+    static final int COL_RANK   = 0;
 
     class ResultTab extends JPanel {
         private final String      modeLabel, primaryMetric, question;
         final ScoringMode         mode;
         private JLabel            lblWinnerTitle, lblWinnerDetail;
-        private JLabel            lblWinnerJust, lblCrossTab, lblPhase2Note;
+        private JLabel            lblWinnerJust, lblCrossTab, lblFloorNote;
         private DefaultTableModel tblModel;
         JTable                    tbl;
         private List<CandidateResult> displayList = new ArrayList<>();
         private SimInputs             currentInp  = null;
-        private int                   currentScenIdx = 0;
 
         ResultTab(String label, String primary, String question, ScoringMode mode) {
             super(new BorderLayout(0, 6));
@@ -770,20 +724,18 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             p.setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createLineBorder(new Color(160,200,240),1),
                     BorderFactory.createEmptyBorder(10,14,10,14)));
-
             addLbl(p, modeLabel.toUpperCase(), Font.BOLD, 11, new Color(80,100,140));
             addLbl(p, question, Font.ITALIC, 13, new Color(70,70,100));
             addLbl(p, "Sorted by: " + primaryMetric, Font.PLAIN, 12, new Color(100,100,130));
             p.add(Box.createVerticalStrut(6));
-
             lblWinnerTitle  = addLbl(p, "-- awaiting results --", Font.BOLD,  18, new Color(20,70,140));
             lblWinnerDetail = addLbl(p, " ", Font.PLAIN, 13, new Color(30,30,30));
             lblWinnerJust   = addLbl(p, " ", Font.PLAIN, 12, new Color(50,50,80));
             p.add(Box.createVerticalStrut(4));
             lblCrossTab     = addLbl(p, " ", Font.PLAIN, 12, new Color(80,80,80));
-            lblPhase2Note   = addLbl(p, " ", Font.ITALIC, 11, new Color(100,100,100));
+            lblFloorNote    = addLbl(p, " ", Font.ITALIC, 11, new Color(100,100,100));
             p.add(Box.createVerticalStrut(4));
-            addLbl(p, "[Hint] Click any Full Fidelity confirmed row (Y) to open the full IL year-by-year table.",
+            addLbl(p, "[Hint] Click any row to open the full IL year-by-year table in a new window.",
                     Font.ITALIC, 11, new Color(0,80,150));
             return p;
         }
@@ -801,10 +753,10 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             tblModel = new DefaultTableModel(COL_NAMES, 0) {
                 @Override public boolean isCellEditable(int r, int c) { return false; }
                 @Override public Class<?> getColumnClass(int c) {
-                    return (c == 0 || c == 13 || c == 14 || c == 15) ? Integer.class : Object.class;
+                    // Rank columns as Integer for numeric sort
+                    return (c==0||c==14||c==15||c==16) ? Integer.class : Object.class;
                 }
             };
-
             tbl = new JTable(tblModel);
             tbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
             tbl.setRowHeight(24);
@@ -814,35 +766,36 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             tbl.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
             tbl.setSelectionBackground(new Color(190, 220, 255));
 
-            // Explicit sorter defaulting to ascending on rank (col 0) so rank 1 is always at top
+            // Default sort: ascending on rank column
             TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(tblModel);
             tbl.setRowSorter(sorter);
             sorter.setSortKeys(List.of(new RowSorter.SortKey(0, SortOrder.ASCENDING)));
             sorter.sort();
 
-            int[] widths = {40, 90, 60, 90, 90, 60, 90, 100, 120, 75, 110, 75, 45, 85, 85, 90};
-            for (int i = 0; i < widths.length && i < tbl.getColumnCount(); i++)
+            int[] widths = {40, 90, 60, 90, 90, 60, 90, 100, 110, 70, 110, 110, 75, 65, 85, 85, 90};
+            for (int i=0; i<widths.length && i<tbl.getColumnCount(); i++)
                 tbl.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
 
+            // Row coloring
             DefaultTableCellRenderer colorRenderer = new DefaultTableCellRenderer() {
-                final Color GOLD   = new Color(255, 245, 150);
-                final Color SILVER = new Color(232, 232, 232);
-                final Color BRONZE = new Color(245, 225, 200);
-                final Color P2COL  = new Color(240, 252, 240);
+                final Color GOLD       = new Color(255, 245, 150);
+                final Color SILVER     = new Color(232, 232, 232);
+                final Color BRONZE     = new Color(245, 225, 200);
+                final Color FLOOR_FAIL = new Color(255, 235, 235);
                 @Override public Component getTableCellRendererComponent(
                         JTable t, Object v, boolean sel, boolean foc, int row, int col) {
                     Component c = super.getTableCellRendererComponent(t,v,sel,foc,row,col);
                     if (!sel) {
                         int modelRow = tbl.convertRowIndexToModel(row);
-                        Object rankObj = tblModel.getValueAt(modelRow, 0);
+                        Object rankObj = tblModel.getValueAt(modelRow, COL_RANK);
                         int rank = rankObj instanceof Integer ? (Integer) rankObj : 9999;
-                        Object p2Obj = tblModel.getValueAt(modelRow, COL_PHASE2);
-                        boolean p2 = CONFIRMED_MARKER.equals(p2Obj != null ? p2Obj.toString() : "");
-                        if      (rank == 1) c.setBackground(GOLD);
-                        else if (rank == 2) c.setBackground(SILVER);
-                        else if (rank == 3) c.setBackground(BRONZE);
-                        else if (p2)        c.setBackground(P2COL);
-                        else                c.setBackground(row%2==0 ? Color.WHITE : new Color(248,248,245));
+                        Object floorObj = tblModel.getValueAt(modelRow, COL_FLOOR);
+                        boolean belowFloor = "[below floor]".equals(floorObj != null ? floorObj.toString() : "");
+                        if      (belowFloor) c.setBackground(FLOOR_FAIL);
+                        else if (rank == 1)  c.setBackground(GOLD);
+                        else if (rank == 2)  c.setBackground(SILVER);
+                        else if (rank == 3)  c.setBackground(BRONZE);
+                        else                 c.setBackground(row%2==0 ? Color.WHITE : new Color(248,248,245));
                         c.setForeground(Color.BLACK);
                     }
                     ((JLabel)c).setHorizontalAlignment((col==1||col==4) ? LEFT : RIGHT);
@@ -853,46 +806,41 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
 
             // Integer renderer for rank columns
             DefaultTableCellRenderer intRenderer = new DefaultTableCellRenderer() {
-                final Color GOLD   = new Color(255, 245, 150);
-                final Color SILVER = new Color(232, 232, 232);
-                final Color BRONZE = new Color(245, 225, 200);
-                final Color P2COL  = new Color(240, 252, 240);
+                final Color GOLD       = new Color(255, 245, 150);
+                final Color SILVER     = new Color(232, 232, 232);
+                final Color BRONZE     = new Color(245, 225, 200);
+                final Color FLOOR_FAIL = new Color(255, 235, 235);
                 @Override public Component getTableCellRendererComponent(
                         JTable t, Object v, boolean sel, boolean foc, int row, int col) {
                     Component c = super.getTableCellRendererComponent(t,v,sel,foc,row,col);
                     ((JLabel)c).setHorizontalAlignment(RIGHT);
                     if (!sel) {
                         int modelRow = tbl.convertRowIndexToModel(row);
-                        Object rankObj = tblModel.getValueAt(modelRow, 0);
+                        Object rankObj = tblModel.getValueAt(modelRow, COL_RANK);
                         int rank = rankObj instanceof Integer ? (Integer) rankObj : 9999;
-                        if      (rank == 1) c.setBackground(GOLD);
-                        else if (rank == 2) c.setBackground(SILVER);
-                        else if (rank == 3) c.setBackground(BRONZE);
-                        else {
-                            Object p2Obj = tblModel.getValueAt(modelRow, COL_PHASE2);
-                            boolean p2 = CONFIRMED_MARKER.equals(p2Obj != null ? p2Obj.toString() : "");
-                            c.setBackground(p2 ? P2COL : (row%2==0?Color.WHITE:new Color(248,248,245)));
-                        }
+                        Object floorObj = tblModel.getValueAt(modelRow, COL_FLOOR);
+                        boolean belowFloor = "[below floor]".equals(floorObj != null ? floorObj.toString() : "");
+                        if      (belowFloor) c.setBackground(FLOOR_FAIL);
+                        else if (rank == 1)  c.setBackground(GOLD);
+                        else if (rank == 2)  c.setBackground(SILVER);
+                        else if (rank == 3)  c.setBackground(BRONZE);
+                        else                 c.setBackground(row%2==0?Color.WHITE:new Color(248,248,245));
                         c.setForeground(Color.BLACK);
                     }
                     return c;
                 }
             };
-            tbl.getColumnModel().getColumn(0).setCellRenderer(intRenderer);
-            tbl.getColumnModel().getColumn(13).setCellRenderer(intRenderer);
-            tbl.getColumnModel().getColumn(14).setCellRenderer(intRenderer);
-            tbl.getColumnModel().getColumn(15).setCellRenderer(intRenderer);
+            for (int col : new int[]{0,14,15,16}) tbl.getColumnModel().getColumn(col).setCellRenderer(intRenderer);
 
+            // Click any row -> DetailWindow
             tbl.addMouseListener(new MouseAdapter() {
                 @Override public void mouseClicked(MouseEvent e) {
                     int viewRow = tbl.rowAtPoint(e.getPoint());
                     if (viewRow < 0) return;
                     int modelRow = tbl.convertRowIndexToModel(viewRow);
-                    Object p2Obj = tblModel.getValueAt(modelRow, COL_PHASE2);
-                    if (!CONFIRMED_MARKER.equals(p2Obj != null ? p2Obj.toString() : "")) return;
                     if (modelRow >= displayList.size()) return;
                     CandidateResult cr = displayList.get(modelRow);
-                    if (currentInp != null) openDetailWindow(cr, currentInp, currentScenIdx);
+                    if (currentInp != null) openDetailWindow(cr, currentInp);
                 }
             });
 
@@ -909,20 +857,20 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
                 lblWinnerDetail.setText(" ");
                 lblWinnerJust.setText(" ");
                 lblCrossTab.setText(" ");
-                lblPhase2Note.setText(" ");
+                lblFloorNote.setText(" ");
             });
         }
 
         void populate(List<CandidateResult> sorted, SimInputs baseInp,
-                      Map<String, int[]> crossRanks, ScoringMode scoreMode, int topN) {
+                      Map<String, int[]> crossRanks, ScoringMode scoreMode, int minFloor) {
             this.currentInp = baseInp;
-            this.currentScenIdx = baseInp.scenarioIndex;
             displayList = new ArrayList<>(sorted);
 
             tblModel.setRowCount(0);
-            for (int rank = 0; rank < sorted.size(); rank++) {
-                CandidateResult cr = sorted.get(rank);
+            int rankAboveFloor = 0;
+            for (CandidateResult cr : sorted) {
                 SSCandidate c = cr.cand;
+                int rank = cr.belowFloor ? 9999 : ++rankAboveFloor;
                 SimInputs ci = baseInp.withSS(c.bobStartYear, c.bobStartMonth,
                         c.joStartYear, c.joStartMonth, baseInp.scenarioIndex);
                 double bobMo = ILEngine.calcSSMonthlyBenefit(ci.manPIA, ci.manBirthYear,
@@ -935,7 +883,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
                 int[] ranks = crossRanks.getOrDefault(c.key(), new int[3]);
 
                 tblModel.addRow(new Object[]{
-                        rank+1,
+                        rank,
                         String.format("%02d/%d", c.bobStartMonth, c.bobStartYear),
                         ageStr(bobAgeM),
                         CURRENCY.format((long)bobMo),
@@ -945,67 +893,79 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
                         CURRENCY.format((long)((bobMo+joMo)*12)),
                         CURRENCY.format(cr.yr1Withdrawal),
                         String.format("%.2f%%", rate),
-                        cr.confirmed ? CURRENCY.format(cr.medianFinalBalance) : "--",
-                        cr.confirmed ? String.format("%.1f%%", cr.actualPoS*100) : "--",
-                        cr.confirmed ? CONFIRMED_MARKER : "",
+                        CURRENCY.format(cr.yr1TotalIncome),
+                        CURRENCY.format(cr.medianFinalBalance),
+                        String.format("%.1f%%", cr.actualPoS*100),
+                        cr.belowFloor ? "[below floor]" : "OK",
                         ranks[0]>0 ? ranks[0] : null,
                         ranks[1]>0 ? ranks[1] : null,
                         ranks[2]>0 ? ranks[2] : null,
                 });
             }
 
-            if (!sorted.isEmpty()) {
-                CandidateResult w  = sorted.get(0);
-                SSCandidate wc = w.cand;
+            // Winner panel -- first non-floor row
+            CandidateResult winner = sorted.stream().filter(r -> !r.belowFloor).findFirst().orElse(null);
+            if (winner == null && !sorted.isEmpty()) winner = sorted.get(0); // all below floor
+            if (winner != null) {
+                SSCandidate wc = winner.cand;
                 SimInputs wi = baseInp.withSS(wc.bobStartYear, wc.bobStartMonth,
                         wc.joStartYear, wc.joStartMonth, baseInp.scenarioIndex);
                 double wBob = ILEngine.calcSSMonthlyBenefit(wi.manPIA, wi.manBirthYear,
                         wi.manBirthMonth, wc.bobStartYear, wc.bobStartMonth);
                 double wJo  = ILEngine.calcSSMonthlyBenefit(wi.womanPIA, wi.womanBirthYear,
                         wi.womanBirthMonth, wc.joStartYear, wc.joStartMonth);
-                int ba = (wc.bobStartYear-wi.manBirthYear)*12+(wc.bobStartMonth-wi.manBirthMonth);
-                int ja = (wc.joStartYear-wi.womanBirthYear)*12+(wc.joStartMonth-wi.womanBirthMonth);
+                int ba=(wc.bobStartYear-wi.manBirthYear)*12+(wc.bobStartMonth-wi.manBirthMonth);
+                int ja=(wc.joStartYear-wi.womanBirthYear)*12+(wc.joStartMonth-wi.womanBirthMonth);
 
                 lblWinnerTitle.setText(String.format(
-                        "Winner: Bob starts %02d/%d (age %s)  |  Jo starts %02d/%d (age %s)",
+                        "Winner: Bob starts %02d/%d (age %s)  |  Jo starts %02d/%d (age %s)%s",
                         wc.bobStartMonth, wc.bobStartYear, ageStr(ba),
-                        wc.joStartMonth,  wc.joStartYear,  ageStr(ja)));
+                        wc.joStartMonth,  wc.joStartYear,  ageStr(ja),
+                        winner.belowFloor ? "  [WARNING: below income floor]" : ""));
                 lblWinnerDetail.setText(String.format(
-                        "Bob: %s/mo  |  Jo: %s/mo  |  Combined: %s/yr  |  Year-1 Withdrawal: %s  |  Init Rate: %.2f%%",
+                        "Bob: %s/mo  |  Jo: %s/mo  |  Combined SS: %s/yr"
+                                + "  |  Port Wd: %s  |  Total Income: %s  |  Init Rate: %.2f%%",
                         CURRENCY.format((long)wBob), CURRENCY.format((long)wJo),
                         CURRENCY.format((long)((wBob+wJo)*12)),
-                        CURRENCY.format(w.yr1Withdrawal),
-                        wi.portfolio>0 ? w.yr1Withdrawal/(double)wi.portfolio*100.0 : 0));
-                lblWinnerJust.setText(buildJustification(w, sorted, scoreMode, wi));
+                        CURRENCY.format(winner.yr1Withdrawal),
+                        CURRENCY.format(winner.yr1TotalIncome),
+                        wi.portfolio>0 ? winner.yr1Withdrawal/(double)wi.portfolio*100.0 : 0));
+                lblWinnerJust.setText(buildJustification(winner, sorted, scoreMode, wi));
                 int[] ranks = crossRanks.getOrDefault(wc.key(), new int[3]);
                 lblCrossTab.setText(String.format(
                         "Cross-tab ranks:  #%s on Max Spending  |  #%s on Max Legacy  |  #%s on Max Survival",
                         ranks[0]>0?ranks[0]:"?", ranks[1]>0?ranks[1]:"?", ranks[2]>0?ranks[2]:"?"));
-                lblPhase2Note.setText(w.confirmed
-                        ? "Winner confirmed at full fidelity - click rank 1 row to view full IL year-by-year table"
-                        : "Winner from Phase 1 scan only - not yet full-fidelity confirmed");
+                if (minFloor > 0) {
+                    long bf = sorted.stream().filter(r -> r.belowFloor).count();
+                    lblFloorNote.setText(String.format(
+                            "Income floor: %s/yr  |  %,d of %,d combinations excluded (shown in red at bottom)",
+                            CURRENCY.format(minFloor), bf, sorted.size()));
+                } else {
+                    lblFloorNote.setText("No income floor set (all combinations ranked).");
+                }
             }
         }
 
         private String buildJustification(CandidateResult w, List<CandidateResult> sorted,
                                           ScoringMode mode, SimInputs wi) {
-            if (sorted.size() < 2) return "Only one combination evaluated.";
-            CandidateResult second = sorted.get(1);
+            List<CandidateResult> eligible = sorted.stream().filter(r -> !r.belowFloor).toList();
+            if (eligible.size() < 2) return eligible.isEmpty()
+                    ? "All combinations fall below the income floor." : "Only one combination above floor.";
+            CandidateResult second = eligible.get(1);
             return switch (mode) {
                 case MAX_SPENDING -> String.format(
-                        "Sustains %s/yr at %.0f%% PoS target - %s/yr more than the next-best option.",
+                        "Sustains %s/yr portfolio withdrawal at %.0f%% PoS  |  Total income: %s/yr  |  %s/yr more than next-best.",
                         CURRENCY.format(w.yr1Withdrawal), wi.targetPoS*100,
+                        CURRENCY.format(w.yr1TotalIncome),
                         CURRENCY.format(Math.abs(w.yr1Withdrawal-second.yr1Withdrawal)));
                 case MAX_LEGACY -> String.format(
-                        "Median portfolio at end of %d-year horizon: %s - %s more than next-best.",
-                        wi.horizon,
-                        w.confirmed ? CURRENCY.format(w.medianFinalBalance) : "pending Phase 2",
-                        w.confirmed&&second.confirmed
-                                ? CURRENCY.format(Math.abs(w.medianFinalBalance-second.medianFinalBalance)) : "--");
+                        "Median portfolio at end of %d-year horizon: %s  |  %s more than next-best.",
+                        wi.horizon, CURRENCY.format(w.medianFinalBalance),
+                        CURRENCY.format(Math.abs(w.medianFinalBalance-second.medianFinalBalance)));
                 case MAX_SURVIVAL -> String.format(
-                        "Actual PoS: %.1f%% - %.1f ppt above next-best. Guaranteed floor income reduces sequence-of-returns risk.",
-                        w.confirmed ? w.actualPoS*100 : 0,
-                        w.confirmed&&second.confirmed ? (w.actualPoS-second.actualPoS)*100 : 0);
+                        "Actual PoS: %.1f%%  |  %.1f ppt above next-best (%.1f%%)."
+                                + " Guaranteed floor income reduces sequence-of-returns risk.",
+                        w.actualPoS*100, (w.actualPoS-second.actualPoS)*100, second.actualPoS*100);
             };
         }
     }
@@ -1036,7 +996,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             setLayout(new BorderLayout(0, 4));
             getContentPane().setBackground(new Color(245, 245, 242));
 
-            lblTitle = new JLabel("  Computing - please wait...");
+            lblTitle = new JLabel("  Computing...");
             lblTitle.setFont(new Font("SansSerif", Font.ITALIC, 13));
             lblTitle.setForeground(new Color(80,80,80));
             lblTitle.setBorder(BorderFactory.createEmptyBorder(6,10,4,10));
@@ -1080,20 +1040,20 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
                     if (!sel && lastRes!=null && row<lastRes.medianRows.size()) {
                         ILEngine.EnhRow er = lastRes.medianRows.get(row);
                         boolean goGo = er.goGoActive;
-                        c.setBackground(goGo ? GOGO_BG : (row%2==0?Color.WHITE:new Color(248,248,245)));
+                        c.setBackground(goGo?GOGO_BG:(row%2==0?Color.WHITE:new Color(248,248,245)));
                         c.setForeground(Color.BLACK);
-                        String s = v==null ? "" : v.toString();
-                        if ((col==3||col==4)&&goGo) { c.setBackground(GOGO_WD); c.setForeground(new Color(0,90,50)); }
-                        else if (col==6) {
+                        String s = v==null?"":v.toString();
+                        if ((col==3||col==4)&&goGo){ c.setBackground(GOGO_WD); c.setForeground(new Color(0,90,50)); }
+                        else if (col==6){
                             if ("[^] raise alert".equals(er.alert)) c.setForeground(new Color(59,109,17));
                             else if ("[v] cut alert".equals(er.alert)) c.setForeground(new Color(163,45,45));
-                        } else if (col==20||col==21) {
-                            if (er.rmdOverage>0) { c.setBackground(ORANGE_BG); c.setForeground(ORANGE_FG); }
-                        } else if ((col==18||col==19)&&er.rmdOverage>0) {
+                        } else if (col==20||col==21){
+                            if (er.rmdOverage>0){ c.setBackground(ORANGE_BG); c.setForeground(ORANGE_FG); }
+                        } else if ((col==18||col==19)&&er.rmdOverage>0){
                             c.setBackground(AMBER_BG); c.setForeground(AMBER_FG);
-                        } else if (col==16) {
+                        } else if (col==16){
                             c.setForeground(s.startsWith("-")?new Color(180,30,30):new Color(59,109,17));
-                        } else if (col==22) {
+                        } else if (col==22){
                             c.setForeground(s.startsWith("-")?new Color(180,30,30):new Color(59,109,17));
                         }
                     }
@@ -1103,58 +1063,56 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             });
 
             add(new JScrollPane(table), BorderLayout.CENTER);
-            setSize(1800, 700);
+            setSize(1850, 700);
             setLocationRelativeTo(null);
         }
 
         void populate(ILEngine.ProResults res) {
             this.lastRes = res;
             SimInputs inp = res.inp;
-            NumberFormat cf = NumberFormat.getCurrencyInstance(Locale.US);
-            cf.setMaximumFractionDigits(0);
             String scenLabel = inp.scenarioIndex > 0
-                    ? "  [Stress: " + HistoricalScenarios.SCENARIO_NAMES[inp.scenarioIndex].split(" \\(")[0] + "]" : "";
+                    ? "  [Stress: " + HistoricalScenarios.SCENARIO_NAMES[inp.scenarioIndex].split(" \\(")[0]+"]" : "";
             lblTitle.setText(String.format(
                     "  Bob SS: %02d/%d ($%,.0f/mo)  |  Jo SS: %02d/%d ($%,.0f/mo)"
-                            + "  |  Year-1 Wd: %s  |  Actual PoS: %.1f%%  |  Median Final: %s%s",
+                            + "  |  Port Wd: %s  |  Total Income: %s  |  PoS: %.1f%%  |  Median Final: %s%s",
                     inp.manSSStartMonth, inp.manSSStartYear, inp.manSSMonthly,
                     inp.womanSSStartMonth, inp.womanSSStartYear, inp.womanSSMonthly,
-                    cf.format(res.yr1Withdrawal), res.actualPoS*100,
-                    cf.format(res.medianFinalBalance), scenLabel));
+                    CURRENCY.format(res.yr1Withdrawal),
+                    CURRENCY.format(res.yr1TotalIncome),
+                    res.actualPoS*100,
+                    CURRENCY.format(res.medianFinalBalance), scenLabel));
             repopulate();
         }
 
         private void repopulate() {
             if (lastRes==null) return;
-            NumberFormat cf = NumberFormat.getCurrencyInstance(Locale.US);
-            cf.setMaximumFractionDigits(0);
             boolean real = tglReal.isSelected();
             model.setRowCount(0);
             for (ILEngine.EnhRow r : lastRes.medianRows) {
                 double d = real ? r.inflFactor : 1.0;
                 model.addRow(new Object[]{
                         r.manAge, r.calYear,
-                        cf.format((long)(r.balance/d)),
-                        r.drawing ? cf.format((long)(r.withdrawal/d)) : "--",
-                        r.drawing ? cf.format((long)(r.wdActual/d))   : "--",
-                        r.drawing ? String.format("%.2f%%", r.wdPct)  : "--",
+                        CURRENCY.format((long)(r.balance/d)),
+                        r.drawing ? CURRENCY.format((long)(r.withdrawal/d)) : "--",
+                        r.drawing ? CURRENCY.format((long)(r.wdActual/d))   : "--",
+                        r.drawing ? String.format("%.2f%%", r.wdPct)        : "--",
                         r.alert,
-                        r.manSS>0    ? cf.format((long)(r.manSS/d))    : "--",
-                        r.womanSS>0  ? cf.format((long)(r.womanSS/d))  : "--",
-                        r.annuity>0  ? cf.format((long)(r.annuity/d))  : "--",
-                        r.guaranteed>0 ? cf.format((long)(r.guaranteed/d)) : "--",
-                        r.drawing ? cf.format((long)(r.living/d))    : "--",
-                        r.drawing ? cf.format((long)(r.medical/d))   : "--",
-                        r.drawing ? cf.format((long)(r.tax/d))       : "--",
-                        r.drawing ? cf.format((long)(r.totalSpend/d)) : "--",
-                        cf.format((long)(r.totalIncome/d)),
-                        r.drawing ? ((r.surplus>=0?"+":"-")+cf.format((long)(Math.abs(r.surplus)/d))) : "--",
+                        r.manSS>0    ? CURRENCY.format((long)(r.manSS/d))    : "--",
+                        r.womanSS>0  ? CURRENCY.format((long)(r.womanSS/d))  : "--",
+                        r.annuity>0  ? CURRENCY.format((long)(r.annuity/d))  : "--",
+                        r.guaranteed>0 ? CURRENCY.format((long)(r.guaranteed/d)) : "--",
+                        r.drawing ? CURRENCY.format((long)(r.living/d))    : "--",
+                        r.drawing ? CURRENCY.format((long)(r.medical/d))   : "--",
+                        r.drawing ? CURRENCY.format((long)(r.tax/d))       : "--",
+                        r.drawing ? CURRENCY.format((long)(r.totalSpend/d)) : "--",
+                        CURRENCY.format((long)(r.totalIncome/d)),
+                        r.drawing ? ((r.surplus>=0?"+":"-")+CURRENCY.format((long)(Math.abs(r.surplus)/d))) : "--",
                         String.format("%.3f", r.inflFactor),
-                        r.manRmd>0    ? cf.format((long)(r.manRmd/d))    : "--",
-                        r.womanRmd>0  ? cf.format((long)(r.womanRmd/d))  : "--",
-                        r.combRmd>0   ? cf.format((long)(r.combRmd/d))   : "--",
-                        r.rmdOverage>0 ? cf.format((long)(r.rmdOverage/d)) : "--",
-                        (r.balDelta>=0?"+":"-")+cf.format((long)(Math.abs(r.balDelta)/d)),
+                        r.manRmd>0    ? CURRENCY.format((long)(r.manRmd/d))    : "--",
+                        r.womanRmd>0  ? CURRENCY.format((long)(r.womanRmd/d))  : "--",
+                        r.combRmd>0   ? CURRENCY.format((long)(r.combRmd/d))   : "--",
+                        r.rmdOverage>0 ? CURRENCY.format((long)(r.rmdOverage/d)) : "--",
+                        (r.balDelta>=0?"+":"-")+CURRENCY.format((long)(Math.abs(r.balDelta)/d)),
                 });
             }
         }
@@ -1182,6 +1140,11 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             ULT.put(99, 6.8); ULT.put(100,6.4);
         }
 
+        /**
+         * Full simulation -- identical engine to IncomeLab_GK2_and_historical.
+         * Returns yr1Withdrawal, medianFinalBalance, actualPoS, AND yr1TotalIncome.
+         * All four metrics computed from the same fan paths -- no shortcuts.
+         */
         static ProResults simulatePro(SimInputs inp, long seed,
                                       int solvePaths, int fanPaths, int binIters) {
             ProResults res = new ProResults();
@@ -1214,7 +1177,8 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
                     int wd=0;
                     if (drawing&&b>0)
                         wd=solveWithdrawalPro((int)b,calYear,inp.horizon-y,inp,
-                                p*1000L+y*37+seed,Math.max(20,solvePaths/8),Math.min(binIters,10),goGoRem);
+                                p*1000L+y*37+seed,
+                                Math.max(20,solvePaths/8),Math.min(binIters,10),goGoRem);
                     double mult=(goGoRem>0)?inp.goGoMultiplier:1.0;
                     int wdActual=drawing?(int)(wd*mult):0;
                     fanWithdrawals[p][y]=wdActual;
@@ -1230,11 +1194,13 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             }
 
             int survived=0;
-            for (int p=0; p<fanPaths; p++) if (fanBalances[p][inp.horizon]>0) survived++;
+            double[] finals=new double[fanPaths];
+            for (int p=0; p<fanPaths; p++) {
+                finals[p]=fanBalances[p][inp.horizon];
+                if (finals[p]>0) survived++;
+            }
             res.actualPoS=survived/(double)fanPaths;
             res.fanPathCount=fanPaths;
-            double[] finals=new double[fanPaths];
-            for (int p=0; p<fanPaths; p++) finals[p]=fanBalances[p][inp.horizon];
             Arrays.sort(finals);
             res.medianFinalBalance=(int)finals[fanPaths/2];
 
@@ -1242,6 +1208,13 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
                     inp,999L+seed,solvePaths,binIters,inp.goGoDuration);
             res.yr1Withdrawal=yr1Wd;
 
+            // Compute yr1TotalIncome = portfolio withdrawal + guaranteed income in year 1
+            double yr1ManSS=manSSThisYear(inp,0);
+            double yr1WomanSS=womanSSThisYear(inp,0);
+            double yr1Ann=annuityThisYear(inp,0);
+            res.yr1TotalIncome=(int)Math.round(yr1Wd+yr1ManSS+yr1WomanSS+yr1Ann);
+
+            // Build median path (Step 4)
             for (int y=0; y<inp.horizon; y++) {
                 int calYear=inp.baseYear+y;
                 int manAge=calYear-inp.manBirthYear, womanAge=calYear-inp.womanBirthYear;
@@ -1297,7 +1270,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
                 String alert="--";
                 if (drawing&&yr1Wd>0) {
                     double vsYr1=(wdActual-(int)(yr1Wd*goGoMult))/(double)(yr1Wd*goGoMult);
-                    if      (vsYr1>=0.20) alert="[^] raise alert";
+                    if      (vsYr1>=0.20)  alert="[^] raise alert";
                     else if (vsYr1<=-0.20) alert="[v] cut alert";
                 }
 
@@ -1321,6 +1294,9 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             return res;
         }
 
+        // Binary-search PoS solver -- pure portfolio, no guaranteed income offset
+        // (SS and annuity are already subtracted from total spending before this is called
+        // because solveWithdrawalPro is called with the NET spending need as target)
         static int solveWithdrawalPro(int balance, int fromYear, int horizon,
                                       SimInputs inp, long seed,
                                       int solvePaths, int binIters, int goGoYearsRem) {
@@ -1328,22 +1304,21 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             double lo=0, hi=balance*0.22;
             for (int i=0;i<binIters;i++) {
                 double mid=(lo+hi)/2.0;
-                // Pass fromYear so survivalRatePro computes correct SS + annuity offsets
-                double rate=survivalRatePro(balance,fromYear,horizon,mid,inp,seed+i*31L,solvePaths,goGoYearsRem);
+                double rate=survivalRatePro(balance,fromYear,horizon,mid,inp,
+                        seed+i*31L,solvePaths,goGoYearsRem);
                 if (rate>inp.targetPoS) lo=mid; else hi=mid;
             }
             return (int)((lo+hi)/2.0);
         }
 
         /**
-         * Survival rate estimator. firstYrWd is the PORTFOLIO DRAW being tested.
-         * Guaranteed income (SS COLA-adjusted + annuity flat) is subtracted from
-         * the gross spending need each year so the portfolio only covers the net gap.
+         * Survival rate -- firstYrWd is the GROSS portfolio draw.
+         * Guaranteed income (SS COLA-adjusted + annuity flat) offsets the
+         * gross draw so the portfolio only covers the net spending gap.
          * fromYear is the calendar year at the start of this horizon slice.
          */
         static double survivalRatePro(int balance, int fromYear, int horizon, double firstYrWd,
-                                      SimInputs inp, long seed,
-                                      int solvePaths, int goGoYearsRem) {
+                                      SimInputs inp, long seed, int solvePaths, int goGoYearsRem) {
             int survived=0;
             for (int i=0;i<solvePaths;i++) {
                 SeededRng rng=new SeededRng(seed*1000L+i*7+3);
@@ -1353,18 +1328,15 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
                     double ret=ri[0],infl=ri[1];
                     int goGoRem=Math.max(0,goGoYearsRem-y);
                     double mult=(goGoRem>0)?inp.goGoMultiplier:1.0;
-
-                    // Gross portfolio draw (inflation-escalated, go-go adjusted)
-                    double portDraw=(b>0)?firstYrWd*mult*Math.pow(1+infl,y):0;
-
-                    // Guaranteed income offsets: SS (COLA) + annuity (flat non-COLA)
-                    // simY is year index relative to inp.baseYear
+                    // Gross spending this path year (inflation-escalated, go-go adjusted)
+                    double grossDraw=(b>0)?firstYrWd*mult*Math.pow(1+infl,y):0;
+                    // Guaranteed income offset
                     int simY=(fromYear-inp.baseYear)+y;
-                    double guaranteed=manSSThisYear(inp,simY)+womanSSThisYear(inp,simY)+annuityThisYear(inp,simY);
-
-                    // Net portfolio draw after guaranteed income covers part of spending
-                    double netDraw=Math.max(0, portDraw-guaranteed);
-
+                    double guaranteed=manSSThisYear(inp,simY)
+                            +womanSSThisYear(inp,simY)
+                            +annuityThisYear(inp,simY);
+                    // Net portfolio draw (cannot be negative)
+                    double netDraw=Math.max(0,grossDraw-guaranteed);
                     b=b*(1+ret)-netDraw;
                     if (b<=0) break;
                 }
@@ -1374,8 +1346,8 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         }
 
         static double[] getReturnAndInflation(SimInputs inp, int simYear, SeededRng rng) {
-            double[][] seq = HistoricalScenarios.getSequence(inp.scenarioIndex);
-            if (seq!=null && simYear<seq.length) return new double[]{seq[simYear][1], seq[simYear][2]};
+            double[][] seq=HistoricalScenarios.getSequence(inp.scenarioIndex);
+            if (seq!=null&&simYear<seq.length) return new double[]{seq[simYear][1],seq[simYear][2]};
             double ret=inp.nomReturn+inp.stdDev*rng.nextGaussian();
             double infl=Math.max(0,inp.inflation+inp.inflationStdDev*rng.nextGaussian());
             return new double[]{ret,infl};
@@ -1435,6 +1407,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         static class ProResults {
             SimInputs inp;
             int yr1Withdrawal, medianFinalBalance, fanPathCount;
+            int yr1TotalIncome;  // yr1Withdrawal + SS + annuity in year 1
             double actualPoS;
             List<EnhRow> medianRows;
             double[][] fanBalances, fanWithdrawals, fanInflFactors;
@@ -1456,7 +1429,7 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
     }
 
     // ==============================
-    // HISTORICAL SCENARIOS (identical data to IL)
+    // HISTORICAL SCENARIOS
     // ==============================
     static class HistoricalScenarios {
         static final String[] SCENARIO_NAMES = {
@@ -1468,41 +1441,33 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         };
         static double[][] getSequence(int idx){
             return switch(idx){
-                case 1 -> GREAT_DEPRESSION;
-                case 2 -> STAGFLATION;
-                case 3 -> DOT_COM;
-                case 4 -> HOUSING_CRISIS;
-                default -> null;
+                case 1->GREAT_DEPRESSION; case 2->STAGFLATION;
+                case 3->DOT_COM; case 4->HOUSING_CRISIS; default->null;
             };
         }
         static String getDescription(int idx){
             return switch(idx){
-                case 1 -> "<html><b>Great Depression (1929-1942)</b><br>"
-                        + "14 years of actual S&P 500 total returns and CPI data.<br>"
-                        + "Includes the crash (1929-1932, cumulative -79%), the volatile<br>"
-                        + "recovery (1933-1936), the 1937 relapse (-35%), and stabilization.</html>";
-                case 2 -> "<html><b>Stagflation Era (1966-1982)</b><br>"
-                        + "17 years of actual S&P 500 total returns and CPI data.<br>"
-                        + "Characterized by low/negative real returns with high inflation.<br>"
-                        + "The worst sequence-of-returns era for retirees in modern history.</html>";
-                case 3 -> "<html><b>Dot-com Crash (2000-2006)</b><br>"
-                        + "7 years of actual S&P 500 total returns and CPI data.<br>"
-                        + "Three consecutive down years (2000-2002), then strong recovery.</html>";
-                case 4 -> "<html><b>Housing Crisis / GFC (2007-2013)</b><br>"
-                        + "7 years of actual S&P 500 total returns and CPI data.<br>"
-                        + "The 2008 crash (-37%) followed by one of the fastest recoveries on record.</html>";
-                default -> "<html>Random normal distribution based on your input parameters.</html>";
+                case 1->"<html><b>Great Depression (1929-1942)</b><br>"
+                        +"14 years of actual S&amp;P 500 total returns and CPI.<br>"
+                        +"Crash (1929-1932, cumulative -79%), recovery, 1937 relapse (-35%).</html>";
+                case 2->"<html><b>Stagflation Era (1966-1982)</b><br>"
+                        +"17 years. Low/negative real returns with high inflation.<br>"
+                        +"Worst sequence-of-returns era for retirees in modern history.</html>";
+                case 3->"<html><b>Dot-com Crash (2000-2006)</b><br>"
+                        +"3 consecutive down years (2000-2002), then strong recovery.</html>";
+                case 4->"<html><b>Housing Crisis / GFC (2007-2013)</b><br>"
+                        +"2008 crash (-37%) followed by one of the fastest recoveries on record.</html>";
+                default->"<html>Random normal distribution based on your input parameters.</html>";
             };
         }
-        // { calendarYear, equityTotalReturn, CPI_inflation }
-        private static final double[][] GREAT_DEPRESSION = {
+        private static final double[][] GREAT_DEPRESSION={
                 {1929,-0.0830,0.001},{1930,-0.2512,-0.023},{1931,-0.4384,-0.089},
                 {1932,-0.0864,-0.103},{1933,0.4998,-0.051},{1934,-0.0119,0.033},
                 {1935,0.4674,0.025},{1936,0.3194,0.014},{1937,-0.3534,0.037},
                 {1938,0.2928,-0.021},{1939,-0.0110,-0.014},{1940,-0.1067,0.007},
                 {1941,-0.1277,0.095},{1942,0.1917,0.090},
         };
-        private static final double[][] STAGFLATION = {
+        private static final double[][] STAGFLATION={
                 {1966,-0.0997,0.042},{1967,0.2380,0.034},{1968,0.1081,0.047},
                 {1969,-0.0824,0.062},{1970,0.0356,0.056},{1971,0.1422,0.033},
                 {1972,0.1876,0.034},{1973,-0.1431,0.087},{1974,-0.2590,0.123},
@@ -1510,12 +1475,12 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
                 {1978,0.0651,0.090},{1979,0.1852,0.133},{1980,0.3174,0.121},
                 {1981,-0.0470,0.089},{1982,0.2042,0.038},
         };
-        private static final double[][] DOT_COM = {
+        private static final double[][] DOT_COM={
                 {2000,-0.0910,0.034},{2001,-0.1189,0.028},{2002,-0.2197,0.016},
                 {2003,0.2836,0.023},{2004,0.1074,0.027},{2005,0.0483,0.034},
                 {2006,0.1561,0.032},
         };
-        private static final double[][] HOUSING_CRISIS = {
+        private static final double[][] HOUSING_CRISIS={
                 {2007,0.0548,0.028},{2008,-0.3700,0.038},{2009,0.2646,0.003},
                 {2010,0.1506,0.016},{2011,0.0211,0.032},{2012,0.1600,0.021},
                 {2013,0.3239,0.015},
@@ -1548,11 +1513,12 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
 
     static class CandidateResult {
         final SSCandidate cand;
-        final int yr1Withdrawal,medianFinalBalance;
+        final int yr1Withdrawal, medianFinalBalance, yr1TotalIncome;
         final double actualPoS;
-        final boolean confirmed;
-        CandidateResult(SSCandidate c,int yr1,int med,double pos,boolean conf){
-            cand=c; yr1Withdrawal=yr1; medianFinalBalance=med; actualPoS=pos; confirmed=conf;
+        final boolean belowFloor;
+        CandidateResult(SSCandidate c,int yr1,int med,double pos,int totalInc,boolean bf){
+            cand=c; yr1Withdrawal=yr1; medianFinalBalance=med;
+            actualPoS=pos; yr1TotalIncome=totalInc; belowFloor=bf;
         }
     }
 
@@ -1591,13 +1557,18 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             c.womanSSAmount=(int)Math.round(c.womanSSMonthly*12);
             c.ssCola=ssCola;
             c.annuity=annuity; c.annuityStartYear=annuityStartYear; c.annuityStartMonth=annuityStartMonth;
-            c.manTradIRA=manTradIRA; c.manRothIRA=manRothIRA; c.manTrad401K=manTrad401K; c.manRoth401K=manRoth401K;
-            c.womanRoth401K=womanRoth401K; c.womanRothIRA=womanRothIRA; c.womanTradIRA=womanTradIRA; c.womanTrad401K=womanTrad401K;
+            c.manTradIRA=manTradIRA; c.manRothIRA=manRothIRA;
+            c.manTrad401K=manTrad401K; c.manRoth401K=manRoth401K;
+            c.womanRoth401K=womanRoth401K; c.womanRothIRA=womanRothIRA;
+            c.womanTradIRA=womanTradIRA; c.womanTrad401K=womanTrad401K;
             c.manPlanAge=manPlanAge; c.womanPlanAge=womanPlanAge;
-            c.nomReturn=nomReturn; c.stdDev=stdDev; c.inflation=inflation; c.inflationStdDev=inflationStdDev;
+            c.nomReturn=nomReturn; c.stdDev=stdDev;
+            c.inflation=inflation; c.inflationStdDev=inflationStdDev;
             c.livingExp=livingExp; c.medical=medical; c.medInflation=medInflation;
             c.baseTax=baseTax; c.taxInflation=taxInflation;
             c.goGoMultiplier=goGoMultiplier; c.goGoDuration=goGoDuration;
+            c.portfolio=manTradIRA+manRothIRA+manTrad401K+manRoth401K
+                    +womanRoth401K+womanRothIRA+womanTradIRA+womanTrad401K;
             c.scenarioIndex=scenIdx;
             return c;
         }
@@ -1651,7 +1622,6 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
         int y=totalMonths/12,m=totalMonths%12;
         return m==0?y+"y":y+"y"+m+"m";
     }
-
     private void refreshAgeAndHorizon(){
         try{
             int ma=computeAge(iv(spManBirthYear),iv(spManBirthMonth));
@@ -1664,7 +1634,6 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             lblHorizonNote.setText("<html><i>Horizon = "+h+" yrs ("+drv+", man age "+ma+")</i></html>");
         }catch(Exception ignored){}
     }
-
     private void updateAccountTotal(){
         try{
             long t=(long)iv(spManTradIRA)+iv(spManRothIRA)+iv(spManTrad401K)+iv(spManRoth401K)
@@ -1673,13 +1642,11 @@ public class IncomeLab_Plus_SS_Optimizer extends JFrame {
             lblAccountTotal.setText("Account total: "+cf.format(t));
         }catch(Exception ignored){}
     }
-
     private int computeAge(int by,int bm){
         LocalDate today=LocalDate.now();
         LocalDate birth=LocalDate.of(Math.max(1900,Math.min(2100,by)),Math.max(1,Math.min(12,bm)),1);
         return (int)java.time.temporal.ChronoUnit.YEARS.between(birth,today);
     }
-
     private SimInputs readInputs(){
         SimInputs i=new SimInputs();
         i.baseYear=iv(spSimStartYear); i.withdrawStartYear=iv(spWithdrawStartYear);
