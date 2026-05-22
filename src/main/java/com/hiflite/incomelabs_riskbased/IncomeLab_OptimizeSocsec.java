@@ -142,6 +142,11 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
 
     private ProResults lastResults    = null;
     private boolean    showRealDollars = false;
+    // Cache for SS Optimizer results -- repopulated when real/nominal toggle fires
+    private java.util.List<SsOptResult> lastOptResults = null;
+    private int lastOptManBY, lastOptManBM, lastOptWomanBY, lastOptWomanBM;
+    private int lastOptManPIA, lastOptWomanPIA;
+    private boolean optResultsStale = false;  // true if inputs changed after optimizer ran
     private final java.util.concurrent.atomic.AtomicLong simCount = new java.util.concurrent.atomic.AtomicLong(0);
     private          long simTotal    = 0;
     private volatile java.util.function.LongConsumer simProgressCallback = null;
@@ -267,7 +272,16 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
                 + "100 = ~4? faster but noisier. 50 = rough but usable for quick checks.<br>"
                 + "Each fan path re-solves withdrawal every year -- most expensive per path.</html>");
 
-        ChangeListener refreshRunTooltip = e -> updateRunTooltip();
+        // Mark optimizer results stale whenever any input changes
+        ChangeListener markStale = e -> {
+            if (lastOptResults != null) {
+                optResultsStale = true;
+                if (lblOptStatus != null)
+                    lblOptStatus.setText("[Results may be stale -- inputs changed. Re-run SS Optimizer.]");
+            }
+        };
+
+        ChangeListener refreshRunTooltip = e -> { updateRunTooltip(); markStale.stateChanged(null); };
         spMcSolvePaths.addChangeListener(refreshRunTooltip);
         spBinaryIters.addChangeListener(refreshRunTooltip);
         spMcFanPaths.addChangeListener(refreshRunTooltip);
@@ -599,6 +613,10 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
             showRealDollars = tglDollars.isSelected();
             tglDollars.setText(showRealDollars ? "Showing: Today's $ (real)" : "Showing: Future $ (nominal)");
             if (lastResults != null) updateUI(lastResults);
+            // Also refresh optimizer table if results are cached
+            if (lastOptResults != null) populateOptTable(lastOptResults,
+                    lastOptManBY, lastOptManBM, lastOptWomanBY, lastOptWomanBM,
+                    lastOptManPIA, lastOptWomanPIA);
         });
 
         JPanel aNorth = new JPanel(new BorderLayout()); aNorth.setOpaque(false);
@@ -1071,7 +1089,8 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         });
 
         JLabel clickHint = new JLabel(
-                "  Click any row to apply those SS start dates to the IL simulation and run automatically.");
+                "  Click any row to apply those SS start dates to the IL simulation and run automatically."
+                        + "  |  Optimizer money columns respond to the Real/Nominal toggle (top right).");
         clickHint.setFont(new Font("SansSerif", Font.ITALIC, 12));
         clickHint.setForeground(new Color(0, 80, 150));
 
@@ -1103,6 +1122,7 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         btnRunOpt.setEnabled(false);
         btnCancelOpt.setEnabled(true);
         optCancelRequested = false;
+        optResultsStale = false;
         tblOptModel.setRowCount(0);
         lblOptStatus.setText("Building candidate grid...");
 
@@ -1228,7 +1248,8 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         double inflAcc  = 1.0;  // starts at 1.0 for year 0, compounds each year
         double totalIncYr1  = 0;
         double portWdYr1    = 0;
-        double goGoTotal    = 0;  // sum of income across all go-go drawing years
+        double goGoTotal    = 0;
+        double inflAccYr1   = 1.0;
         int startY = wdYear - baseYear;
 
         for (int y = 0; y < horizon; y++) {
@@ -1270,17 +1291,15 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
             double totalInc = guaranteed + portDraw;
 
             if (draw && y == startY) {
-                // Total income = what actually arrives (guaranteed + portfolio gap fill)
-                // guaranteed is the meaningful metric -- higher SS/annuity = less portfolio needed
+                // Store nominal; display converts to real when needed
                 totalIncYr1 = guaranteed + portDraw;
                 portWdYr1   = portDraw;
+                inflAccYr1  = inflAcc;
             }
             // Sum GUARANTEED income (SS + annuity) across go-go years.
             // This is the primary score: more guaranteed income during go-go = less portfolio draw.
             // Total income always equals max(totalSpend, guaranteed) which varies too little.
-            if (draw && goGoRem > 0) {
-                goGoTotal += guaranteed;
-            }
+            if (draw && goGoRem > 0) goGoTotal += guaranteed;  // nominal; display converts
 
             bal = Math.max(0, bal * (1 + ret) - portDraw);
         }
@@ -1293,18 +1312,24 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         r.combinedAnnual= bobAnnual + joAnnual;
         r.totalIncomeYr1= totalIncYr1;
         r.portWdYr1     = portWdYr1;
-        r.projFinalBal  = bal;
-        r.goGoTotalIncome = goGoTotal;
+        r.projFinalBal  = bal;                 // nominal; display converts to real if needed
+        r.inflAccFinal  = inflAcc;             // to convert projFinalBal to real
+        r.goGoTotalIncome = goGoTotal;          // accumulated as real in the loop
         return r;
     }
 
     private void populateOptTable(java.util.List<SsOptResult> results,
                                   int manBY, int manBM, int womanBY, int womanBM,
                                   int manPIA, int womanPIA) {
+        // Cache for real/nominal toggle refresh
+        lastOptResults  = results;
+        lastOptManBY    = manBY;  lastOptManBM   = manBM;
+        lastOptWomanBY  = womanBY; lastOptWomanBM = womanBM;
+        lastOptManPIA   = manPIA;  lastOptWomanPIA = womanPIA;
+
         tblOptModel.setRowCount(0);
         optRowDates.clear();
-        // Only show top 200 to keep table manageable
-        int show = Math.min(results.size(), 200);
+        int show = results.size();  // show all combinations
         for (int rank = 0; rank < show; rank++) {
             SsOptResult r = results.get(rank);
             int bobAgeM = (r.bobYear - manBY)*12   + (r.bobMonth - manBM);
@@ -1320,20 +1345,17 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
                     ssAgeStr(joAgeM),
                     CURRENCY.format((long) r.joMonthly),
                     CURRENCY.format((long) r.combinedAnnual),
-                    CURRENCY.format((long) r.totalIncomeYr1),
-                    CURRENCY.format((long) r.portWdYr1),
+                    CURRENCY.format((long)(r.totalIncomeYr1 / (showRealDollars && r.inflAccYr1 > 0 ? r.inflAccYr1 : 1.0))),
+                    CURRENCY.format((long)(r.portWdYr1 / (showRealDollars && r.inflAccYr1 > 0 ? r.inflAccYr1 : 1.0))),
                     String.format("%.2f%%", initRate),
-                    CURRENCY.format((long) r.goGoTotalIncome),
-                    CURRENCY.format((long) r.goGoTotalIncome),
-                    CURRENCY.format((long) r.goGoTotalIncome),
-                    CURRENCY.format((long) r.goGoTotalIncome),
-                    CURRENCY.format((long) r.projFinalBal),
+                    CURRENCY.format((long)(r.goGoTotalIncome / (showRealDollars && r.inflAccFinal > 0 ? r.inflAccFinal : 1.0))),
+                    CURRENCY.format((long)(r.projFinalBal / (showRealDollars && r.inflAccFinal > 0 ? r.inflAccFinal : 1.0))),
             });
             optRowDates.add(new int[]{r.bobYear, r.bobMonth, r.joYear, r.joMonth});
         }
         lblOptStatus.setText(String.format(
-                "Showing top %,d of %,d combinations. Click any row to apply and run IL.",
-                show, results.size()));
+                "Showing all %,d combinations ranked. Click any row to apply and run IL.",
+                show));
     }
 
     private static String ssAgeStr(int totalMonths) {
@@ -1348,7 +1370,9 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         int bobYear, bobMonth, joYear, joMonth;
         double bobMonthly, joMonthly, combinedAnnual;
         double totalIncomeYr1, portWdYr1, projFinalBal;
-        double goGoTotalIncome;  // sum of income across all go-go years (primary sort key)
+        double goGoTotalIncome;  // sum of guaranteed income across all go-go years
+        double inflAccYr1   = 1.0;   // inflation factor at withdrawal start year (default 1=nominal)
+        double inflAccFinal = 1.0;   // inflation factor at end of horizon (default 1=nominal)
     }
 
     private JPanel buildStatusBar() {
