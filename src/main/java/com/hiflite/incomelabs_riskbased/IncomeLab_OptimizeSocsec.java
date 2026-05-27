@@ -221,6 +221,82 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         inner.add(card("Appearance", new Object[]{ "Font size adjustment (pt)", spFontDelta }));
         inner.add(Box.createVerticalStrut(4));
 
+        // -- Scenario save / load card
+        JTextField tfScenDesc = new JTextField("", 30);
+        tfScenDesc.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        tfScenDesc.setToolTipText("Short description used in filename when saving");
+
+        JButton btnSave = new JButton("Save Scenario");
+        JButton btnLoad = new JButton("Load Scenario");
+        JComboBox<String> cmbRecent = new JComboBox<>();
+        cmbRecent.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        cmbRecent.setToolTipText("Recently saved/loaded scenario files -- select to load");
+        cmbRecent.addItem("-- recent files --");
+
+        btnSave.setFont(new Font("SansSerif", Font.BOLD, 12));
+        btnSave.setBackground(new Color(60, 100, 160));
+        btnSave.setForeground(Color.WHITE);
+        btnSave.setFocusPainted(false);
+        btnLoad.setFont(new Font("SansSerif", Font.BOLD, 12));
+        btnLoad.setBackground(new Color(80, 130, 60));
+        btnLoad.setForeground(Color.WHITE);
+        btnLoad.setFocusPainted(false);
+
+        btnSave.addActionListener(e -> saveScenario(tfScenDesc));
+        btnLoad.addActionListener(e -> loadScenario(tfScenDesc, cmbRecent));
+        cmbRecent.addActionListener(e -> {
+            int rIdx = cmbRecent.getSelectedIndex();
+            if (rIdx > 0) {
+                String rPath = (String) cmbRecent.getSelectedItem();
+                if (rPath != null && !rPath.startsWith("--"))
+                    loadScenarioFromFile(new java.io.File(rPath), tfScenDesc, cmbRecent);
+            }
+        });
+
+        JPanel scenBtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        scenBtnRow.setOpaque(false); scenBtnRow.setAlignmentX(LEFT_ALIGNMENT);
+        scenBtnRow.add(btnSave); scenBtnRow.add(btnLoad);
+
+        JPanel scenSaveCard = new JPanel();
+        scenSaveCard.setLayout(new BoxLayout(scenSaveCard, BoxLayout.Y_AXIS));
+        scenSaveCard.setBackground(Color.WHITE);
+        scenSaveCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createEmptyBorder(0,0,6,0),
+                BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(208,206,200),1),
+                        BorderFactory.createEmptyBorder(8,10,8,10))));
+        JLabel scenSaveTitleLbl = new JLabel("SCENARIO");
+        scenSaveTitleLbl.setFont(new Font("SansSerif",Font.BOLD,12));
+        scenSaveTitleLbl.setForeground(new Color(110,105,95));
+        scenSaveTitleLbl.setBorder(BorderFactory.createEmptyBorder(0,0,6,0));
+        scenSaveTitleLbl.setAlignmentX(LEFT_ALIGNMENT);
+        scenSaveCard.add(scenSaveTitleLbl);
+        JLabel descInputLbl = new JLabel("Description (used in filename)");
+        descInputLbl.setFont(new Font("SansSerif",Font.PLAIN,13));
+        descInputLbl.setForeground(new Color(75,75,75));
+        descInputLbl.setBorder(BorderFactory.createEmptyBorder(4,0,1,0));
+        descInputLbl.setAlignmentX(LEFT_ALIGNMENT);
+        scenSaveCard.add(descInputLbl);
+        tfScenDesc.setMaximumSize(new Dimension(Integer.MAX_VALUE,28));
+        tfScenDesc.setAlignmentX(LEFT_ALIGNMENT);
+        scenSaveCard.add(tfScenDesc);
+        scenBtnRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,32));
+        scenSaveCard.add(Box.createVerticalStrut(4));
+        scenSaveCard.add(scenBtnRow);
+        JLabel recentFilesLbl = new JLabel("Recent files");
+        recentFilesLbl.setFont(new Font("SansSerif",Font.PLAIN,13));
+        recentFilesLbl.setForeground(new Color(75,75,75));
+        recentFilesLbl.setBorder(BorderFactory.createEmptyBorder(6,0,1,0));
+        recentFilesLbl.setAlignmentX(LEFT_ALIGNMENT);
+        scenSaveCard.add(recentFilesLbl);
+        cmbRecent.setMaximumSize(new Dimension(Integer.MAX_VALUE,28));
+        cmbRecent.setAlignmentX(LEFT_ALIGNMENT);
+        scenSaveCard.add(cmbRecent);
+        inner.add(scenSaveCard);
+        loadRecentFiles(cmbRecent);
+
+        inner.add(Box.createVerticalStrut(4));
+
         // == Portfolio & Simulation =========================================
         int curYear = java.time.Year.now().getValue();
         spSimStartYear       = spinI(curYear, 2020, 2040, 1, "#");
@@ -1373,6 +1449,233 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         double goGoTotalIncome;  // sum of guaranteed income across all go-go years
         double inflAccYr1   = 1.0;   // inflation factor at withdrawal start year (default 1=nominal)
         double inflAccFinal = 1.0;   // inflation factor at end of horizon (default 1=nominal)
+    }
+
+
+    // =========================================================================
+    //  SCENARIO SAVE / LOAD
+    // =========================================================================
+    private static final String RECENT_PREFS_FILE = "recent.ilscen.prefs";
+    private static final int    MAX_RECENT = 5;
+    private static final String SCENARIO_VERSION = "1";
+
+    private void saveScenario(javax.swing.JTextField tfDesc) {
+        String desc = tfDesc.getText().trim();
+        if (desc.isEmpty()) desc = "scenario";
+        String date = java.time.LocalDate.now().toString();
+        String safeName = desc.replaceAll("[^a-zA-Z0-9_-]", "_");
+        String defaultName = date + "_" + safeName + ".ilscen";
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Save Scenario");
+        fc.setSelectedFile(new java.io.File(defaultName));
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+                "IncomeLab Scenario files (*.ilscen)", "ilscen"));
+        if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        java.io.File file = fc.getSelectedFile();
+        if (!file.getName().endsWith(".ilscen"))
+            file = new java.io.File(file.getAbsolutePath() + ".ilscen");
+        java.util.Properties props = new java.util.Properties();
+        props.setProperty("scenario.version",       SCENARIO_VERSION);
+        props.setProperty("scenario.description",   desc);
+        props.setProperty("scenario.saved",         java.time.LocalDateTime.now().toString());
+        props.setProperty("sim.startYear",          String.valueOf(iv(spSimStartYear)));
+        props.setProperty("sim.withdrawStartYear",  String.valueOf(iv(spWithdrawStartYear)));
+        props.setProperty("sim.withdrawStartMonth", String.valueOf(iv(spWithdrawStartMonth)));
+        props.setProperty("sim.targetPoS",          String.valueOf(iv(spTargetPoS)));
+        props.setProperty("man.birthYear",          String.valueOf(iv(spManBirthYear)));
+        props.setProperty("man.birthMonth",         String.valueOf(iv(spManBirthMonth)));
+        props.setProperty("man.planAge",            String.valueOf(iv(spManPlanAge)));
+        props.setProperty("woman.birthYear",        String.valueOf(iv(spWomanBirthYear)));
+        props.setProperty("woman.birthMonth",       String.valueOf(iv(spWomanBirthMonth)));
+        props.setProperty("woman.planAge",          String.valueOf(iv(spWomanPlanAge)));
+        props.setProperty("man.pia",                String.valueOf(iv(spManPIA)));
+        props.setProperty("woman.pia",              String.valueOf(iv(spWomanPIA)));
+        props.setProperty("ss.cola",                String.valueOf(dv(spSSCola)));
+        props.setProperty("man.ssStartYear",        String.valueOf(iv(spManSSStartYear)));
+        props.setProperty("man.ssStartMonth",       String.valueOf(iv(spManSSStartMonth)));
+        props.setProperty("woman.ssStartYear",      String.valueOf(iv(spWomanSSStartYear)));
+        props.setProperty("woman.ssStartMonth",     String.valueOf(iv(spWomanSSStartMonth)));
+        props.setProperty("annuity.amount",         String.valueOf(iv(spAnnuity)));
+        props.setProperty("annuity.startYear",      String.valueOf(iv(spAnnuityStartYear)));
+        props.setProperty("annuity.startMonth",     String.valueOf(iv(spAnnuityStartMonth)));
+        props.setProperty("man.tradIRA",            String.valueOf(iv(spManTradIRA)));
+        props.setProperty("man.rothIRA",            String.valueOf(iv(spManRothIRA)));
+        props.setProperty("man.trad401K",           String.valueOf(iv(spManTrad401K)));
+        props.setProperty("man.roth401K",           String.valueOf(iv(spManRoth401K)));
+        props.setProperty("woman.roth401K",         String.valueOf(iv(spWomanRoth401K)));
+        props.setProperty("woman.rothIRA",          String.valueOf(iv(spWomanRothIRA)));
+        props.setProperty("woman.tradIRA",          String.valueOf(iv(spWomanTradIRA)));
+        props.setProperty("woman.trad401K",         String.valueOf(iv(spWomanTrad401K)));
+        props.setProperty("market.nomReturn",       String.valueOf(dv(spNomReturn)));
+        props.setProperty("market.stdDev",          String.valueOf(dv(spStdDev)));
+        props.setProperty("market.inflation",       String.valueOf(dv(spInflation)));
+        props.setProperty("market.inflStdDev",      String.valueOf(dv(spInflationStdDev)));
+        props.setProperty("spending.base",          String.valueOf(iv(spLivingExp)));
+        props.setProperty("spending.goGo",          String.valueOf(dv(spGoGo)));
+        props.setProperty("spending.goGoDuration",  String.valueOf(iv(spGoGoDuration)));
+        props.setProperty("spending.medical",       String.valueOf(iv(spMedical)));
+        props.setProperty("spending.medInflation",  String.valueOf(dv(spMedInflation)));
+        props.setProperty("spending.baseTax",       String.valueOf(iv(spBaseTax)));
+        props.setProperty("spending.taxInflation",  String.valueOf(dv(spTaxInflation)));
+        props.setProperty("mc.solvePaths",          String.valueOf(iv(spMcSolvePaths)));
+        props.setProperty("mc.binIters",            String.valueOf(iv(spBinaryIters)));
+        props.setProperty("mc.fanPaths",            String.valueOf(iv(spMcFanPaths)));
+        props.setProperty("opt.scenario",           String.valueOf(
+                cmbScenario != null ? cmbScenario.getSelectedIndex() : 0));
+        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
+            props.store(fos, "IncomeLab_OptimizeSocsec scenario -- " + desc);
+            addRecentFile(file.getAbsolutePath());
+            if (progressBar != null)
+                progressBar.setString("Saved: " + file.getName() + " -- " + desc);
+        } catch (java.io.IOException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    "Could not save scenario:\n" + ex.getMessage(),
+                    "Save Error", javax.swing.JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void loadScenario(javax.swing.JTextField tfDesc, JComboBox<String> cmbRecent) {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Load Scenario");
+        fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+                "IncomeLab Scenario files (*.ilscen)", "ilscen"));
+        if (fc.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        loadScenarioFromFile(fc.getSelectedFile(), tfDesc, cmbRecent);
+    }
+
+    private void loadScenarioFromFile(java.io.File file,
+                                      javax.swing.JTextField tfDesc,
+                                      JComboBox<String> cmbRecent) {
+        java.util.Properties props = new java.util.Properties();
+        try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
+            props.load(fis);
+        } catch (java.io.IOException ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    "Could not read scenario file:\n" + ex.getMessage(),
+                    "Load Error", javax.swing.JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        java.util.List<String> warnings = new java.util.ArrayList<>();
+        String ver = props.getProperty("scenario.version", "1");
+        if (!SCENARIO_VERSION.equals(ver))
+            warnings.add("version mismatch (file=" + ver + " app=" + SCENARIO_VERSION + ")");
+
+        setSpinnerI(spSimStartYear,       props, "sim.startYear",          warnings);
+        setSpinnerI(spWithdrawStartYear,  props, "sim.withdrawStartYear",  warnings);
+        setSpinnerI(spWithdrawStartMonth, props, "sim.withdrawStartMonth", warnings);
+        setSpinnerI(spTargetPoS,          props, "sim.targetPoS",          warnings);
+        setSpinnerI(spManBirthYear,       props, "man.birthYear",          warnings);
+        setSpinnerI(spManBirthMonth,      props, "man.birthMonth",         warnings);
+        setSpinnerI(spManPlanAge,         props, "man.planAge",            warnings);
+        setSpinnerI(spWomanBirthYear,     props, "woman.birthYear",        warnings);
+        setSpinnerI(spWomanBirthMonth,    props, "woman.birthMonth",       warnings);
+        setSpinnerI(spWomanPlanAge,       props, "woman.planAge",          warnings);
+        setSpinnerI(spManPIA,             props, "man.pia",                warnings);
+        setSpinnerI(spWomanPIA,           props, "woman.pia",              warnings);
+        setSpinnerD(spSSCola,             props, "ss.cola",                warnings);
+        setSpinnerI(spManSSStartYear,     props, "man.ssStartYear",        warnings);
+        setSpinnerI(spManSSStartMonth,    props, "man.ssStartMonth",       warnings);
+        setSpinnerI(spWomanSSStartYear,   props, "woman.ssStartYear",      warnings);
+        setSpinnerI(spWomanSSStartMonth,  props, "woman.ssStartMonth",     warnings);
+        setSpinnerI(spAnnuity,            props, "annuity.amount",         warnings);
+        setSpinnerI(spAnnuityStartYear,   props, "annuity.startYear",      warnings);
+        setSpinnerI(spAnnuityStartMonth,  props, "annuity.startMonth",     warnings);
+        setSpinnerI(spManTradIRA,         props, "man.tradIRA",            warnings);
+        setSpinnerI(spManRothIRA,         props, "man.rothIRA",            warnings);
+        setSpinnerI(spManTrad401K,        props, "man.trad401K",           warnings);
+        setSpinnerI(spManRoth401K,        props, "man.roth401K",           warnings);
+        setSpinnerI(spWomanRoth401K,      props, "woman.roth401K",         warnings);
+        setSpinnerI(spWomanRothIRA,       props, "woman.rothIRA",          warnings);
+        setSpinnerI(spWomanTradIRA,       props, "woman.tradIRA",          warnings);
+        setSpinnerI(spWomanTrad401K,      props, "woman.trad401K",         warnings);
+        setSpinnerD(spNomReturn,          props, "market.nomReturn",       warnings);
+        setSpinnerD(spStdDev,             props, "market.stdDev",          warnings);
+        setSpinnerD(spInflation,          props, "market.inflation",       warnings);
+        setSpinnerD(spInflationStdDev,    props, "market.inflStdDev",      warnings);
+        setSpinnerI(spLivingExp,          props, "spending.base",          warnings);
+        setSpinnerD(spGoGo,               props, "spending.goGo",          warnings);
+        setSpinnerI(spGoGoDuration,       props, "spending.goGoDuration",  warnings);
+        setSpinnerI(spMedical,            props, "spending.medical",       warnings);
+        setSpinnerD(spMedInflation,       props, "spending.medInflation",  warnings);
+        setSpinnerI(spBaseTax,            props, "spending.baseTax",       warnings);
+        setSpinnerD(spTaxInflation,       props, "spending.taxInflation",  warnings);
+        setSpinnerI(spMcSolvePaths,       props, "mc.solvePaths",          warnings);
+        setSpinnerI(spBinaryIters,        props, "mc.binIters",            warnings);
+        setSpinnerI(spMcFanPaths,         props, "mc.fanPaths",            warnings);
+        if (cmbScenario != null) {
+            String si = props.getProperty("opt.scenario");
+            if (si != null) { try { cmbScenario.setSelectedIndex(Integer.parseInt(si.trim())); } catch (Exception ignored) {} }
+        }
+        String desc = props.getProperty("scenario.description", "");
+        if (tfDesc != null) tfDesc.setText(desc);
+        lastOptResults = null;
+        if (tblOptModel != null) tblOptModel.setRowCount(0);
+        if (lblOptStatus != null) lblOptStatus.setText("Scenario loaded. Review inputs, then Run Simulation or Run SS Optimizer.");
+        updateAgeLabels();
+        updateAccountTotal();
+        updateSSBenefitNote();
+        addRecentFile(file.getAbsolutePath());
+        if (cmbRecent != null) loadRecentFiles(cmbRecent);
+        String warnMsg = warnings.isEmpty() ? "" : "  [Warnings: " + String.join(", ", warnings) + "]";
+        if (progressBar != null)
+            progressBar.setString("Loaded: " + file.getName() + " -- " + desc + warnMsg);
+    }
+
+    private void setSpinnerI(JSpinner sp, java.util.Properties props,
+                             String key, java.util.List<String> warnings) {
+        String val = props.getProperty(key);
+        if (val == null) { warnings.add("missing: " + key); return; }
+        try {
+            int v = Integer.parseInt(val.trim());
+            SpinnerNumberModel m = (SpinnerNumberModel) sp.getModel();
+            int lo = ((Number)m.getMinimum()).intValue(), hi = ((Number)m.getMaximum()).intValue();
+            sp.setValue(Math.max(lo, Math.min(hi, v)));
+        } catch (Exception e) { warnings.add("bad value for " + key + ": " + val); }
+    }
+
+    private void setSpinnerD(JSpinner sp, java.util.Properties props,
+                             String key, java.util.List<String> warnings) {
+        String val = props.getProperty(key);
+        if (val == null) { warnings.add("missing: " + key); return; }
+        try {
+            double v = Double.parseDouble(val.trim());
+            SpinnerNumberModel m = (SpinnerNumberModel) sp.getModel();
+            double lo = ((Number)m.getMinimum()).doubleValue(), hi = ((Number)m.getMaximum()).doubleValue();
+            sp.setValue(Math.max(lo, Math.min(hi, v)));
+        } catch (Exception e) { warnings.add("bad value for " + key + ": " + val); }
+    }
+
+    private void loadRecentFiles(JComboBox<String> cmb) {
+        cmb.removeAllItems();
+        cmb.addItem("-- recent files --");
+        java.io.File prefs = new java.io.File(RECENT_PREFS_FILE);
+        if (!prefs.exists()) return;
+        try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(prefs))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (!line.isEmpty() && new java.io.File(line).exists()) cmb.addItem(line);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void addRecentFile(String path) {
+        java.util.List<String> recent = new java.util.ArrayList<>();
+        recent.add(path);
+        java.io.File prefs = new java.io.File(RECENT_PREFS_FILE);
+        if (prefs.exists()) {
+            try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(prefs))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    line = line.trim();
+                    if (!line.isEmpty() && !line.equals(path)) recent.add(line);
+                }
+            } catch (Exception ignored) {}
+        }
+        if (recent.size() > MAX_RECENT) recent = recent.subList(0, MAX_RECENT);
+        try (java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter(prefs))) {
+            for (String p : recent) pw.println(p);
+        } catch (Exception ignored) {}
     }
 
     private JPanel buildStatusBar() {
