@@ -370,17 +370,17 @@ public class IncomeLab_and_GK2 extends JFrame {
                 + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
                 + "Reduced if claiming before FRA; increased if after FRA.<br>"
                 + "FRA = 67 for those born 1960 or later.</html>");
-        spManSSStartYear   = spinI(2027,  2020, 2040, 1, "#");
-        spManSSStartMonth  = spinI(1,     1,    12,   1, "#");
+        spManSSStartYear   = spinI(2026,  2020, 2040, 1, "#");
+        spManSSStartMonth  = spinI(12,     1,    12,   1, "#");
         spWomanPIA         = spinI(3_897, 0, 6_000, 50, "#,###");
         spWomanPIA.setToolTipText("<html><b>Woman’s Primary Insurance Amount (PIA)</b><br>"
                 + "Monthly SS benefit payable at Full Retirement Age (FRA).<br>"
                 + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
                 + "Reduced if claiming before FRA; increased if after FRA.<br>"
                 + "FRA = 67 for those born 1960 or later.</html>");
-        spWomanSSStartYear = spinI(2027,  2020, 2040, 1, "#");
+        spWomanSSStartYear = spinI(2026,  2020, 2040, 1, "#");
         spWomanSSStartMonth= spinI(12,    1,    12,   1, "#");
-        spSSCola           = spinD(2.3,   0.0,  5.0,  0.1, "0.0#");
+        spSSCola           = spinD(2.4,   0.0,  10.0,  0.1, "0.0#");
         lblSSBenefitNote   = new JLabel(" ");
         lblSSBenefitNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblSSBenefitNote.setForeground(new Color(80, 100, 60));
