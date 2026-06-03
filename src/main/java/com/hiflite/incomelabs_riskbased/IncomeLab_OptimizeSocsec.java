@@ -483,7 +483,7 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
                 + "FRA = 67 for those born 1960 or later.</html>");
         spWomanSSStartYear = spinI(2026,  2020, 2040, 1, "#");
         spWomanSSStartMonth= spinI(12,    1,    12,   1, "#");
-        spSSCola           = spinD(2.4,   0.0,  5.0,  0.1, "0.0#");
+        spSSCola           = spinD(2.4,   0.0,  10.0,  0.1, "0.0#");
         lblSSBenefitNote   = new JLabel(" ");
         lblSSBenefitNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblSSBenefitNote.setForeground(new Color(80, 100, 60));
