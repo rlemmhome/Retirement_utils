@@ -151,6 +151,11 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
     private          long simTotal    = 0;
     private volatile java.util.function.LongConsumer simProgressCallback = null;
 
+    // Calibration: stores past run times to estimate duration of next run
+    private static final String CALIB_FILE    = "calibration.ilscen.prefs";
+    private static final int    CALIB_MAX     = 20;   // max stored entries
+    private static final int    CALIB_MIN_FOR_ESTIMATE = 1; // need at least 1 matching run
+
     private static final NumberFormat CURRENCY = NumberFormat.getCurrencyInstance(Locale.US);
     static { CURRENCY.setMaximumFractionDigits(0); }
 
@@ -481,9 +486,9 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
                 + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
                 + "Reduced if claiming before FRA; increased if after FRA.<br>"
                 + "FRA = 67 for those born 1960 or later.</html>");
-        spWomanSSStartYear = spinI(2026,  2020, 2040, 1, "#");
+        spWomanSSStartYear = spinI(2027,  2020, 2040, 1, "#");
         spWomanSSStartMonth= spinI(12,    1,    12,   1, "#");
-        spSSCola           = spinD(2.4,   0.0,  10.0,  0.1, "0.0#");
+        spSSCola           = spinD(2.4,   0.0,  5.0,  0.1, "0.0#");
         lblSSBenefitNote   = new JLabel(" ");
         lblSSBenefitNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblSSBenefitNote.setForeground(new Color(80, 100, 60));
@@ -1678,6 +1683,75 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         } catch (Exception ignored) {}
     }
 
+
+    // =========================================================================
+    //  CALIBRATION -- stores and retrieves run times for countdown estimates
+    // =========================================================================
+
+    /** Format milliseconds as "Xs" or "Xm Ys" -- used in progress display. */
+    private static String formatSecs(long ms) {
+        long s = ms / 1000;
+        if (s < 60) return s + "s";
+        return (s / 60) + "m " + (s % 60) + "s";
+    }
+
+    /**
+     * Load average elapsed time for runs matching these parameters.
+     * Returns 0 if no matching entries (calibration not yet available).
+     */
+    private long loadCalibrationEstimate(int solvePaths, int binIters, int fanPaths, int horizon) {
+        java.io.File f = new java.io.File(CALIB_FILE);
+        if (!f.exists()) return 0;
+        java.util.List<Long> matches = new java.util.ArrayList<>();
+        try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split("\t");
+                if (parts.length < 5) continue;
+                try {
+                    int sp = Integer.parseInt(parts[0].trim());
+                    int bi = Integer.parseInt(parts[1].trim());
+                    int fp = Integer.parseInt(parts[2].trim());
+                    int hz = Integer.parseInt(parts[3].trim());
+                    long ms = Long.parseLong(parts[4].trim());
+                    if (sp == solvePaths && bi == binIters && fp == fanPaths && hz == horizon)
+                        matches.add(ms);
+                } catch (NumberFormatException ignored) {}
+            }
+        } catch (Exception ignored) {}
+        if (matches.size() < CALIB_MIN_FOR_ESTIMATE) return 0;
+        // Rolling average of last 5 matching entries
+        int start = Math.max(0, matches.size() - 5);
+        long sum = 0;
+        for (int i = start; i < matches.size(); i++) sum += matches.get(i);
+        return sum / (matches.size() - start);
+    }
+
+    /**
+     * Save a calibration entry.  Keeps at most CALIB_MAX entries total
+     * (oldest dropped first across all parameter sets).
+     */
+    private void saveCalibrationEntry(int solvePaths, int binIters,
+                                      int fanPaths, int horizon, long elapsedMs) {
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        java.io.File f = new java.io.File(CALIB_FILE);
+        if (f.exists()) {
+            try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
+                String line;
+                while ((line = br.readLine()) != null)
+                    if (!line.isBlank()) lines.add(line);
+            } catch (Exception ignored) {}
+        }
+        // New entry at the end
+        lines.add(solvePaths + "\t" + binIters + "\t" + fanPaths + "\t" + horizon + "\t" + elapsedMs);
+        // Trim to max
+        if (lines.size() > CALIB_MAX)
+            lines = lines.subList(lines.size() - CALIB_MAX, lines.size());
+        try (java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter(f))) {
+            for (String l : lines) pw.println(l);
+        } catch (Exception ignored) {}
+    }
+
     private JPanel buildStatusBar() {
         progressBar = new JProgressBar();
         progressBar.setStringPainted(true);
@@ -1712,35 +1786,59 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         final long grandTotal  = simTotal;
         final long grandTotalM = Math.max(1, grandTotal / 1_000_000);
 
-        SwingWorker<ProResults, Long> worker = new SwingWorker<>() {
-            @Override protected ProResults doInBackground() {
-                // Publish every solve-path batch. Swing's EDT coalesces rapid calls
-                // naturally, so this is safe even on fast machines -- and ensures the
-                // progress bar visibly moves on slower ones.
-                final long batchSize = solvePaths;
-                simProgressCallback = running -> {
-                    if (running % batchSize < batchSize) publish(running);
-                };
-                ProResults r = simulatePro(readInputs(), seed, solvePaths, fanPaths, binIters);
-                simProgressCallback = null;
-                return r;
+        // Scheduler reads simCount every 250ms and updates UI -- avoids EDT flooding
+        // entirely (same pattern as SS Optimizer tab status counter).
+        java.util.concurrent.ScheduledExecutorService progressScheduler =
+                java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+                    Thread t = new Thread(r, "progress-scheduler");
+                    t.setDaemon(true);
+                    return t;
+                });
+        final long startMs = System.currentTimeMillis();
+        // Load calibration estimate for this parameter set
+        final long estimatedMs = loadCalibrationEstimate(solvePaths, binIters, fanPaths, horizon);
+        progressScheduler.scheduleAtFixedRate(() -> {
+            long done    = simCount.get();
+            long elapsed = System.currentTimeMillis() - startMs;
+            long pct     = grandTotal > 0 ? Math.min(100, done * 100 / grandTotal) : 0;
+            String elapsedStr = formatSecs(elapsed);
+            String countdownStr;
+            if (estimatedMs > 0) {
+                long remaining = Math.max(0, estimatedMs - elapsed);
+                countdownStr = "~" + formatSecs(remaining) + " remaining";
+            } else {
+                countdownStr = "estimating...";
             }
-            @Override protected void process(java.util.List<Long> chunks) {
-                if (chunks.isEmpty()) return;
-                long latest = chunks.get(chunks.size() - 1);
-                long pct    = Math.min(100, latest * 100 / grandTotal);
+            String msg = String.format(
+                    "Running ~%,dM simulations  |  %s  |  %s elapsed",
+                    grandTotalM, countdownStr, elapsedStr);
+            SwingUtilities.invokeLater(() -> {
                 progressBar.setValue((int) pct);
-                progressBar.setString(String.format(
-                        "%,dM / ~%,dM simulations...", latest / 1_000_000, grandTotalM));
+                progressBar.setString(msg);
+            });
+        }, 250, 250, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+        SwingWorker<ProResults, Void> worker = new SwingWorker<>() {
+            @Override protected ProResults doInBackground() {
+                // No publish() calls -- scheduler handles all UI updates
+                simProgressCallback = null;  // disable legacy callback
+                return simulatePro(readInputs(), seed, solvePaths, fanPaths, binIters);
             }
             @Override protected void done() {
+                progressScheduler.shutdownNow();
                 try {
                     lastResults = get();
                     updateUI(lastResults);
+                    long elapsed = System.currentTimeMillis() - startMs;
+                    String elapsedStr = elapsed < 60000
+                            ? (elapsed / 1000) + "s"
+                            : (elapsed / 60000) + "m " + ((elapsed % 60000) / 1000) + "s";
                     progressBar.setValue(100);
                     progressBar.setString(String.format(
-                            "Complete -- ~%,dM simulations . %,d fan paths . %,d solve paths . %d iters",
-                            grandTotalM, fanPaths, solvePaths, binIters));
+                            "Complete -- ~%,dM simulations . %,d fan paths . %,d solve paths . %d iters . %s",
+                            grandTotalM, fanPaths, solvePaths, binIters, elapsedStr));
+                    // Save calibration entry for future countdown estimates
+                    saveCalibrationEntry(solvePaths, binIters, fanPaths, horizon, elapsed);
                 } catch (Exception ex) {
                     progressBar.setString("Error: " + ex.getMessage());
                     ex.printStackTrace();
