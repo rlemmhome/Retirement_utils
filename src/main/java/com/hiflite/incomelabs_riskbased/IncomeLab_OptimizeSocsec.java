@@ -1798,9 +1798,11 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         // Load calibration estimate for this parameter set
         final long estimatedMs = loadCalibrationEstimate(solvePaths, binIters, fanPaths, horizon);
         progressScheduler.scheduleAtFixedRate(() -> {
-            long done    = simCount.get();
             long elapsed = System.currentTimeMillis() - startMs;
-            long pct     = grandTotal > 0 ? Math.min(100, done * 100 / grandTotal) : 0;
+            // Progress bar tracks elapsed time vs estimated duration (not sim count)
+            int timePct = estimatedMs > 0
+                    ? (int) Math.min(99, elapsed * 100 / estimatedMs)
+                    : 0;  // stays at 0 until calibrated; jumps to 100 on done()
             String elapsedStr = formatSecs(elapsed);
             String countdownStr;
             if (estimatedMs > 0) {
@@ -1813,7 +1815,7 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
                     "Running ~%,dM simulations  |  %s  |  %s elapsed",
                     grandTotalM, countdownStr, elapsedStr);
             SwingUtilities.invokeLater(() -> {
-                progressBar.setValue((int) pct);
+                progressBar.setValue(timePct);
                 progressBar.setString(msg);
             });
         }, 250, 250, java.util.concurrent.TimeUnit.MILLISECONDS);
