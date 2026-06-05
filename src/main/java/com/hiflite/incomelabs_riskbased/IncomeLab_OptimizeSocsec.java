@@ -152,9 +152,19 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
     private volatile java.util.function.LongConsumer simProgressCallback = null;
 
     // Calibration: stores past run times to estimate duration of next run
-    private static final String CALIB_FILE    = "calibration.ilscen.prefs";
-    private static final int    CALIB_MAX     = 20;   // max stored entries
-    private static final int    CALIB_MIN_FOR_ESTIMATE = 1; // need at least 1 matching run
+    private static final int    CALIB_MAX              = 20;
+    private static final int    CALIB_MIN_FOR_ESTIMATE = 1;
+
+    // Directory structure under user home:
+    //   ~/.retirement_utils/.incomelab/scenarios/    <- scenario files
+    //   ~/.retirement_utils/.incomelab/calibration/  <- prefs files
+    private static final java.io.File DIR_ROOT      = new java.io.File(
+            System.getProperty("user.home"), ".retirement_utils");
+    private static final java.io.File DIR_INCOMELAB = new java.io.File(DIR_ROOT,     ".incomelab");
+    private static final java.io.File DIR_SCENARIOS = new java.io.File(DIR_INCOMELAB,"scenarios");
+    private static final java.io.File DIR_CALIB     = new java.io.File(DIR_INCOMELAB,"calibration");
+    private static final String CALIB_FILE   = new java.io.File(DIR_CALIB, "calibration.ilscen.prefs").getAbsolutePath();
+    private static final String RECENT_FILE  = new java.io.File(DIR_CALIB, "recent.ilscen.prefs").getAbsolutePath();
 
     private static final NumberFormat CURRENCY = NumberFormat.getCurrencyInstance(Locale.US);
     static { CURRENCY.setMaximumFractionDigits(0); }
@@ -174,6 +184,9 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
 
     public IncomeLab_OptimizeSocsec() {
         super("IncomeLab Optimize Socsec -- PoS + GK + Historical + SS Optimizer");
+        // Ensure app directories exist under ~/.retirement_utils/.incomelab/
+        DIR_SCENARIOS.mkdirs();
+        DIR_CALIB.mkdirs();
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout(0, 0));
         getContentPane().setBackground(new Color(245, 245, 242));
@@ -1460,7 +1473,7 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
     // =========================================================================
     //  SCENARIO SAVE / LOAD
     // =========================================================================
-    private static final String RECENT_PREFS_FILE = "recent.ilscen.prefs";
+    // RECENT_FILE replaced by RECENT_FILE (see DIR_CALIB above)
     private static final int    MAX_RECENT = 5;
     private static final String SCENARIO_VERSION = "1";
 
@@ -1470,9 +1483,9 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         String date = java.time.LocalDate.now().toString();
         String safeName = desc.replaceAll("[^a-zA-Z0-9_-]", "_");
         String defaultName = date + "_" + safeName + ".ilscen";
-        JFileChooser fc = new JFileChooser();
+        JFileChooser fc = new JFileChooser(DIR_SCENARIOS);
         fc.setDialogTitle("Save Scenario");
-        fc.setSelectedFile(new java.io.File(defaultName));
+        fc.setSelectedFile(new java.io.File(DIR_SCENARIOS, defaultName));
         fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
                 "IncomeLab Scenario files (*.ilscen)", "ilscen"));
         if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
@@ -1540,7 +1553,7 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
     }
 
     private void loadScenario(javax.swing.JTextField tfDesc, JComboBox<String> cmbRecent) {
-        JFileChooser fc = new JFileChooser();
+        JFileChooser fc = new JFileChooser(DIR_SCENARIOS);
         fc.setDialogTitle("Load Scenario");
         fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
                 "IncomeLab Scenario files (*.ilscen)", "ilscen"));
@@ -1653,7 +1666,7 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
     private void loadRecentFiles(JComboBox<String> cmb) {
         cmb.removeAllItems();
         cmb.addItem("-- recent files --");
-        java.io.File prefs = new java.io.File(RECENT_PREFS_FILE);
+        java.io.File prefs = new java.io.File(RECENT_FILE);
         if (!prefs.exists()) return;
         try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(prefs))) {
             String line;
@@ -1667,7 +1680,7 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
     private void addRecentFile(String path) {
         java.util.List<String> recent = new java.util.ArrayList<>();
         recent.add(path);
-        java.io.File prefs = new java.io.File(RECENT_PREFS_FILE);
+        java.io.File prefs = new java.io.File(RECENT_FILE);
         if (prefs.exists()) {
             try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(prefs))) {
                 String line;
