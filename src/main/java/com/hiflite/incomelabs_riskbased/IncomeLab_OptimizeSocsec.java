@@ -2177,14 +2177,16 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         for (int i = 0; i < solvePaths; i++) {
             SeededRng rng = new SeededRng(seed * 1000L + i * 7 + 3);
             double b = balance;
+            double cumInflFactor = 1.0;  // year-0 spend = W0 (no inflation); chained thereafter
 
             for (int y = 0; y < horizon; y++) {
                 double[] ri2 = getReturnAndInflation(inp, y, rng);
                 double ret   = ri2[0];
                 double infl  = ri2[1];
+                if (y > 0) cumInflFactor *= (1 + infl);  // chain per-year draws (matches GK convention)
                 int goGoRem = Math.max(0, goGoYearsRemaining - y);
                 double mult = (goGoRem > 0) ? inp.goGoMultiplier : 1.0;
-                double spend = (b > 0) ? firstYrWd * mult * Math.pow(1 + infl, y) : 0;
+                double spend = (b > 0) ? firstYrWd * mult * cumInflFactor : 0;
                 b = b * (1 + ret) - spend;
                 if (b <= 0) break;
             }
