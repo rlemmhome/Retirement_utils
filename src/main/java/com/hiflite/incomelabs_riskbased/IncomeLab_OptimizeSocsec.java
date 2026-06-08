@@ -31,15 +31,27 @@ import java.util.List;
  *     displayed table then reads the 50th-percentile balance across all fan
  *     paths at each year -- not the mean-return path used in simplified tools.
  *
- *  2. INFLATION-INDEXED WITHDRAWAL CALIBRATED VIA MONTE CARLO BINARY SEARCH
- *     The outer binary-search solver finds a first-year withdrawal W0 such that
- *     >= targetPoS of trial paths survive the full horizon. Within each trial
- *     path, spending each year y is W0 * goGoMultiplier(y) * (1+infl)^y --
- *     i.e. a real-dollar fixed withdrawal stream (the Bengen / Trinity-style
- *     baseline), NOT an annual re-optimization based on current balance.
- *     Dynamic adaptation to portfolio drift is provided by the Guyton-Klinger
- *     guardrails tab (Option C), which adjusts spending up or down when the
- *     current withdrawal rate strays from initial bounds.
+ *  2. TWO-LEVEL WITHDRAWAL ENGINE
+ *     INNER (per Monte Carlo trial in survivalRatePro):
+ *       Given a starting balance and a candidate first-year withdrawal W0,
+ *       simulate `horizon` years of stochastic returns and inflation with
+ *       spending = W0 * goGoMultiplier(y) * cumInflFactor(y), where
+ *       cumInflFactor chains the per-year inflation draws multiplicatively
+ *       (year 0 = 1.0, year y = product of (1 + infl_k) for k = 1..y).
+ *       This is a Bengen-style real-dollar fixed schedule -- no inner
+ *       re-optimization.
+ *     MIDDLE (solveWithdrawalPro):
+ *       Binary search over W0 such that >= targetPoS of inner trials
+ *       survive the full horizon for the given balance.
+ *     OUTER (fan paths in Step 1, displayed median path in Step 4):
+ *       Each simulated year, call solveWithdrawalPro again on the current
+ *       (or 50th-percentile) balance for the remaining horizon. This
+ *       produces year-by-year withdrawals that adapt to observed
+ *       portfolio drift -- the engine IS annually re-solving at this
+ *       level, even though each individual call's inner trials are not.
+ *
+ *     The Guyton-Klinger guardrails tab (Option C) provides a separate
+ *     dynamic-spending overlay with explicit upper/lower guardrails.
  *
  *  3. COUPLE-AWARE SS / RMD
  *     Full SSA FRA schedule, early/delayed adjustments, SECURE 2.0 RMDs (age 75),
@@ -369,7 +381,7 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
                 + "compute the actual PoS metric shown at the top.<br><br>"
                 + "<b>Default: 400</b> -- smooth fan chart, stable PoS reading.<br>"
                 + "100 = ~4? faster but noisier. 50 = rough but usable for quick checks.<br>"
-                + "Each fan path simulates the solved inflation-indexed withdrawal under fresh stochastic draws.</html>");
+                + "Each fan path re-solves the withdrawal annually against its current balance -- most expensive per path.</html>");
 
         // Mark optimizer results stale whenever any input changes
         ChangeListener markStale = e -> {
@@ -720,7 +732,7 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
 
         JPanel aNorth = new JPanel(new BorderLayout()); aNorth.setOpaque(false);
         JLabel aTitle = new JLabel(
-                "Year 1 portfolio withdrawal -- true stochastic median, inflation-indexed withdrawal solved by binary search");
+                "Year 1 portfolio withdrawal -- true stochastic median, re-solved annually on observed balance");
         aTitle.setFont(new Font("SansSerif", Font.PLAIN, 12));
         aTitle.setForeground(new Color(90, 90, 90));
         aNorth.add(aTitle, BorderLayout.WEST);
@@ -753,7 +765,7 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
                 BorderFactory.createEmptyBorder(3, 8, 3, 8)));
         for (String c : new String[]{
                 "OK True stochastic median (50th pct of fan paths)",
-                "OK Inflation-indexed withdrawal solved by Monte Carlo binary search",
+                "OK Annual re-solve on observed balance (inner trials use inflation-indexed schedule)",
                 "OK SECURE 2.0 RMDs  OK Couple SS with FRA/early/delayed" }) {
             JLabel lbl = new JLabel(c);
             lbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
@@ -813,12 +825,14 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
                             + " stochastic fan paths at this year.<br>"
                             + "More conservative and accurate than a mean-return path.</html>"; }
                     case 3 -> { return "<html><b>Pro PoS withdrawal</b><br>"
-                            + "Binary-search solved: finds the first-year withdrawal<br>"
-                            + "such that &ge; target % of Monte Carlo paths survive<br>"
-                            + "the full horizon. Subsequent years apply this amount<br>"
-                            + "indexed to inflation (real-dollar fixed withdrawal).<br>"
-                            + "Dynamic spending adjustments are handled by the<br>"
-                            + "Guyton-Klinger guardrails tab.</html>"; }
+                            + "For each displayed year, runs a Monte Carlo binary search<br>"
+                            + "against the 50th-percentile balance and remaining horizon<br>"
+                            + "to find the largest withdrawal where &ge; target % of inner<br>"
+                            + "trial paths survive. Inner trials use an inflation-indexed<br>"
+                            + "schedule (per-year inflation draws chained cumulatively).<br>"
+                            + "Year-over-year, the displayed withdrawal adapts to observed<br>"
+                            + "portfolio drift. The Guyton-Klinger guardrails tab provides<br>"
+                            + "an alternative dynamic-spending overlay.</html>"; }
                     case 9 -> {
                         // Annuity -- fixed nominal, erodes in real terms
                         double d = showRealDollars ? er.inflFactor : 1.0;
@@ -1941,9 +1955,13 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
     // ========================================================================
     //  ENHANCED PRO SIMULATION ENGINE
     //  1. True stochastic median: runs fan paths first, reads 50th-pct balance
-    //  2. Outer binary search finds first-year withdrawal at targetPoS;
-    //     trial paths apply inflation-indexed spending (NOT annual re-solve).
-    //     Guyton-Klinger guardrails provide the dynamic-spending overlay.
+    //  2. Annual re-solve at the fan-path and display levels: each year calls
+    //     solveWithdrawalPro on the current (or 50th-pct) balance for the
+    //     remaining horizon. Inner trial paths apply an inflation-indexed
+    //     schedule (cumulative chained per-year draws) with no further
+    //     re-optimization.
+    //  3. Guyton-Klinger guardrails (Option C) provide a separate
+    //     dynamic-spending overlay.
     // ========================================================================
     private ProResults simulatePro(SimInputs inp, long seed,
                                    int solvePaths, int fanPaths, int binIters) {
@@ -2136,9 +2154,12 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
 
     /**
      * Binary-search the largest first-year withdrawal whose trial-path survival
-     * rate meets or exceeds {@code inp.targetPoS}. Within each trial path the
-     * withdrawal is held constant in real terms (W0 * goGoMult * (1+infl)^y);
-     * this routine does NOT perform an inner annual re-optimization.
+     * rate meets or exceeds {@code inp.targetPoS} starting from the given balance.
+     * Within each trial path the withdrawal is held constant in real terms
+     * (W0 * goGoMult * cumInflFactor, where cumInflFactor chains the per-year
+     * stochastic inflation draws); this routine does NOT perform an inner annual
+     * re-optimization. Called annually by the fan-path and display loops to
+     * produce adaptive year-by-year withdrawals against the observed balance.
      */
     private int solveWithdrawalPro(int balance, int fromYear, int horizon,
                                    SimInputs inp, long seed,
@@ -2165,11 +2186,12 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
     /**
      * Fraction of Monte Carlo trial paths that survive {@code horizon} years
      * given an inflation-indexed withdrawal stream. For each path, year y
-     * spending = firstYrWd * goGoMult(y) * (1 + infl_y)^y, where returns and
-     * inflation are drawn stochastically per year. No inner binary search and
-     * no balance-aware re-optimization occurs here -- the withdrawal schedule
-     * is a real-dollar fixed stream calibrated by the outer binary search in
-     * {@link #solveWithdrawalPro}.
+     * spending = firstYrWd * goGoMult(y) * cumInflFactor(y), where
+     * cumInflFactor chains the per-year stochastic inflation draws
+     * multiplicatively (year 0 = 1.0; thereafter cumInflFactor *= (1 + infl_y)).
+     * No inner binary search and no balance-aware re-optimization occurs
+     * here -- the withdrawal schedule is a real-dollar fixed stream calibrated
+     * by the outer binary search in {@link #solveWithdrawalPro}.
      */
     private double survivalRatePro(int balance, int horizon, double firstYrWd,
                                    SimInputs inp, long seed, int solvePaths, int goGoYearsRemaining) {
@@ -2299,7 +2321,7 @@ public class IncomeLab_OptimizeSocsec extends JFrame {
         return preDrawSection + String.format(
                 "== INCOME LAB PRO -- FIRST WITHDRAWAL YEAR (%d) ==\n"
                         + "  Portfolio withdrawal:  %s/yr  (%.2f%% of $%,.0f)\n"
-                        + "  Method: true stochastic median . inflation-indexed withdrawal solved by binary search\n"
+                        + "  Method: true stochastic median . annual re-solve on observed balance\n"
                         + "  + Guaranteed income:   %s\n"
                         + "  = Total income:        %s\n"
                         + "  ? Total spending:      %s\n"
