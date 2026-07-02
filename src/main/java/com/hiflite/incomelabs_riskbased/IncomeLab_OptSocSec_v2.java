@@ -124,7 +124,8 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
     private JSpinner spLivingExp, spMedical, spMedInflation;
     private JSpinner spBaseTax, spTaxInflation;
     private JSpinner spGoGo, spGoGoDuration;
-    private JSpinner spUpperGuardrail, spLowerGuardrail;
+    private JSpinner spProPosUpperGuardrail, spProPosLowerGuardrail;
+    private JSpinner spGkUpperGuardrail, spGkLowerGuardrail;
     private JSpinner spManTradIRA, spManRothIRA, spManTrad401K, spManRoth401K;
     private JSpinner spWomanRoth401K, spWomanRothIRA, spWomanTradIRA, spWomanTrad401K;
     private JLabel   lblAccountTotal;
@@ -599,12 +600,26 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
 
-        // == Guardrails ====================================================
-        spUpperGuardrail = spinD(20.0, 5.0, 50.0, 1.0, "0.0#");
-        spLowerGuardrail = spinD(20.0, 5.0, 50.0, 1.0, "0.0#");
-        inner.add(card("Guardrails (advisory alerts)", new Object[]{
-                "Upper guardrail (% above yr1, raise alert)", spUpperGuardrail,
-                "Lower guardrail (% below yr1, cut alert)",   spLowerGuardrail,
+        // == Pro PoS advisory guardrails ===================================
+        spProPosUpperGuardrail = spinD(20.0, 5.0, 50.0, 1.0, "0.0#");
+        spProPosUpperGuardrail.setToolTipText("<html><b>Pro PoS -- Upper advisory guardrail (raise alert)</b><br>"
+                + "Used ONLY by the Pro PoS table's Alert column. It is <b>informational</b> --<br>"
+                + "it does NOT change any withdrawal amount.<br><br>"
+                + "If this year's base withdrawal RATE (draw / balance, go-go removed) rises<br>"
+                + "more than this % <b>above</b> the Year-1 base rate, the table flags a<br>"
+                + "<b>[^] raise alert</b>, signalling the portfolio has outperformed and you<br>"
+                + "could sustainably spend more.<br><b>Default: 20%</b></html>");
+        spProPosLowerGuardrail = spinD(20.0, 5.0, 50.0, 1.0, "0.0#");
+        spProPosLowerGuardrail.setToolTipText("<html><b>Pro PoS -- Lower advisory guardrail (cut alert)</b><br>"
+                + "Used ONLY by the Pro PoS table's Alert column. It is <b>informational</b> --<br>"
+                + "it does NOT change any withdrawal amount.<br><br>"
+                + "If this year's base withdrawal RATE (draw / balance, go-go removed) falls<br>"
+                + "more than this % <b>below</b> the Year-1 base rate, the table flags a<br>"
+                + "<b>[v] cut alert</b>, suggesting you consider trimming discretionary spend.<br>"
+                + "<b>Default: 20%</b></html>");
+        inner.add(card("Pro PoS Guardrails (advisory alerts only)", new Object[]{
+                "Upper guardrail (% above yr1, raise alert)", spProPosUpperGuardrail,
+                "Lower guardrail (% below yr1, cut alert)",   spProPosLowerGuardrail,
         }));
         inner.add(Box.createVerticalStrut(4));
 
@@ -656,18 +671,28 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         inner.add(cardScenario);
         inner.add(Box.createVerticalStrut(4));
 
-        // == Guardrails card (GK tab) ======================================
-        spUpperGuardrail = spinD(20.0, 5.0, 60.0, 1.0, "0.0#");
-        spUpperGuardrail.setToolTipText("<html><b>Upper guardrail -- Prosperity Rule (PR[^])</b><br>"
-                + "If the GK withdrawal rate falls more than this % below the initial rate,<br>"
-                + "the withdrawal is raised 10%.<br><b>Default: 20%</b></html>");
-        spLowerGuardrail = spinD(20.0, 5.0, 60.0, 1.0, "0.0#");
-        spLowerGuardrail.setToolTipText("<html><b>Lower guardrail -- Capital Preservation Rule (CPR[v])</b><br>"
-                + "If the GK withdrawal rate rises more than this % above the initial rate,<br>"
-                + "the withdrawal is cut 10%.<br><b>Default: 25%</b></html>");
-        inner.add(card("Guardrail Alerts (GK tab)", new Object[]{
-                "Upper guardrail -- raise alert (%)", spUpperGuardrail,
-                "Lower guardrail -- cut alert (%)",   spLowerGuardrail,
+        // == Guyton-Klinger guardrails (GK tab) ============================
+        // Conventional GK mapping: the UPPER guardrail is the ceiling that
+        // triggers the Capital Preservation Rule (a CUT); the LOWER guardrail is
+        // the floor that triggers the Prosperity Rule (a RAISE). Unlike the Pro
+        // PoS advisory guardrails above, these actually MODIFY the GK withdrawal.
+        spGkUpperGuardrail = spinD(20.0, 5.0, 60.0, 1.0, "0.0#");
+        spGkUpperGuardrail.setToolTipText("<html><b>Guyton-Klinger -- Upper guardrail (Capital Preservation Rule, CPR[v])</b><br>"
+                + "This <b>actually cuts</b> the GK withdrawal (it is not just an alert).<br><br>"
+                + "If the current GK withdrawal RATE rises more than this % <b>above</b> the<br>"
+                + "initial rate -- meaning the portfolio has shrunk and the fixed draw is now<br>"
+                + "too large a slice of it -- the withdrawal is <b>cut 10%</b> to preserve capital.<br>"
+                + "<b>Default: 20%</b></html>");
+        spGkLowerGuardrail = spinD(20.0, 5.0, 60.0, 1.0, "0.0#");
+        spGkLowerGuardrail.setToolTipText("<html><b>Guyton-Klinger -- Lower guardrail (Prosperity Rule, PR[^])</b><br>"
+                + "This <b>actually raises</b> the GK withdrawal (it is not just an alert).<br><br>"
+                + "If the current GK withdrawal RATE falls more than this % <b>below</b> the<br>"
+                + "initial rate -- meaning the portfolio has grown and the fixed draw is now<br>"
+                + "too small a slice of it -- the withdrawal is <b>raised 10%</b>.<br>"
+                + "<b>Default: 20%</b></html>");
+        inner.add(card("Guyton-Klinger Guardrails (adjust GK withdrawal)", new Object[]{
+                "Upper guardrail -- Capital Preservation, cut (%)", spGkUpperGuardrail,
+                "Lower guardrail -- Prosperity, raise (%)",         spGkLowerGuardrail,
         }));
         inner.add(Box.createVerticalStrut(4));
 
@@ -1961,12 +1986,12 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         i.taxInflation       = dv(spTaxInflation)    / 100.0;
         i.goGoMultiplier     = dv(spGoGo);
         i.goGoDuration       = iv(spGoGoDuration);
-        i.upperGuardrail     = dv(spUpperGuardrail) / 100.0;
-        i.lowerGuardrail     = dv(spLowerGuardrail) / 100.0;
+        i.proPosUpperGuardrail = dv(spProPosUpperGuardrail) / 100.0;
+        i.proPosLowerGuardrail = dv(spProPosLowerGuardrail) / 100.0;
+        i.gkUpperGuardrail     = dv(spGkUpperGuardrail)     / 100.0;
+        i.gkLowerGuardrail     = dv(spGkLowerGuardrail)     / 100.0;
         i.gkPreRate          = dv(spGkPreRate)       / 100.0;
         i.scenarioIndex      = cmbScenario != null ? cmbScenario.getSelectedIndex() : 0;
-        i.upperGuardrail     = dv(spUpperGuardrail)  / 100.0;
-        i.lowerGuardrail     = dv(spLowerGuardrail)  / 100.0;
         i.manAge             = computeAge(i.manBirthYear,   i.manBirthMonth);
         i.womanAge           = computeAge(i.womanBirthYear, i.womanBirthMonth);
         i.currentAge         = i.manAge;
@@ -2155,8 +2180,8 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                 double yr1Rate = yr1Wd / (double) inp.portfolio;            // base-draw rate at start
                 if (yr1Rate > 0) {
                     double vsYr1 = (curRate - yr1Rate) / yr1Rate;
-                    if      (vsYr1 >= inp.upperGuardrail)  alert = "[^] raise alert";
-                    else if (vsYr1 <= -inp.lowerGuardrail) alert = "[v] cut alert";
+                    if      (vsYr1 >= inp.proPosUpperGuardrail)  alert = "[^] raise alert";
+                    else if (vsYr1 <= -inp.proPosLowerGuardrail) alert = "[v] cut alert";
                 }
             }
 
@@ -2587,13 +2612,20 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                 }
                 if (applyInflation) wdGK *= (1 + yearInfl);
 
+                // Conventional Guyton-Klinger mapping:
+                //   UPPER guardrail -> Capital Preservation Rule (CUT): if the current
+                //     withdrawal RATE has risen more than upper% ABOVE the initial rate
+                //     (portfolio shrank), cut the withdrawal 10%.
+                //   LOWER guardrail -> Prosperity Rule (RAISE): if the current
+                //     withdrawal RATE has fallen more than lower% BELOW the initial rate
+                //     (portfolio grew), raise the withdrawal 10%.
                 double wdPctCheck = bal > 0 ? wdGK / bal : 0;
-                if (wdPctCheck > initialWdRate * (1 + inp.lowerGuardrail)) {
+                if (wdPctCheck > initialWdRate * (1 + inp.gkUpperGuardrail)) {
                     wdGK *= 0.90;
                     flags = flags.equals("--") ? "CPR\u25bc" : flags + " + CPR\u25bc";
                 }
                 wdPctCheck = bal > 0 ? wdGK / bal : 0;
-                if (wdPctCheck < initialWdRate * (1 - inp.upperGuardrail)) {
+                if (wdPctCheck < initialWdRate * (1 - inp.gkLowerGuardrail)) {
                     wdGK *= 1.10;
                     flags = flags.equals("--") ? "PR\u25b2" : flags + " + PR\u25b2";
                 }
@@ -3338,7 +3370,8 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         int livingExp, medical; double medInflation;
         int baseTax; double taxInflation;
         double goGoMultiplier; int goGoDuration;
-        double upperGuardrail, lowerGuardrail;
+        double proPosUpperGuardrail, proPosLowerGuardrail;   // Pro PoS advisory alerts only
+        double gkUpperGuardrail, gkLowerGuardrail;           // Guyton-Klinger active adjustments
         double gkPreRate;
         int scenarioIndex; // 0=Random, 1=Depression, 2=Stagflation, 3=DotCom, 4=GFC
     }
