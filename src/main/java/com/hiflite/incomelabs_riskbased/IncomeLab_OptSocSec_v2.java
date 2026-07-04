@@ -567,12 +567,12 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         inner.add(Box.createVerticalStrut(4));
 
         // == Spending ======================================================
-        spLivingExp    = spinI(100_000, 0, 500_000, 1_000, "#,###");
-        spMedical      = spinI( 16_000, 0, 100_000,   500, "#,###");
+        spLivingExp    = spinI( 70_000, 0, 500_000, 1_000, "#,###");
+        spMedical      = spinI(  6_200, 0, 100_000,   500, "#,###");
         spMedInflation = spinD(4.5,     0.0, 15.0,   0.1,  "0.0#");
         spBaseTax      = spinI( 17_500, 0, 200_000, 1_000, "#,###");
         spTaxInflation = spinD(3.79,    0.0, 10.0,  0.01,  "0.00#");
-        spGoGo         = spinD(1.300,   1.0,  2.0,  0.001, "0.000#");
+        spGoGo         = spinD(1.000,   1.0,  2.0,  0.001, "0.000#");
         spGoGo.setToolTipText("<html><b>Common multiplier ranges:</b><br><br>"
                 + "&nbsp;&nbsp;<b>1.2?&nbsp;(20% more)</b> -- Conservative; suitable if you already have<br>"
                 + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
