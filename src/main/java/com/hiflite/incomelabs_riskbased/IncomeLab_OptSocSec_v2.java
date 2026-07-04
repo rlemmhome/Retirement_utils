@@ -432,9 +432,9 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         lblHorizonNote   = new JLabel(" ");
         lblHorizonNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblHorizonNote.setForeground(new Color(100, 100, 100));
-        lblManAge        = new JLabel("Man age: --");
+        lblManAge        = new JLabel("User age: --");
         lblManAge.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        lblWomanAge      = new JLabel("Woman age: --");
+        lblWomanAge      = new JLabel("Spouse age: --");
         lblWomanAge.setFont(new Font("SansSerif", Font.PLAIN, 12));
 
         ChangeListener peopleListener = e -> {
@@ -453,12 +453,12 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         ageRow.add(lblManAge); ageRow.add(lblWomanAge);
 
         inner.add(card("People -- Birth Dates & Life Expectancy", new Object[]{
-                "Man birth year",         spManBirthYear,
-                "Man birth month",        spManBirthMonth,
-                "Woman birth year",       spWomanBirthYear,
-                "Woman birth month",      spWomanBirthMonth,
-                "Man's life expectancy",  spManPlanAge,
-                "Woman's life expectancy", spWomanPlanAge,
+                "User birth year",         spManBirthYear,
+                "User birth month",        spManBirthMonth,
+                "Spouse birth year",       spWomanBirthYear,
+                "Spouse birth month",      spWomanBirthMonth,
+                "User's life expectancy",  spManPlanAge,
+                "Spouse's life expectancy", spWomanPlanAge,
                 null,                     ageRow,
                 null,                     lblHorizonNote,
         }));
@@ -489,14 +489,14 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
             sp.addChangeListener(acctListener);
 
         inner.add(card("Account Balances (SECURE 2.0 RMD -- Age 75)", new Object[]{
-                "Man -- Traditional IRA ($)  [RMD age 75]",    spManTradIRA,
-                "Man -- Roth IRA ($)  [no RMD]",               spManRothIRA,
-                "Man -- Traditional 401K ($)  [RMD age 75]",   spManTrad401K,
-                "Man -- Roth 401K ($)  [no RMD]",              spManRoth401K,
-                "Woman -- Roth 401K ($)  [no RMD]",            spWomanRoth401K,
-                "Woman -- Roth IRA ($)  [no RMD]",             spWomanRothIRA,
-                "Woman -- Traditional IRA ($)  [RMD age 75]",  spWomanTradIRA,
-                "Woman -- Traditional 401K ($)  [RMD age 75]", spWomanTrad401K,
+                "User -- Traditional IRA ($)  [RMD age 75]",    spManTradIRA,
+                "User -- Roth IRA ($)  [no RMD]",               spManRothIRA,
+                "User -- Traditional 401K ($)  [RMD age 75]",   spManTrad401K,
+                "User -- Roth 401K ($)  [no RMD]",              spManRoth401K,
+                "Spouse -- Roth 401K ($)  [no RMD]",            spWomanRoth401K,
+                "Spouse -- Roth IRA ($)  [no RMD]",             spWomanRothIRA,
+                "Spouse -- Traditional IRA ($)  [RMD age 75]",  spWomanTradIRA,
+                "Spouse -- Traditional 401K ($)  [RMD age 75]", spWomanTrad401K,
                 null,                                          lblAccountTotal,
         }));
         inner.add(Box.createVerticalStrut(4));
@@ -504,7 +504,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
 
         // == Social Security ===============================================
         spManPIA           = spinI(3_788, 0, 6_000, 50, "#,###");
-        spManPIA.setToolTipText("<html><b>Man's Primary Insurance Amount (PIA)</b><br>"
+        spManPIA.setToolTipText("<html><b>User's Primary Insurance Amount (PIA)</b><br>"
                 + "Monthly SS benefit payable at Full Retirement Age (FRA).<br>"
                 + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
                 + "Reduced if claiming before FRA; increased if after FRA.<br>"
@@ -512,7 +512,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         spManSSStartYear   = spinI(2027,  2020, 2040, 1, "#");
         spManSSStartMonth  = spinI(1,     1,    12,   1, "#");
         spWomanPIA         = spinI(3_897, 0, 6_000, 50, "#,###");
-        spWomanPIA.setToolTipText("<html><b>Woman's Primary Insurance Amount (PIA)</b><br>"
+        spWomanPIA.setToolTipText("<html><b>Spouse's Primary Insurance Amount (PIA)</b><br>"
                 + "Monthly SS benefit payable at Full Retirement Age (FRA).<br>"
                 + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
                 + "Reduced if claiming before FRA; increased if after FRA.<br>"
@@ -531,12 +531,12 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
             sp.addChangeListener(ssListener);
 
         inner.add(card("Social Security", new Object[]{
-                "Man PIA (monthly at FRA, $)",     spManPIA,
-                "Man SS start year",               spManSSStartYear,
-                "Man SS start month",              spManSSStartMonth,
-                "Woman PIA (monthly at FRA, $)",   spWomanPIA,
-                "Woman SS start year",             spWomanSSStartYear,
-                "Woman SS start month",            spWomanSSStartMonth,
+                "User PIA (monthly at FRA, $)",     spManPIA,
+                "User SS start year",               spManSSStartYear,
+                "User SS start month",              spManSSStartMonth,
+                "Spouse PIA (monthly at FRA, $)",   spWomanPIA,
+                "Spouse SS start year",             spWomanSSStartYear,
+                "Spouse SS start month",            spWomanSSStartMonth,
                 "SS COLA (%/yr)",                  spSSCola,
                 null,                              lblSSBenefitNote,
         }));
@@ -831,15 +831,15 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
     // == Pro PoS Table =====================================================
     private JScrollPane buildTablePanel() {
         String[] cols = {
-                "Man age", "Cal yr", "Portfolio bal (50th%)",           // 0 1 2
+                "User Age", "Cal yr", "Portfolio bal (50th%)",         // 0 1 2
                 "Pro PoS withdrawal", "Actual wd", "Wd %",              // 3 4 5
                 "Alert",                                                  // 6
-                "Man SS", "Woman SS", "Annuity", "Fixed Inc",            // 7 8 9 10
+                "User SS", "Spouse SS", "Annuity", "Fixed Inc",          // 7 8 9 10
                 "Living Exp", "Medical", "Tax (est)",                    // 11 12 13
                 "Total spend", "Total income", "Surplus/gap",            // 14 15 16
                 "Infl factor",                                           // 17
-                "Man RMD", "Woman RMD", "Combined RMD", "-> Roth/MM",    // 18 19 20 21
-                "Bal Chg"                                                   // 22
+                "User RMD", "Spouse RMD", "Combined RMD", "-> Roth/MM",  // 18 19 20 21
+                "Portfolio Chg"                                             // 22
         };
         tblProModel = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -892,14 +892,14 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                             return String.format(
                                     "<html><b>Actual wd -- go-go years active</b><br>"
                                             + "&nbsp;&nbsp;Pro PoS withdrawal: %s<br>"
-                                            + "&nbsp;&nbsp;? go-go multiplier:&nbsp;&nbsp;%.3f?<br>"
+                                            + "&nbsp;&nbsp;x go-go multiplier:&nbsp;&nbsp;%.3f<br>"
                                             + "&nbsp;&nbsp;= Actual wd:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br><br>"
                                             + "Go-go multiplier increases spending during your<br>"
                                             + "active early-retirement travel years.</html>",
                                     posWdStr, er.goGoMult, wdStr);
                         } else {
                             return "<html><b>Actual wd</b><br>"
-                                    + "Go-go years have ended -- multiplier = 1.0?.<br>"
+                                    + "Go-go years have ended -- multiplier = 1.0.<br>"
                                     + "Actual wd = Pro PoS withdrawal.</html>";
                         }
                     }
@@ -916,13 +916,75 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                                 er.inflFactor,
                                 CURRENCY.format((long)(100_000 / er.inflFactor)));
                     }
+                    case 10 -> {
+                        double d = showRealDollars ? er.inflFactor : 1.0;
+                        return String.format(
+                                "<html><b>Fixed Inc = User SS + Spouse SS + Annuity</b><br>"
+                                        + "&nbsp;&nbsp;User SS:&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Spouse SS:&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Annuity:&nbsp;&nbsp;&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;= Fixed Inc:&nbsp;<b>%s</b></html>",
+                                CURRENCY.format((long)(er.manSS / d)),
+                                CURRENCY.format((long)(er.womanSS / d)),
+                                CURRENCY.format((long)(er.annuity / d)),
+                                CURRENCY.format((long)(er.guaranteed / d)));
+                    }
+                    case 11 -> {
+                        double d = showRealDollars ? er.inflFactor : 1.0;
+                        return String.format(
+                                "<html><b>Living Exp = base input inflated to this year</b><br>"
+                                        + "&nbsp;&nbsp;This year's value:&nbsp;<b>%s</b><br>"
+                                        + "&nbsp;&nbsp;Inflation factor applied:&nbsp;%.3f<br><br>"
+                                        + "Source: your Living Expense input, scaled by the median<br>"
+                                        + "cumulative inflation factor for this year.</html>",
+                                CURRENCY.format((long)(er.living / d)),
+                                er.inflFactor);
+                    }
+                    case 14 -> {
+                        double d = showRealDollars ? er.inflFactor : 1.0;
+                        return String.format(
+                                "<html><b>Total spend = Living Exp + Medical + Tax</b><br>"
+                                        + "&nbsp;&nbsp;Living Exp:&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Medical:&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Tax (est):&nbsp;&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;= Total spend:&nbsp;<b>%s</b></html>",
+                                CURRENCY.format((long)(er.living / d)),
+                                CURRENCY.format((long)(er.medical / d)),
+                                CURRENCY.format((long)(er.tax / d)),
+                                CURRENCY.format((long)(er.totalSpend / d)));
+                    }
+                    case 15 -> {
+                        double d = showRealDollars ? er.inflFactor : 1.0;
+                        return String.format(
+                                "<html><b>Total income = Actual wd + Fixed Inc</b><br>"
+                                        + "&nbsp;&nbsp;Actual wd (portfolio draw):&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Fixed Inc (guaranteed):&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;= Total income:&nbsp;<b>%s</b></html>",
+                                CURRENCY.format((long)(er.wdActual / d)),
+                                CURRENCY.format((long)(er.guaranteed / d)),
+                                CURRENCY.format((long)(er.totalIncome / d)));
+                    }
+                    case 16 -> {
+                        double d = showRealDollars ? er.inflFactor : 1.0;
+                        return String.format(
+                                "<html><b>Surplus / gap = Total income - Total spend</b><br>"
+                                        + "&nbsp;&nbsp;Total income:&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Total spend:&nbsp;&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;= Surplus/gap:&nbsp;<b>%s</b><br><br>"
+                                        + "This column represents the amount over the expected living<br>"
+                                        + "expenses that is available for spending.</html>",
+                                CURRENCY.format((long)(er.totalIncome / d)),
+                                CURRENCY.format((long)(er.totalSpend / d)),
+                                (er.surplus >= 0 ? "+" : "-")
+                                        + CURRENCY.format((long)(Math.abs(er.surplus) / d)));
+                    }
                     case COL_ALERT -> {
-                        if ("[^] raise alert".equals(er.alert))
+                        if ("[^] raise".equals(er.alert))
                             return "<html><b>[^] Raise alert</b><br>"
                                     + "This year's base withdrawal RATE (draw / balance, go-go removed)<br>"
                                     + "rose above the upper guardrail vs. the Year-1 base rate.<br>"
                                     + "Portfolio has outperformed; sustainable to spend more.</html>";
-                        if ("[v] cut alert".equals(er.alert))
+                        if ("[v] cut".equals(er.alert))
                             return "<html><b>[v] Cut alert</b><br>"
                                     + "This year's base withdrawal RATE (draw / balance, go-go removed)<br>"
                                     + "fell below the lower guardrail vs. the Year-1 base rate.<br>"
@@ -935,7 +997,10 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                                 + "Combined RMD (" + CURRENCY.format(er.combRmd) + ")<br>"
                                 + "exceeds planned spending withdrawal.<br>"
                                 + "Overage (" + CURRENCY.format(er.rmdOverage) + ") -> Roth/MM -- not spent.<br>"
-                                + "This is an involuntary Roth conversion opportunity.</html>";
+                                + "This is an involuntary Roth conversion opportunity.<br>"
+                                + "The simulated portfolio balance is not reduced by RMDs; the overage<br>"
+                                + "is assumed re-invested at a return at least matching inflation and<br>"
+                                + "remains in your asset base.</html>";
                     }
                     case COL_BAL_DELTA -> {
                         double d = showRealDollars ? er.inflFactor : 1.0;
@@ -989,13 +1054,31 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                             + "Monte Carlo trials survive, re-solved each year on the median balance.<br>"
                             + "<b>Guaranteed income (SS/annuity) is NOT subtracted</b> -- this is what the<br>"
                             + "portfolio alone can sustain. See Surplus/gap for budget headroom.</html>";
+                    case 10 -> "<html><b>Fixed Inc -- guaranteed income (fed by User SS + Spouse SS + Annuity)</b><br>"
+                            + "= User SS + Spouse SS + Annuity for the year.<br>"
+                            + "This is the non-portfolio income floor. Hover a cell to see the<br>"
+                            + "three source values that add up to that year's figure.</html>";
+                    case 11 -> "<html><b>Living Exp -- core living budget (fed by your Living Exp input)</b><br>"
+                            + "= your base Living Expense input, inflated by the median cumulative<br>"
+                            + "inflation factor for that year (stochastic 50th-percentile path).<br>"
+                            + "Hover a cell to see the base input and the inflation factor applied.</html>";
+                    case 14 -> "<html><b>Total spend -- committed budget (fed by Living Exp + Medical + Tax)</b><br>"
+                            + "= Living Exp + Medical + Tax (est).<br>"
+                            + "This is your fixed yearly commitment. Hover a cell to see the<br>"
+                            + "three source values that add up to that year's total.</html>";
+                    case 15 -> "<html><b>Total income -- money available (fed by Actual wd + Fixed Inc)</b><br>"
+                            + "= Actual wd (portfolio draw) + Fixed Inc (guaranteed income).<br>"
+                            + "This is the full pool available this year. Hover a cell to see the<br>"
+                            + "two source values that add up to that year's total.</html>";
                     case 16 -> "<html><b>Surplus / gap -- Total income minus Total spend</b><br>"
                             + "= (Guaranteed income + Actual wd) - (Living + Medical + Tax).<br><br>"
                             + "A <b>positive surplus is not slack to ignore</b> -- it is your headroom for<br>"
                             + "Roth conversions up to your bracket and IRMAA ceilings. A negative gap<br>"
                             + "means the max sustainable draw plus guaranteed income still falls short<br>"
                             + "of the budget at your PoS target; the draw is already capped by PoS, so<br>"
-                            + "closing it means trimming spend, lowering the PoS target, or both.</html>";
+                            + "closing it means trimming spend, lowering the PoS target, or both.<br>"
+                            + "This column represents the amount over the expected living expenses that<br>"
+                            + "is available for spending.</html>";
                     case 5  -> "<html><b>Wd % -- effective withdrawal rate</b><br>"
                             + "= Actual wd / portfolio balance.<br>"
                             + "Shows what percentage of the portfolio is being spent this year.<br>"
@@ -1008,24 +1091,27 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                             + "multiply by this number.<br><br>"
                             + "Example: Infl factor = 1.450 in Year 10 means $1.00 today<br>"
                             + "costs $1.45 in that year -- or a $100K withdrawal is worth only $69K today.</html>";
-                    case 18 -> "<html><b>Man RMD</b><br>"
-                            + "Required Minimum Distribution from man's traditional IRA + 401K.<br>"
+                    case 18 -> "<html><b>User RMD</b><br>"
+                            + "Required Minimum Distribution from the user's traditional IRA + 401K.<br>"
                             + "Begins age 75 (SECURE 2.0, born after 1960).</html>";
-                    case 19 -> "<html><b>Woman RMD</b><br>"
-                            + "Required Minimum Distribution from woman's traditional IRA + 401K.<br>"
+                    case 19 -> "<html><b>Spouse RMD</b><br>"
+                            + "Required Minimum Distribution from the spouse's traditional IRA + 401K.<br>"
                             + "Begins age 75 (SECURE 2.0, born after 1960).</html>";
                     case 20 -> "<html><b>Combined RMD</b><br>"
                             + "Sum of man + woman RMDs.<br>"
                             + "Orange = RMD exceeds planned withdrawal; overage -> Roth/MM.</html>";
                     case 21 -> "<html><b>-> Roth/MM -- RMD overage redirected</b><br>"
-                            + "= max(0, Combined RMD ? Actual wd).<br>"
+                            + "= max(0, Combined RMD - Actual wd).<br>"
                             + "When RMD exceeds the planned spending withdrawal, the excess must<br>"
                             + "still be taken but is redirected to Roth/MM -- not spent.<br>"
-                            + "This is effectively an involuntary Roth conversion opportunity.</html>";
-                    case 22 -> "<html><b>Bal ? -- portfolio balance change</b><br>"
-                            + "= end-of-year balance ? start-of-year balance.<br>"
-                            + "= market growth ? spending withdrawal.<br>"
-                            + "Green = portfolio grew . Red = portfolio shrank.</html>";
+                            + "This is effectively an involuntary Roth conversion opportunity.<br>"
+                            + "The simulated portfolio balance is not reduced by RMDs; the overage<br>"
+                            + "is assumed re-invested at a return at least matching inflation and<br>"
+                            + "remains in your asset base.</html>";
+                    case 22 -> "<html><b>Portfolio Chg -- portfolio balance change</b><br>"
+                            + "= end-of-year balance - start-of-year balance.<br>"
+                            + "= market growth - spending withdrawal.<br>"
+                            + "Green = portfolio grew. Red = portfolio shrank.</html>";
                     default -> null;
                 };
             }
@@ -1054,8 +1140,8 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                     if ((col == 3 || col == 4) && goGo) {
                         c.setBackground(GOGO_WD_BG); c.setForeground(new Color(0, 90, 50));
                     } else if (col == COL_ALERT) {
-                        if ("[^] raise alert".equals(er.alert)) c.setForeground(new Color(59, 109, 17));
-                        else if ("[v] cut alert".equals(er.alert)) c.setForeground(new Color(163, 45, 45));
+                        if ("[^] raise".equals(er.alert)) c.setForeground(new Color(59, 109, 17));
+                        else if ("[v] cut".equals(er.alert)) c.setForeground(new Color(163, 45, 45));
                     } else if (col == COL_CMB_RMD || col == COL_ROTH_MM) {
                         if (er.rmdOverage > 0) { c.setBackground(ORANGE_BG); c.setForeground(ORANGE_FG); }
                     } else if ((col == 18 || col == 19) && er.rmdOverage > 0) {
@@ -1144,7 +1230,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
 
         JLabel modeNote = new JLabel(
                 "  Unchecked = use manual SS dates from input panel  |  "
-                        + "Checked = scan all Bob x Jo claiming-age combinations");
+                        + "Checked = scan all User x Spouse claiming-age combinations");
         modeNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
         modeNote.setForeground(new Color(80, 80, 80));
 
@@ -1196,8 +1282,8 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
 
         // == Results table ==================================================
         String[] optCols = {
-                "Rank", "Bob SS Start", "Bob Age", "Bob Mo. ($)",
-                "Jo SS Start",  "Jo Age",  "Jo Mo. ($)",
+                "Rank", "User SS Start", "User Age", "User Mo. ($)",
+                "Spouse SS Start",  "Spouse Age",  "Spouse Mo. ($)",
                 "Combined SS/yr", "Total Inc Yr1", "Port Wd Yr1",
                 "Init Rate %", "Go-Go Guar", "Proj Final Bal"
         };
@@ -2180,8 +2266,8 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                 double yr1Rate = yr1Wd / (double) inp.portfolio;            // base-draw rate at start
                 if (yr1Rate > 0) {
                     double vsYr1 = (curRate - yr1Rate) / yr1Rate;
-                    if      (vsYr1 >= inp.proPosUpperGuardrail)  alert = "[^] raise alert";
-                    else if (vsYr1 <= -inp.proPosLowerGuardrail) alert = "[v] cut alert";
+                    if      (vsYr1 >= inp.proPosUpperGuardrail)  alert = "[^] raise";
+                    else if (vsYr1 <= -inp.proPosLowerGuardrail) alert = "[v] cut";
                 }
             }
 
@@ -2313,7 +2399,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                 ? " . [Stress: " + HistoricalScenarios.SCENARIO_NAMES[inp.scenarioIndex].split(" \\(")[0] + "]"
                 : "";
         lblDetail.setText(String.format(
-                "Man (age %d) . Woman (age %d) . Draws begin %02d/%d . "
+                "User (age %d) . Spouse (age %d) . Draws begin %02d/%d . "
                         + "%.2f%% nom return / %.2f%% inflation%s",
                 inp.manAge, inp.womanAge,
                 inp.withdrawStartMonth, inp.withdrawStartYear,
@@ -2394,7 +2480,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
             preDrawSection = String.format(
                     "== YEAR %d -- PRE-DRAW ==\n"
                             + "  No portfolio draws.\n"
-                            + "  Man (age %d) . Woman (age %d)\n\n",
+                            + "  User (age %d) . Spouse (age %d)\n\n",
                     inp.baseYear, inp.manAge, inp.womanAge);
         }
 
@@ -2407,13 +2493,13 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                         + "  ? Total spending:      %s\n"
                         + "  -> %s of %s\n\n"
                         + "== SOCIAL SECURITY ==\n"
-                        + "  Man: %s/yr from %02d/%d (age %d) . Woman: %s/yr from %02d/%d (age %d)\n"
+                        + "  User: %s/yr from %02d/%d (age %d) . Spouse: %s/yr from %02d/%d (age %d)\n"
                         + "  COLA %.1f%%/yr\n\n"
                         + "== ANNUITY ==\n"
                         + "  %s/yr from %d (non-COLA)\n\n"
                         + "== RMD SCHEDULE (SECURE 2.0 -- age 75) ==\n"
-                        + "  Man's trad IRA + 401K: %s . RMDs begin %d\n"
-                        + "  Woman's trad IRA + 401K: %s . RMDs begin %d\n"
+                        + "  User's trad IRA + 401K: %s . RMDs begin %d\n"
+                        + "  Spouse's trad IRA + 401K: %s . RMDs begin %d\n"
                         + "  Roth accounts (no RMD): %s\n\n"
                         + "== SPENDING ==\n"
                         + "  Base tax %s in %d . Medical %s at %.1f%%/yr\n"
@@ -2495,7 +2581,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         String womAdj = womAgeM < womFra ? String.format("%.1f%% early", (1.0-womM/womanPIA)*100)
                 : womAgeM > womFra ? String.format("+%.1f%% delayed", (womM/womanPIA-1.0)*100) : "at FRA";
         lblSSBenefitNote.setText(String.format(
-                "<html><i>Computed monthly: Man $%,.0f (%s) . Woman $%,.0f (%s)</i></html>",
+                "<html><i>Computed monthly: User $%,.0f (%s) . Spouse $%,.0f (%s)</i></html>",
                 manM, manAdj, womM, womAdj));
     }
 
@@ -2685,16 +2771,16 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         // 15=TotalSpend 16=TotalIncome 17=SurplusGap
         // 18=InflFactor 19=ManRMD 20=WomanRMD 21=CombRMD 22=->Roth/MM 23=Bal?
         String[] gkCols = {
-                "Man age", "Cal yr", "Portfolio bal",                        // 0 1 2
+                "User Age", "Cal yr", "Portfolio bal",                      // 0 1 2
                 "GK withdrawal", "Actual wd", "Wd %",                       // 3 4 5
                 "Rules (raw)",                                                // 6 hidden
                 "Rule flags",                                                 // 7 visible
-                "Man SS", "Woman SS", "Annuity", "Fixed Inc",                // 8 9 10 11
+                "User SS", "Spouse SS", "Annuity", "Fixed Inc",              // 8 9 10 11
                 "Living Exp", "Medical", "Tax (est)",                        // 12 13 14
                 "Total spend", "Total income", "Surplus/gap",                // 15 16 17
                 "Infl factor",                                                // 18
-                "Man RMD", "Woman RMD", "Combined RMD", "-> Roth/MM",         // 19 20 21 22
-                "Bal Chg"                                                        // 23
+                "User RMD", "Spouse RMD", "Combined RMD", "-> Roth/MM",       // 19 20 21 22
+                "Portfolio Chg"                                                  // 23
         };
         tblGkModel = new DefaultTableModel(gkCols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -2744,17 +2830,82 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                     sb.append("</html>");
                     return sb.toString();
                 }
+                if (col == 11) { // Fixed Inc
+                    double d = showRealDollars ? gr.inflFactor : 1.0;
+                    return String.format(
+                            "<html><b>Fixed Inc = User SS + Spouse SS + Annuity</b><br>"
+                                    + "&nbsp;&nbsp;User SS:&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
+                                    + "&nbsp;&nbsp;Spouse SS:&nbsp;%s<br>"
+                                    + "&nbsp;&nbsp;Annuity:&nbsp;&nbsp;&nbsp;%s<br>"
+                                    + "&nbsp;&nbsp;= Fixed Inc:&nbsp;<b>%s</b></html>",
+                            CURRENCY.format((long)(gr.manSS / d)),
+                            CURRENCY.format((long)(gr.womanSS / d)),
+                            CURRENCY.format((long)(gr.annuity / d)),
+                            CURRENCY.format((long)(gr.guaranteed / d)));
+                }
+                if (col == 12) { // Living Exp
+                    double d = showRealDollars ? gr.inflFactor : 1.0;
+                    return String.format(
+                            "<html><b>Living Exp = base input inflated to this year</b><br>"
+                                    + "&nbsp;&nbsp;This year's value:&nbsp;<b>%s</b><br>"
+                                    + "&nbsp;&nbsp;Inflation factor applied:&nbsp;%.3f<br><br>"
+                                    + "Source: your Living Expense input, scaled by the median<br>"
+                                    + "cumulative inflation factor for this year.</html>",
+                            CURRENCY.format((long)(gr.living / d)),
+                            gr.inflFactor);
+                }
+                if (col == 15) { // Total spend
+                    double d = showRealDollars ? gr.inflFactor : 1.0;
+                    return String.format(
+                            "<html><b>Total spend = Living Exp + Medical + Tax</b><br>"
+                                    + "&nbsp;&nbsp;Living Exp:&nbsp;%s<br>"
+                                    + "&nbsp;&nbsp;Medical:&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
+                                    + "&nbsp;&nbsp;Tax (est):&nbsp;&nbsp;%s<br>"
+                                    + "&nbsp;&nbsp;= Total spend:&nbsp;<b>%s</b></html>",
+                            CURRENCY.format((long)(gr.living / d)),
+                            CURRENCY.format((long)(gr.medical / d)),
+                            CURRENCY.format((long)(gr.tax / d)),
+                            CURRENCY.format((long)(gr.totalSpend / d)));
+                }
+                if (col == 16) { // Total income
+                    double d = showRealDollars ? gr.inflFactor : 1.0;
+                    return String.format(
+                            "<html><b>Total income = Actual wd + Fixed Inc</b><br>"
+                                    + "&nbsp;&nbsp;Actual wd (portfolio draw):&nbsp;%s<br>"
+                                    + "&nbsp;&nbsp;Fixed Inc (guaranteed):&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
+                                    + "&nbsp;&nbsp;= Total income:&nbsp;<b>%s</b></html>",
+                            CURRENCY.format((long)(gr.wdActual / d)),
+                            CURRENCY.format((long)(gr.guaranteed / d)),
+                            CURRENCY.format((long)(gr.totalIncome / d)));
+                }
+                if (col == 17) { // Surplus/gap
+                    double d = showRealDollars ? gr.inflFactor : 1.0;
+                    return String.format(
+                            "<html><b>Surplus / gap = Total income - Total spend</b><br>"
+                                    + "&nbsp;&nbsp;Total income:&nbsp;%s<br>"
+                                    + "&nbsp;&nbsp;Total spend:&nbsp;&nbsp;%s<br>"
+                                    + "&nbsp;&nbsp;= Surplus/gap:&nbsp;<b>%s</b><br><br>"
+                                    + "This column represents the amount over the expected living<br>"
+                                    + "expenses that is available for spending.</html>",
+                            CURRENCY.format((long)(gr.totalIncome / d)),
+                            CURRENCY.format((long)(gr.totalSpend / d)),
+                            (gr.surplus >= 0 ? "+" : "-")
+                                    + CURRENCY.format((long)(Math.abs(gr.surplus) / d)));
+                }
                 if (col == 22 && gr.rmdOverage > 0) { // Roth/MM
                     return "<html><b>RMD overage -> Roth/MM</b><br>"
                             + "Combined RMD (" + CURRENCY.format(gr.combRmd) + ")<br>"
                             + "exceeds planned GK withdrawal (" + CURRENCY.format(gr.wdActual) + ").<br>"
-                            + "Overage (" + CURRENCY.format(gr.rmdOverage) + ") goes to Roth/MM -- not spent.</html>";
+                            + "Overage (" + CURRENCY.format(gr.rmdOverage) + ") goes to Roth/MM -- not spent.<br>"
+                            + "The simulated portfolio balance is not reduced by RMDs; the overage<br>"
+                            + "is assumed re-invested at a return at least matching inflation and<br>"
+                            + "remains in your asset base.</html>";
                 }
                 if (col == 23) { // Bal ? tooltip
                     double d = showRealDollars ? gr.inflFactor : 1.0;
                     return String.format("<html><b>Portfolio change: %s%s</b><br>"
                                     + "&nbsp;&nbsp;Market growth: +%s<br>"
-                                    + "&nbsp;&nbsp;Withdrawal:   ?%s<br>",
+                                    + "&nbsp;&nbsp;Withdrawal:   -%s<br>",
                             gr.balDelta >= 0 ? "+" : "",
                             CURRENCY.format((long)(gr.balDelta / d)),
                             CURRENCY.format((long)(gr.investmentGrowth / d)),
@@ -2798,7 +2949,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                 switch (col) {
                     case 3 -> gkHeader.setToolTipText(
                             "<html><b>GK withdrawal</b><br>"
-                                    + "Pre-anchor years: user-entered rate ? current balance.<br>"
+                                    + "Pre-anchor years: user-entered rate x current balance.<br>"
                                     + "Anchor year: net spending need (spending minus guaranteed income).<br>"
                                     + "Subsequent years: prior withdrawal, inflation-adjusted, then<br>"
                                     + "modified by CPR, PR, and PMR rules as needed.<br><br>"
@@ -2807,21 +2958,49 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                                     + "computed net-need / portfolio ratio.</html>");
                     case 7 -> gkHeader.setToolTipText(
                             "<html><b>Rule flags</b><br>"
-                                    + "<b>X.X%</b> = Year 1 of drawing: gkPreRate ? current balance used.<br>"
+                                    + "<b>X.X%</b> = Year 1 of drawing: gkPreRate x current balance used.<br>"
                                     + "&nbsp;&nbsp;Set via 'GK only -- pre-anchor initial wd rate' in the input panel.<br>"
                                     + "<b>--</b> = GK rules phase, no rule triggered; normal inflation adjustment.<br>"
                                     + "<b>PMR0</b> = Portfolio Management Rule: inflation raise <i>skipped</i>.<br>"
                                     + "<b>CPR[v]</b> = Capital Preservation Rule: withdrawal cut 10%.<br>"
                                     + "<b>PR[^]</b> = Prosperity Rule: withdrawal raised 10%.</html>");
+                    case 11 -> gkHeader.setToolTipText(
+                            "<html><b>Fixed Inc -- guaranteed income (fed by User SS + Spouse SS + Annuity)</b><br>"
+                                    + "= User SS + Spouse SS + Annuity for the year.<br>"
+                                    + "The non-portfolio income floor. Hover a cell to see the<br>"
+                                    + "three source values that add up to that year's figure.</html>");
+                    case 12 -> gkHeader.setToolTipText(
+                            "<html><b>Living Exp -- core living budget (fed by your Living Exp input)</b><br>"
+                                    + "= your base Living Expense input, inflated by the median cumulative<br>"
+                                    + "inflation factor for that year. Hover a cell to see the base<br>"
+                                    + "input and the inflation factor applied.</html>");
+                    case 15 -> gkHeader.setToolTipText(
+                            "<html><b>Total spend -- committed budget (fed by Living Exp + Medical + Tax)</b><br>"
+                                    + "= Living Exp + Medical + Tax (est).<br>"
+                                    + "Hover a cell to see the three source values that add up<br>"
+                                    + "to that year's total.</html>");
+                    case 16 -> gkHeader.setToolTipText(
+                            "<html><b>Total income -- money available (fed by Actual wd + Fixed Inc)</b><br>"
+                                    + "= Actual wd (GK portfolio draw) + Fixed Inc (guaranteed income).<br>"
+                                    + "Hover a cell to see the two source values that add up<br>"
+                                    + "to that year's total.</html>");
+                    case 17 -> gkHeader.setToolTipText(
+                            "<html><b>Surplus / gap -- Total income minus Total spend</b><br>"
+                                    + "= Total income - Total spend.<br>"
+                                    + "This column represents the amount over the expected living<br>"
+                                    + "expenses that is available for spending.</html>");
                     case 22 -> gkHeader.setToolTipText(
                             "<html><b>-> Roth/MM -- RMD overage redirected</b><br>"
-                                    + "= max(0, Combined RMD ? GK actual withdrawal).<br>"
+                                    + "= max(0, Combined RMD - GK actual withdrawal).<br>"
                                     + "Excess RMD above planned GK spending is redirected<br>"
-                                    + "to Roth IRA or money market -- NOT spent.</html>");
+                                    + "to Roth IRA or money market -- NOT spent.<br>"
+                                    + "The simulated portfolio balance is not reduced by RMDs; the overage<br>"
+                                    + "is assumed re-invested at a return at least matching inflation and<br>"
+                                    + "remains in your asset base.</html>");
                     case 23 -> gkHeader.setToolTipText(
-                            "<html><b>Bal ? -- portfolio balance change</b><br>"
-                                    + "= market growth ? GK spending withdrawal.<br>"
-                                    + "Green = grew . Red = shrank.</html>");
+                            "<html><b>Portfolio Chg -- portfolio balance change</b><br>"
+                                    + "= market growth - GK spending withdrawal.<br>"
+                                    + "Green = grew. Red = shrank.</html>");
                     default -> gkHeader.setToolTipText(null);
                 }
             }
@@ -3492,8 +3671,8 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
 
     private void updateAgeLabels() {
         try {
-            lblManAge.setText("Man age: "   + computeAge(iv(spManBirthYear),   iv(spManBirthMonth)));
-            lblWomanAge.setText("Woman age: " + computeAge(iv(spWomanBirthYear), iv(spWomanBirthMonth)));
+            lblManAge.setText("User age: "   + computeAge(iv(spManBirthYear),   iv(spManBirthMonth)));
+            lblWomanAge.setText("Spouse age: " + computeAge(iv(spWomanBirthYear), iv(spWomanBirthMonth)));
         } catch (Exception ignored) {}
     }
 
