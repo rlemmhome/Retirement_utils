@@ -471,14 +471,14 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         });
 
         // == Account Balances ==============================================
-        spManTradIRA     = spinI(880_000,  0, 10_000_000, 1_000, "#,###");
-        spManRothIRA     = spinI( 10_000,  0, 10_000_000, 1_000, "#,###");
+        spManTradIRA     = spinI(300_000,  0, 10_000_000, 1_000, "#,###");
+        spManRothIRA     = spinI(  5_000,  0, 10_000_000, 1_000, "#,###");
         spManTrad401K    = spinI(      0,  0, 10_000_000, 1_000, "#,###");
         spManRoth401K    = spinI(      0,  0, 10_000_000, 1_000, "#,###");
-        spWomanRoth401K  = spinI( 30_000,  0, 10_000_000, 1_000, "#,###");
+        spWomanRoth401K  = spinI( 15_000,  0, 10_000_000, 1_000, "#,###");
         spWomanRothIRA   = spinI(      0,  0, 10_000_000, 1_000, "#,###");
-        spWomanTradIRA   = spinI(266_000,  0, 10_000_000, 1_000, "#,###");
-        spWomanTrad401K  = spinI(314_000,  0, 10_000_000, 1_000, "#,###");
+        spWomanTradIRA   = spinI( 80_000,  0, 10_000_000, 1_000, "#,###");
+        spWomanTrad401K  = spinI(100_000,  0, 10_000_000, 1_000, "#,###");
         lblAccountTotal  = new JLabel("Account total: --");
         lblAccountTotal.setFont(new Font("SansSerif", Font.BOLD, 13));
         lblAccountTotal.setForeground(new Color(40, 80, 40));
@@ -543,7 +543,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         inner.add(Box.createVerticalStrut(4));
 
         // == Annuity =======================================================
-        spAnnuity           = spinI(22_599, 0, 500_000, 500, "#,###");
+        spAnnuity           = spinI(0, 0, 500_000, 500, "#,###");
         spAnnuityStartYear  = spinI(2028, 2020, 2040, 1, "#");
         spAnnuityStartMonth = spinI(4,    1,    12,   1, "#");
         inner.add(card("Annuity (non-COLA)", new Object[]{
@@ -567,7 +567,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         inner.add(Box.createVerticalStrut(4));
 
         // == Spending ======================================================
-        spLivingExp    = spinI(105_000, 0, 500_000, 1_000, "#,###");
+        spLivingExp    = spinI(100_000, 0, 500_000, 1_000, "#,###");
         spMedical      = spinI( 16_000, 0, 100_000,   500, "#,###");
         spMedInflation = spinD(4.5,     0.0, 15.0,   0.1,  "0.0#");
         spBaseTax      = spinI( 17_500, 0, 200_000, 1_000, "#,###");
