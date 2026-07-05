@@ -201,7 +201,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
     private JLabel            lblGkInitWd, lblGkInitRate, lblGkFinalBal;
 
     public IncomeLab_OptSocSec_v2() {
-        super("IncomeLab Optimize Socsec -- PoS + GK + Historical + SS Optimizer");
+        super("Income withdrawal and Probability of Success -- PoS + GK + Historical + SS Optimizer");
         // Ensure app directories exist under ~/.retirement_utils/.incomelab/
         DIR_SCENARIOS.mkdirs();
         DIR_CALIB.mkdirs();
@@ -273,10 +273,16 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         btnSave.setBackground(new Color(60, 100, 160));
         btnSave.setForeground(Color.WHITE);
         btnSave.setFocusPainted(false);
+        btnSave.setOpaque(true);
+        btnSave.setBorderPainted(true);
+        btnSave.setBorder(BorderFactory.createLineBorder(new Color(40, 70, 120), 1));
         btnLoad.setFont(new Font("SansSerif", Font.BOLD, 12));
         btnLoad.setBackground(new Color(80, 130, 60));
         btnLoad.setForeground(Color.WHITE);
         btnLoad.setFocusPainted(false);
+        btnLoad.setOpaque(true);
+        btnLoad.setBorderPainted(true);
+        btnLoad.setBorder(BorderFactory.createLineBorder(new Color(55, 95, 40), 1));
 
         btnSave.addActionListener(e -> saveScenario(tfScenDesc));
         btnLoad.addActionListener(e -> loadScenario(tfScenDesc, cmbRecent));
@@ -367,7 +373,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                 + "Number of simulation paths per binary-search iteration<br>"
                 + "used to find the target PoS withdrawal amount.<br><br>"
                 + "<b>Default: 800</b> -- high accuracy.<br>"
-                + "200 = ~4? faster, ~$500 variance. 100 = ~8? faster, ~$1,000 variance.<br>"
+                + "200 = ~4x faster, ~$500 variance. 100 = ~8x faster, ~$1,000 variance.<br>"
                 + "Biggest single driver of total runtime.</html>");
         spBinaryIters  = spinI(25, 8, 30, 1, "#");
         spBinaryIters.setToolTipText("<html><b>Binary search iterations</b><br>"
@@ -381,7 +387,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                 + "Full simulation paths used to draw the fan chart and<br>"
                 + "compute the actual PoS metric shown at the top.<br><br>"
                 + "<b>Default: 400</b> -- smooth fan chart, stable PoS reading.<br>"
-                + "100 = ~4? faster but noisier. 50 = rough but usable for quick checks.<br>"
+                + "100 = ~4x faster but noisier. 50 = rough but usable for quick checks.<br>"
                 + "Each fan path re-solves the withdrawal annually against its current balance -- most expensive per path.</html>");
 
         // Mark optimizer results stale whenever any input changes
@@ -402,7 +408,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         spGkPreRate = spinD(4.0, 1.0, 10.0, 0.1, "0.0#");
         spGkPreRate.setToolTipText("<html><b>GK only -- initial withdrawal rate (%)</b><br>"
                 + "Used exclusively by the Guyton-Klinger tab.<br>"
-                + "Has no effect on the Income Lab PoS tab.<br><br>"
+                + "Has no effect on the Income PoS tab.<br><br>"
                 + "In the first withdrawal year, this % of the current portfolio<br>"
                 + "balance sets the GK withdrawal (prorated by start month).<br>"
                 + "From year 2 onward, CPR\u25bc / PR\u25b2 / PMR\u2070 guardrail rules engage,<br>"
@@ -574,13 +580,13 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         spTaxInflation = spinD(3.79,    0.0, 10.0,  0.01,  "0.00#");
         spGoGo         = spinD(1.000,   1.0,  2.0,  0.001, "0.000#");
         spGoGo.setToolTipText("<html><b>Common multiplier ranges:</b><br><br>"
-                + "&nbsp;&nbsp;<b>1.2?&nbsp;(20% more)</b> -- Conservative; suitable if you already have<br>"
+                + "&nbsp;&nbsp;<b>1.2x&nbsp;(20% more)</b> -- Conservative; suitable if you already have<br>"
                 + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
                 + "an active lifestyle baked into your baseline<br><br>"
-                + "&nbsp;&nbsp;<b>1.3?&nbsp;(30% more)</b> -- The most commonly cited \"middle ground\"<br>"
+                + "&nbsp;&nbsp;<b>1.3x&nbsp;(30% more)</b> -- The most commonly cited \"middle ground\"<br>"
                 + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
                 + "in retirement planning literature<br><br>"
-                + "&nbsp;&nbsp;<b>1.5?&nbsp;(50% more)</b> -- Used for people expecting significant travel,<br>"
+                + "&nbsp;&nbsp;<b>1.5x&nbsp;(50% more)</b> -- Used for people expecting significant travel,<br>"
                 + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
                 + "bucket-list spending, or major lifestyle upgrades</html>");
         spGoGoDuration = spinI(10,      0,    20,    1,     "#");
@@ -702,6 +708,9 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         btnRun.setBackground(new Color(24, 95, 165));
         btnRun.setForeground(Color.WHITE);
         btnRun.setFocusPainted(false);
+        btnRun.setOpaque(true);
+        btnRun.setBorderPainted(true);
+        btnRun.setBorder(BorderFactory.createLineBorder(new Color(16, 65, 115), 1));
         btnRun.setAlignmentX(LEFT_ALIGNMENT);
         btnRun.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
         btnRun.addActionListener(e -> runSimulation());
@@ -1006,7 +1015,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                         double d = showRealDollars ? er.inflFactor : 1.0;
                         return String.format("<html><b>Portfolio change: %s%s</b><br>"
                                         + "&nbsp;&nbsp;Market growth:&nbsp;&nbsp;+%s<br>"
-                                        + "&nbsp;&nbsp;Withdrawal:&nbsp;&nbsp;&nbsp;?%s</html>",
+                                        + "&nbsp;&nbsp;Withdrawal:&nbsp;&nbsp;&nbsp;-%s</html>",
                                 er.balDelta >= 0 ? "+" : "",
                                 CURRENCY.format((long)(er.balDelta / d)),
                                 CURRENCY.format((long)(er.investmentGrowth / d)),
@@ -1246,6 +1255,9 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         btnRunOpt.setBackground(new Color(24, 130, 80));
         btnRunOpt.setForeground(Color.WHITE);
         btnRunOpt.setFocusPainted(false);
+        btnRunOpt.setOpaque(true);
+        btnRunOpt.setBorderPainted(true);
+        btnRunOpt.setBorder(BorderFactory.createLineBorder(new Color(16, 90, 55), 1));
         btnRunOpt.setEnabled(false);
         btnRunOpt.addActionListener(e -> runSsOptimizer());
 
@@ -1254,6 +1266,9 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         btnCancelOpt.setBackground(new Color(180, 40, 40));
         btnCancelOpt.setForeground(Color.WHITE);
         btnCancelOpt.setFocusPainted(false);
+        btnCancelOpt.setOpaque(true);
+        btnCancelOpt.setBorderPainted(true);
+        btnCancelOpt.setBorder(BorderFactory.createLineBorder(new Color(130, 28, 28), 1));
         btnCancelOpt.setEnabled(false);
         btnCancelOpt.addActionListener(e -> optCancelRequested = true);
 
@@ -1643,7 +1658,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         fc.setDialogTitle("Save Scenario");
         fc.setSelectedFile(new java.io.File(DIR_SCENARIOS, defaultName));
         fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
-                "IncomeLab Scenario files (*.ilscen)", "ilscen"));
+                "Income PoS files (*.ilscen)", "ilscen"));
         if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
         java.io.File file = fc.getSelectedFile();
         if (!file.getName().endsWith(".ilscen"))
@@ -1697,7 +1712,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         props.setProperty("opt.scenario",           String.valueOf(
                 cmbScenario != null ? cmbScenario.getSelectedIndex() : 0));
         try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
-            props.store(fos, "IncomeLab_OptSocSec_v2 scenario -- " + desc);
+            props.store(fos, "IncomePoS_OptSocSec_v2 scenario -- " + desc);
             addRecentFile(file.getAbsolutePath());
             if (progressBar != null)
                 progressBar.setString("Saved: " + file.getName() + " -- " + desc);
@@ -1712,7 +1727,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         JFileChooser fc = new JFileChooser(DIR_SCENARIOS);
         fc.setDialogTitle("Load Scenario");
         fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
-                "IncomeLab Scenario files (*.ilscen)", "ilscen"));
+                "Income PoS files (*.ilscen)", "ilscen"));
         if (fc.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
         loadScenarioFromFile(fc.getSelectedFile(), tfDesc, cmbRecent);
     }
@@ -2485,12 +2500,12 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         }
 
         return preDrawSection + String.format(
-                "== INCOME LAB PRO -- FIRST WITHDRAWAL YEAR (%d) ==\n"
+                "== INCOME PoS -- FIRST WITHDRAWAL YEAR (%d) ==\n"
                         + "  Portfolio withdrawal:  %s/yr  (%.2f%% of $%,.0f)\n"
                         + "  Method: true stochastic median . annual re-solve on observed balance\n"
                         + "  + Guaranteed income:   %s\n"
                         + "  = Total income:        %s\n"
-                        + "  ? Total spending:      %s\n"
+                        + "  - Total spending:      %s\n"
                         + "  -> %s of %s\n\n"
                         + "== SOCIAL SECURITY ==\n"
                         + "  User: %s/yr from %02d/%d (age %d) . Spouse: %s/yr from %02d/%d (age %d)\n"
@@ -2901,7 +2916,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                             + "is assumed re-invested at a return at least matching inflation and<br>"
                             + "remains in your asset base.</html>";
                 }
-                if (col == 23) { // Bal ? tooltip
+                if (col == 23) { // Bal Chg tooltip
                     double d = showRealDollars ? gr.inflFactor : 1.0;
                     return String.format("<html><b>Portfolio change: %s%s</b><br>"
                                     + "&nbsp;&nbsp;Market growth: +%s<br>"
@@ -2933,7 +2948,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
                 88, 95, 85,                  // 15-17
                 72,                          // 18 infl
                 80, 85, 90, 85,              // 19-22 RMDs
-                90                           // 23 Bal ?
+                90                           // 23 Bal Chg
         };
         for (int i = 0; i < gkw.length && i < tblGk.getColumnCount(); i++) {
             TableColumn tc = tblGk.getColumnModel().getColumn(i);
@@ -3087,7 +3102,7 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
         // Legend bar
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 3));
         legend.setBackground(new Color(245, 245, 242));
-        legend.add(gkLegendChip(new Color(230, 222, 255), new Color(70, 40, 140),  "Year 1 initial rate (gkPreRate ? bal)"));
+        legend.add(gkLegendChip(new Color(230, 222, 255), new Color(70, 40, 140),  "Year 1 initial rate (gkPreRate x bal)"));
         legend.add(gkLegendChip(new Color(220, 235, 255), new Color(24, 95, 165),  "GK rules start"));
         legend.add(gkLegendChip(new Color(180, 230, 205), new Color(0, 90, 50),    "Go-go years"));
         legend.add(gkLegendChip(new Color(255, 235, 185), new Color(120, 70, 0),   "PMR0 -- inflation frozen"));
@@ -3777,8 +3792,8 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
             long totalM     = totalSims / 1_000_000;
             if (btnRun != null) btnRun.setToolTipText(String.format(
                     "<html><b>Estimated computation at current settings:</b><br>"
-                            + "Fan: %,d paths ? %d yrs ? %d iters ? %,d paths = <b>%,dM sims</b><br>"
-                            + "Median: %d yrs ? %d iters ? %,d paths ? avg %d remaining = <b>%,dM sims</b><br>"
+                            + "Fan: %,d paths x %d yrs x %d iters x %,d paths = <b>%,dM sims</b><br>"
+                            + "Median: %d yrs x %d iters x %,d paths x avg %d remaining = <b>%,dM sims</b><br>"
                             + "Grand total: <b>~%,dM simulations</b></html>",
                     fanPaths, horizon, binIters, solvePaths, fanSims / 1_000_000,
                     horizon, binIters, solvePaths, (horizon + 1) / 2, medianSims / 1_000_000, totalM));
@@ -3828,8 +3843,24 @@ public class IncomeLab_OptSocSec_v2 extends JFrame {
     // ========================================================================
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
-            catch (Exception ignored) {}
+            // Use Nimbus so custom button/table background colors render reliably
+            // across platforms and packaging (uber-jar, WiX executable). The native
+            // system L&F ignores custom button backgrounds on some platforms, which
+            // made the Save/Load/Run buttons nearly invisible. Fall back to the
+            // system L&F if Nimbus is not present on this JRE.
+            try {
+                boolean nimbusSet = false;
+                for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
+                    if ("Nimbus".equals(info.getName())) {
+                        UIManager.setLookAndFeel(info.getClassName());
+                        nimbusSet = true;
+                        break;
+                    }
+                }
+                if (!nimbusSet) {
+                    UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+                }
+            } catch (Exception ignored) {}
             new IncomeLab_OptSocSec_v2();
         });
     }
