@@ -151,6 +151,7 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
     private JSpinner   spConvFlat;          // flat annual conversion $ (flat mode)
     private JSpinner   spConvBuffer;        // MAGI buffer below IRMAA cliff (fill mode)
     private JSpinner   spConvCap;           // max conversion cap (fill mode; 0 = uncapped)
+    private JComboBox<String> cmbIrmaaMode; // IRMAA threshold indexing mode
     private JSpinner spGkUpperGuardrail, spGkLowerGuardrail;
     private JSpinner spManTradIRA, spManRothIRA, spManTrad401K, spManRoth401K;
     private JSpinner spWomanRoth401K, spWomanRothIRA, spWomanTradIRA, spWomanTrad401K;
@@ -587,9 +588,39 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
 
         // == Market Assumptions ============================================
         spNomReturn       = spinD(6.70, 0.0, 20.0, 0.01, "0.00#");
+        spNomReturn.setToolTipText("<html><b>Expected NOMINAL return (%/yr)</b><br>"
+                + "A forward-looking <b>nominal</b> return -- BEFORE removing inflation. The<br>"
+                + "engine applies inflation separately (to spending), so feed a nominal number<br>"
+                + "here, not a real one.<br><br>"
+                + "The 6.70% default reflects conservative expert forward estimates for the next<br>"
+                + "~10-15 years, which run well below the historical nominal S&amp;P 500 CAGR of<br>"
+                + "roughly 10.5% (dividends reinvested). Experts expect lower returns ahead due<br>"
+                + "to elevated valuations.<br><br>"
+                + "<b>Nominal vs real:</b> real (inflation-adjusted) return &asymp; this figure minus<br>"
+                + "your inflation assumption. At 6.70% nominal - 3.79% inflation that is ~2.9%<br>"
+                + "real. Do NOT enter a real number here or inflation gets removed twice.<br>"
+                + "Update at least annually as new forward estimates publish.</html>");
         spStdDev          = spinD(10.79, 0.0, 40.0, 0.01, "0.00#");
+        spStdDev.setToolTipText("<html><b>Return standard deviation (%/yr)</b><br>"
+                + "Annual volatility of returns, from the 1961-2024 historical S&amp;P 500 series.<br>"
+                + "Volatility -- not average return -- is the dominant driver of sequence-of-<br>"
+                + "returns risk and thus the sustainable withdrawal. Default 10.79%.</html>");
         spInflation       = spinD(3.79,  0.0, 15.0, 0.01, "0.00#");
+        spInflation.setToolTipText("<html><b>Mean inflation (%/yr)</b><br>"
+                + "The 3.79% default is the <b>historical</b> 1961-2024 average, paired with the<br>"
+                + "historical inflation volatility below. It includes the high-inflation 1970s-80s,<br>"
+                + "so it is <b>higher than current forward consensus</b>, which clusters around<br>"
+                + "2.5-3% (Fed 2% target, Treasury breakevens, Cleveland Fed model), with some<br>"
+                + "near-term upside risk (tariffs, deficits).<br><br>"
+                + "Keeping 3.79% is a deliberate conservative choice: pairing it with the low<br>"
+                + "forward 6.70% return stress-tests your plan against 'low returns AND high<br>"
+                + "inflation' at once. If you prefer to match current forward projections,<br>"
+                + "lower this to ~2.75-3%. Update at least annually.</html>");
         spInflationStdDev = spinD(2.73,  0.0, 10.0, 0.01, "0.00#");
+        spInflationStdDev.setToolTipText("<html><b>Inflation standard deviation (%/yr)</b><br>"
+                + "Year-to-year volatility of inflation, from the 1961-2024 historical CPI series.<br>"
+                + "Paired with the mean inflation above for the stochastic inflation draws.<br>"
+                + "Default 2.73%.</html>");
         inner.add(card("Market Assumptions (1961-2024 Historical)", new Object[]{
                 "Expected nominal return (%)",  spNomReturn,
                 "Return std deviation (%)",     spStdDev,
@@ -601,6 +632,18 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         // == Spending ======================================================
         spLivingExp    = spinI( 70_000, 0, 500_000, 1_000, "#,###");
         spMedical      = spinI(  6_200, 0, 100_000,   500, "#,###");
+        spMedical.setToolTipText("<html><b>Medical premiums &amp; out-of-pocket ($/yr)</b><br>"
+                + "All health-care costs: <b>medical premiums and out-of-pocket</b> (deductible<br>"
+                + "and copay, dentist / vision / hearing).<br><br>"
+                + "<b>Include your base Medicare premiums here</b> -- Part B (~$203/mo/person in<br>"
+                + "2026) plus a Part D drug plan (~$40-55/mo/person) plus any Medigap/supplement.<br>"
+                + "For a couple both on Medicare that base runs roughly $6,000/yr before supplement<br>"
+                + "and out-of-pocket. Medicare premiums are a MEDICAL cost, not a tax -- only the<br>"
+                + "income-related IRMAA <i>surcharge</i> (above $218k MAGI) appears near the Tax<br>"
+                + "column; your base premiums belong here.<br><br>"
+                + "Pre-Medicare (bridge years) this line is your ACA/marketplace premium instead;<br>"
+                + "the figure changes once you and your spouse are both on Medicare (~2027-2028).<br>"
+                + "The tool inflates this line at the medical-inflation rate below.</html>");
         spMedInflation = spinD(4.5,     0.0, 15.0,   0.1,  "0.0#");
         spBaseTax      = spinI( 17_500, 0, 200_000, 1_000, "#,###");
         spTaxInflation = spinD(3.79,    0.0, 10.0,  0.01,  "0.00#");
@@ -623,10 +666,8 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
                 + "early retiree. Set to 0 to disable the go-go multiplier entirely.</html>");
         inner.add(card("Annual Spending (2027 Base $)", new Object[]{
                 "Living expenses ($/yr)",             spLivingExp,
-                "Medical ($/yr)",                     spMedical,
+                "Medical -- premiums & out-of-pocket ($/yr)", spMedical,
                 "Medical inflation (%/yr)",           spMedInflation,
-                "Base tax -- yr 1 ($/yr)",             spBaseTax,
-                "Tax inflation (%/yr)",               spTaxInflation,
                 "Go-go years multiplier",             spGoGo,
                 "Go-go years duration (from wd start)", spGoGoDuration,
         }));
@@ -651,8 +692,11 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
                 + "Tier-0 cliff (minus your buffer) and the 22%-&gt;24% bracket edge --<br>"
                 + "then capped by the cap below. The table reports which ceiling bound it.<br>"
                 + "<b>Unselected (Flat $):</b> converts the fixed amount below every year.</html>");
-        tglConvMode.addActionListener(e ->
-                tglConvMode.setText(tglConvMode.isSelected() ? "Fill to MAGI target" : "Flat $ amount"));
+        tglConvMode.addActionListener(e -> {
+            tglConvMode.setText(tglConvMode.isSelected() ? "Fill to MAGI target" : "Flat $ amount");
+            refreshTaxEngineEnabled();
+        });
+        chkComputedTax.addActionListener(e -> refreshTaxEngineEnabled());
 
         spConvFlat   = spinI(40_000, 0, 1_000_000, 1_000, "#,###");
         spConvFlat.setToolTipText("<html><b>Flat annual Roth conversion ($)</b><br>"
@@ -670,6 +714,23 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
                 + "Used in <b>Fill to MAGI target</b> mode. The computed fill is never<br>"
                 + "larger than this. Set 0 for no cap. Default $40,000.</html>");
 
+        cmbIrmaaMode = new JComboBox<>(new String[]{
+                "Frozen (nominal 2026)", "Chained-CPI (current law)", "Full CPI" });
+        cmbIrmaaMode.setSelectedIndex(1); // default: chained-CPI
+        cmbIrmaaMode.setToolTipText("<html><b>IRMAA threshold indexing mode</b><br>"
+                + "How the IRMAA income cliffs move over the horizon. The surcharge<br>"
+                + "AMOUNT always tracks general inflation; this controls only the<br>"
+                + "THRESHOLDS.<br><br>"
+                + "<b>Chained-CPI (default, current law):</b> thresholds grow at inflation<br>"
+                + "minus ~0.3%/yr, matching how the first four IRMAA tiers have been<br>"
+                + "indexed since 2020.<br>"
+                + "<b>Frozen (nominal 2026):</b> thresholds never move -- the conservative<br>"
+                + "stress case, matching the 2007-2019 freeze and Medicare funding-<br>"
+                + "pressure risk. Surfaces late-life RMD-driven IRMAA most clearly.<br>"
+                + "<b>Full CPI:</b> thresholds grow at your full inflation assumption -- the<br>"
+                + "most optimistic (thresholds outrun income, IRMAA rarely triggers).<br><br>"
+                + "See the Assumptions &amp; Methods tab.</html>");
+
         JPanel convBtnRow = new JPanel();
         convBtnRow.setLayout(new BoxLayout(convBtnRow, BoxLayout.Y_AXIS));
         convBtnRow.setBackground(Color.WHITE);
@@ -677,14 +738,28 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         tglConvMode.setAlignmentX(LEFT_ALIGNMENT);
         tglConvMode.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
 
+        spBaseTax.setToolTipText("<html><b>Base tax -- year 1 ($/yr) [LEGACY, flat mode only]</b><br>"
+                + "Used ONLY when 'Use computed tax engine' is OFF. Drives the legacy flat<br>"
+                + "escalator: baseTax * (1+taxInflation)^year. When the computed engine is ON<br>"
+                + "this field is greyed out and ignored (the Tax column is computed instead).<br>"
+                + "Set from your actual prior-year return when using flat mode.</html>");
+        spTaxInflation.setToolTipText("<html><b>Tax inflation (%/yr) [LEGACY, flat mode only]</b><br>"
+                + "Used ONLY when 'Use computed tax engine' is OFF. The annual escalation rate<br>"
+                + "for the flat Base tax above. Greyed out and ignored when the computed engine<br>"
+                + "is ON.</html>");
+
         inner.add(card("Tax Engine & Roth Conversion (v3)", new Object[]{
                 "Computed tax (vs flat)",  chkComputedTax,
+                "Base tax -- yr 1 ($/yr) [flat only]",  spBaseTax,
+                "Tax inflation (%/yr) [flat only]",     spTaxInflation,
                 "Conversion mode",         tglConvMode,
                 "Flat conversion ($/yr)",  spConvFlat,
                 "Fill buffer below IRMAA ($)", spConvBuffer,
                 "Fill cap ($/yr, 0=none)", spConvCap,
+                "IRMAA threshold growth",  cmbIrmaaMode,
         }));
         inner.add(Box.createVerticalStrut(4));
+        refreshTaxEngineEnabled();  // set initial enabled/greyed state
 
         // == Pro PoS advisory guardrails ===================================
         spProPosUpperGuardrail = spinD(20.0, 5.0, 50.0, 1.0, "0.0#");
@@ -1141,8 +1216,11 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
                         if (er.irmaa <= 0)
                             return "<html><b>IRMAA surcharge: none</b><br>"
                                     + "MAGI from 2 years prior was at or below the Tier-0<br>"
-                                    + "threshold (2026 base $218,000, inflation-indexed), so no<br>"
-                                    + "Medicare Part B/D surcharge applies this year.</html>";
+                                    + "threshold (2026 base $218,000, indexed per your chosen<br>"
+                                    + "IRMAA threshold-growth mode), so no Medicare Part B/D<br>"
+                                    + "surcharge applies this year. If this stays all-dashes even in<br>"
+                                    + "high-RMD late years, try the 'Frozen' threshold mode to see<br>"
+                                    + "the conservative IRMAA exposure.</html>";
                         double d = showRealDollars ? er.inflFactor : 1.0;
                         return String.format(
                                 "<html><b>IRMAA surcharge (Medicare Part B + D)</b><br>"
@@ -1443,15 +1521,25 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
 
                 + "<h3 style='color:#2a5d34;'>2. Market assumptions (1961&ndash;2024 historical basis)</h3>"
                 + "<ul>"
-                + "<li>Expected nominal return: 6.70% (user-editable)</li>"
-                + "<li>Return standard deviation: 10.79%</li>"
-                + "<li>Mean inflation: 3.79%; inflation standard deviation: 2.73%</li>"
-                + "<li>Social Security COLA: 2.4%</li>"
+                + "<li>Expected NOMINAL return: 6.70% (user-editable). This is a forward-looking nominal "
+                + "estimate &mdash; before removing inflation, which the engine applies separately. The 6.70% "
+                + "reflects conservative expert forward views for the next ~10-15 years and runs well below the "
+                + "historical nominal S&amp;P 500 CAGR of ~10.5% (dividends reinvested). Do not enter a real "
+                + "(inflation-adjusted) number here, or inflation would be removed twice.</li>"
+                + "<li>Return standard deviation: 10.79% (1961-2024). Volatility, not average return, dominates "
+                + "sequence-of-returns risk and the sustainable withdrawal.</li>"
+                + "<li>Mean inflation: 3.79% &mdash; the 1961-2024 historical average, which includes the "
+                + "high-inflation 1970s-80s and is therefore HIGHER than current forward consensus (~2.5-3%; Fed "
+                + "2% target, Treasury breakevens). Keeping 3.79% is a deliberate conservative choice that, paired "
+                + "with the low 6.70% forward return, stress-tests the plan against low-returns-and-high-inflation "
+                + "at once. Lower to ~2.75-3% to match forward projections. Inflation std dev: 2.73%.</li>"
+                + "<li>Social Security COLA: 2.4%.</li>"
                 + "</ul>"
                 + "<p>Sources: Damodaran (NYU Stern) S&amp;P 500 total-return series; BLS CPI; SSA benefit "
-                + "adjustment schedules. Volatility (not average return) is the dominant driver of the sustainable "
-                + "figure. Asset-allocation glide path and mortality weighting are deliberately NOT modeled "
-                + "(see section 8).</p>"
+                + "adjustment schedules. Asset-allocation glide path and mortality weighting are deliberately NOT "
+                + "modeled (see section 8). Note the current mix pairs a FORWARD return estimate with HISTORICAL "
+                + "inflation/volatility; this is intentionally conservative (implied real return ~2.9%), not a "
+                + "matched forward-with-forward or historical-with-historical pair.</p>"
 
                 + "<h3 style='color:#2a5d34;'>3. Tax engine (v3) &mdash; federal + Arizona + IRMAA</h3>"
                 + "<p>When 'Use computed tax engine' is ON, the Tax column is computed each year rather than "
@@ -1499,7 +1587,15 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
                 + "1993), which realistically pulls more SS into the taxable base over time.</p>"
 
                 + "<h3 style='color:#2a5d34;'>6. IRMAA &mdash; Medicare surcharge, costed and visible</h3>"
-                + "<p>IRMAA (Medicare Part B + D) is computed as a real dollar cost (not merely flagged) and "
+                + "<p><b>Important distinction:</b> the IRMAA column and the IRMAA piece of the Tax column contain "
+                + "ONLY the income-related <b>surcharge</b> &mdash; the extra amount added to Medicare Part B and "
+                + "Part D premiums when MAGI crosses the tier thresholds. They do NOT contain your <b>base</b> "
+                + "Medicare premiums (Part B ~$203/mo/person and a Part D drug plan ~$40-55/mo/person in 2026). "
+                + "Those base premiums are a MEDICAL cost, not a tax, and belong in your Medical spending input "
+                + "(section 7 / the Medical column), not here. At MAGI below $218,000 the IRMAA surcharge is $0, "
+                + "which is why the IRMAA column shows dashes at your planned income &mdash; that is correct, not "
+                + "a missing cost.</p>"
+                + "<p>The IRMAA <b>surcharge</b> is computed as a real dollar cost (not merely flagged) and "
                 + "included in the Tax column, with its own IRMAA column. It is assessed on MAGI from <b>2 years "
                 + "prior</b> (the statutory lookback). 2026 base tiers (per couple/year), inflation-indexed:</p>"
                 + "<ul>"
@@ -1511,8 +1607,32 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
                 + "</ul>"
                 + "<p>IRMAA is a cliff: one dollar over a threshold triggers the full tier jump &mdash; which is "
                 + "why the conversion fill leaves a buffer (section 7).</p>"
+                + "<p><b>IRMAA threshold growth (user toggle):</b> unlike federal tax brackets (fully CPI-indexed), "
+                + "IRMAA thresholds have a poor indexing history &mdash; they were frozen in nominal dollars from "
+                + "2007 to 2019, and only the first four tiers have been indexed (to chained-CPI) since 2020; the "
+                + "top tier remains frozen. So the tool lets you choose how the thresholds move:</p>"
+                + "<ul>"
+                + "<li><b>Chained-CPI (default, current law):</b> thresholds grow at inflation minus ~0.3%/yr, "
+                + "matching post-2020 indexing.</li>"
+                + "<li><b>Frozen (nominal 2026):</b> thresholds never move &mdash; the conservative stress case, "
+                + "matching the 2007-2019 freeze and the real risk that Medicare funding pressure leads to future "
+                + "freezes. This surfaces late-life RMD-driven IRMAA most clearly.</li>"
+                + "<li><b>Full CPI:</b> thresholds grow at your full inflation assumption &mdash; the most "
+                + "optimistic, since thresholds then outrun nominal income and IRMAA rarely triggers.</li>"
+                + "</ul>"
+                + "<p>The surcharge AMOUNT always tracks general inflation regardless of mode (Medicare costs rise "
+                + "with prices); the toggle affects only the income THRESHOLDS. An all-dashes IRMAA column means "
+                + "your MAGI stays under the (mode-dependent) thresholds every year.</p>"
 
-                + "<h3 style='color:#2a5d34;'>7. Taxable-draw logic and Roth conversions</h3>"
+                + "<h3 style='color:#2a5d34;'>7. Spending, medical costs, and Roth conversions</h3>"
+                + "<p><b>Medical spending (the Medical column)</b> is a single lump input covering all health-care "
+                + "costs: medical premiums and out-of-pocket (deductible and copay, dentist / vision / hearing). "
+                + "This is where your <b>base Medicare premiums</b> belong &mdash; Part B (~$203/mo/person, 2026) "
+                + "plus a Part D drug plan (~$40-55/mo/person) plus any Medigap/supplement &mdash; because Medicare "
+                + "premiums are a medical cost, not a tax. The Medical line inflates at the medical-inflation rate. "
+                + "Note that in the pre-Medicare bridge years this line represents your ACA/marketplace premium; "
+                + "the figure changes once both spouses are on Medicare (~2027-2028), and the tool does not switch "
+                + "it automatically &mdash; update the Medical input when that transition occurs.</p>"
                 + "<p><b>Living-expenses tax (the Tax column)</b> is computed on SPENDING income only: "
                 + "taxable Social Security (provisional formula) + ordinary income (max(combined RMD, "
                 + "Traditional draw) + annuity), minus the MFJ + age-65 standard deduction, through the "
@@ -2022,6 +2142,36 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
     private static final int    MAX_RECENT = 5;
     private static final String SCENARIO_VERSION = "1";
 
+    /**
+     * Enable/disable (grey out) the tax-engine inputs based on the two toggles.
+     * Computed-tax OFF: the whole tax engine is bypassed (legacy flat escalator),
+     *   so grey out conversion mode, all conversion inputs, and IRMAA growth; and
+     *   ENABLE the legacy Base tax + Tax inflation (they now drive the flat path).
+     * Computed-tax ON: grey out Base tax + Tax inflation (unused); enable the
+     *   engine controls; within them, Fill mode enables buffer/cap and greys the
+     *   flat conversion, while Flat mode does the reverse.
+     * Living expenses / Medical / Go-go are always enabled (tax-method-independent).
+     */
+    private void refreshTaxEngineEnabled() {
+        if (chkComputedTax == null) return; // guard: called during construction
+        boolean computed = chkComputedTax.isSelected();
+
+        // Legacy flat-tax inputs: live ONLY when the computed engine is OFF.
+        if (spBaseTax != null)      spBaseTax.setEnabled(!computed);
+        if (spTaxInflation != null) spTaxInflation.setEnabled(!computed);
+
+        // Engine controls: live ONLY when the computed engine is ON.
+        if (tglConvMode != null)  tglConvMode.setEnabled(computed);
+        if (cmbIrmaaMode != null) cmbIrmaaMode.setEnabled(computed);
+
+        boolean fillMode = (tglConvMode != null) && tglConvMode.isSelected();
+        // Flat conversion is live only in computed + flat mode.
+        if (spConvFlat != null)   spConvFlat.setEnabled(computed && !fillMode);
+        // Fill buffer + cap are live only in computed + fill mode.
+        if (spConvBuffer != null) spConvBuffer.setEnabled(computed && fillMode);
+        if (spConvCap != null)    spConvCap.setEnabled(computed && fillMode);
+    }
+
     private void saveScenario(javax.swing.JTextField tfDesc) {
         String desc = tfDesc.getText().trim();
         if (desc.isEmpty()) desc = "scenario";
@@ -2085,6 +2235,7 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         props.setProperty("tax.convFlat",           String.valueOf(iv(spConvFlat)));
         props.setProperty("tax.convBuffer",         String.valueOf(iv(spConvBuffer)));
         props.setProperty("tax.convCap",            String.valueOf(iv(spConvCap)));
+        props.setProperty("tax.irmaaThreshMode",    String.valueOf(cmbIrmaaMode.getSelectedIndex()));
         props.setProperty("mc.solvePaths",          String.valueOf(iv(spMcSolvePaths)));
         props.setProperty("mc.binIters",            String.valueOf(iv(spBinaryIters)));
         props.setProperty("mc.fanPaths",            String.valueOf(iv(spMcFanPaths)));
@@ -2177,6 +2328,12 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         setSpinnerI(spConvFlat,           props, "tax.convFlat",           warnings);
         setSpinnerI(spConvBuffer,         props, "tax.convBuffer",         warnings);
         setSpinnerI(spConvCap,            props, "tax.convCap",            warnings);
+        if (props.getProperty("tax.irmaaThreshMode") != null) {
+            try {
+                int m = Integer.parseInt(props.getProperty("tax.irmaaThreshMode").trim());
+                if (m >= 0 && m < cmbIrmaaMode.getItemCount()) cmbIrmaaMode.setSelectedIndex(m);
+            } catch (Exception ignore) { }
+        }
         setSpinnerI(spMcSolvePaths,       props, "mc.solvePaths",          warnings);
         setSpinnerI(spBinaryIters,        props, "mc.binIters",            warnings);
         setSpinnerI(spMcFanPaths,         props, "mc.fanPaths",            warnings);
@@ -2192,6 +2349,7 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         updateAgeLabels();
         updateAccountTotal();
         updateSSBenefitNote();
+        refreshTaxEngineEnabled();  // greying may change if loaded toggles differ
         addRecentFile(file.getAbsolutePath());
         if (cmbRecent != null) loadRecentFiles(cmbRecent);
         String warnMsg = warnings.isEmpty() ? "" : "  [Warnings: " + String.join(", ", warnings) + "]";
@@ -2479,6 +2637,7 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         i.convFlat           = iv(spConvFlat);
         i.convBuffer         = iv(spConvBuffer);
         i.convCap            = iv(spConvCap);
+        i.irmaaThreshMode    = cmbIrmaaMode.getSelectedIndex();
         i.goGoMultiplier     = dv(spGoGo);
         i.goGoDuration       = iv(spGoGoDuration);
         i.proPosUpperGuardrail = dv(spProPosUpperGuardrail) / 100.0;
@@ -2704,9 +2863,14 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
                 //      uses living income only.
                 double magiTwoYrPrior = (y >= 2) ? magiHistory[y - 2]
                         : (magiBeforeConv + conv);
+                // IRMAA thresholds index per the chosen mode, evaluated at the
+                // lookback year (y-2) whose MAGI is being assessed.
+                int lookbackY = Math.max(0, y - 2);
+                double irmaaTF = TaxEngine.irmaaThreshFactor(
+                        inp.irmaaThreshMode, inflFactor, lookbackY);
                 TaxEngine.TaxResult tr = TaxEngine.compute(
                         grossSS, ordinaryBeforeConv, magiTwoYrPrior,
-                        manAge >= 65, womanAge >= 65, inflFactor);
+                        manAge >= 65, womanAge >= 65, inflFactor, irmaaTF);
 
                 tax          = tr.totalTax;                 // living-expenses tax
                 taxableSSInt = (int) tr.taxableSS;
@@ -4153,9 +4317,9 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         }
 
         /** IRMAA tier index from a (2yr-prior) MAGI, thresholds inflated to year. */
-        static int irmaaTier(double magi, double inflFactor) {
+        static int irmaaTier(double magi, double threshFactor) {
             for (int t = 0; t < IRMAA_THRESH_2026.length; t++)
-                if (magi <= infl(IRMAA_THRESH_2026[t], inflFactor)) return t;
+                if (magi <= infl(IRMAA_THRESH_2026[t], threshFactor)) return t;
             return IRMAA_THRESH_2026.length; // top tier
         }
 
@@ -4178,6 +4342,36 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
             return d;
         }
 
+        // IRMAA threshold indexing modes.
+        static final int IRMAA_FROZEN = 0;   // thresholds fixed in nominal dollars
+        static final int IRMAA_CHAINED = 1;  // chained-CPI (inflation minus ~0.3%/yr)
+        static final int IRMAA_FULL = 2;     // full CPI (= general inflation factor)
+
+        // Chained-CPI runs ~0.3 percentage points/yr below regular CPI.
+        static final double CHAINED_CPI_LAG = 0.003;
+
+        /**
+         * Factor to index IRMAA THRESHOLDS this simulation year, per the chosen
+         * mode. Frozen keeps thresholds at nominal 2026 (factor 1.0). Chained
+         * grows them at (inflation - 0.3%)/yr. Full uses the general inflation
+         * factor. Given the general cumulative inflFactor and the year index y,
+         * chained is reconstructed from the effective annual inflation implied
+         * by inflFactor over y years, minus the chained lag.
+         */
+        static double irmaaThreshFactor(int mode, double inflFactor, int y) {
+            switch (mode) {
+                case IRMAA_FROZEN: return 1.0;
+                case IRMAA_FULL:   return inflFactor;
+                case IRMAA_CHAINED:
+                default:
+                    if (y <= 0 || inflFactor <= 1.0) return 1.0;
+                    // effective annual inflation implied by the cumulative factor
+                    double annual = Math.pow(inflFactor, 1.0 / y) - 1.0;
+                    double chained = Math.max(0.0, annual - CHAINED_CPI_LAG);
+                    return Math.pow(1.0 + chained, y);
+            }
+        }
+
         /**
          * Compute a full year's tax picture.
          *
@@ -4189,11 +4383,14 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
          * @param man65          user is 65+ this year
          * @param woman65        spouse is 65+ this year
          * @param inflFactor     cumulative inflation factor for this year
+         * @param irmaaThreshFactor factor for indexing IRMAA THRESHOLDS this
+         *                       year (may differ from inflFactor: 1.0 = frozen,
+         *                       reduced = chained-CPI, = inflFactor = full-CPI)
          */
         static TaxResult compute(double grossSS, double ordinaryOther,
                                  double magiTwoYrPrior,
                                  boolean man65, boolean woman65,
-                                 double inflFactor) {
+                                 double inflFactor, double irmaaThreshFactor) {
             TaxResult r = new TaxResult();
             r.taxableSS     = taxableSocialSecurity(grossSS, ordinaryOther, inflFactor);
             r.ordinaryOther = ordinaryOther;
@@ -4207,7 +4404,9 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
             double azBase   = Math.max(0, r.taxableIncome - r.taxableSS);
             r.stateTax      = azBase * AZ_STATE_RATE;
 
-            r.irmaaTier = irmaaTier(magiTwoYrPrior, inflFactor);
+            // IRMAA THRESHOLDS index per the chosen mode; the surcharge AMOUNT
+            // still tracks general inflation (Medicare costs rise with prices).
+            r.irmaaTier = irmaaTier(magiTwoYrPrior, irmaaThreshFactor);
             double[] tbl = IRMAA_COUPLE_YR_2026;
             r.irmaaCost = tbl[Math.min(r.irmaaTier, tbl.length - 1)] * inflFactor;
 
@@ -4291,6 +4490,7 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         boolean computedTax;
         boolean convFillMode;       // true = fill-to-target, false = flat
         int convFlat, convBuffer, convCap;
+        int irmaaThreshMode;        // 0=frozen 1=chained-CPI 2=full-CPI
         double goGoMultiplier; int goGoDuration;
         double proPosUpperGuardrail, proPosLowerGuardrail;   // Pro PoS advisory alerts only
         double gkUpperGuardrail, gkLowerGuardrail;           // Guyton-Klinger active adjustments
