@@ -167,6 +167,11 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
     private JCheckBox  chkOptimize;                  // true = scan, false = manual
     private JLabel     lblOptStatus;
     private JButton    btnRunOpt;
+    // Stress Test tab (v3)
+    private JButton    btnRunStress;
+    private JLabel     lblStressStatus, lblStressVerdict;
+    private javax.swing.table.DefaultTableModel tblStressModel;
+    private JTable     tblStress;
     private JTable     tblOpt;
     private javax.swing.table.DefaultTableModel tblOptModel;
     private volatile boolean optCancelRequested = false;
@@ -986,6 +991,7 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         tabs.addTab("Simulation Chart",              buildChartPanel());
         tabs.addTab("Summary",                       buildSummaryPanel());
         tabs.addTab("SS Optimizer",                  buildSsOptimizerPanel());
+        tabs.addTab("Stress Test",                   buildStressTestPanel());
         tabs.addTab("Assumptions & Methods",         buildAssumptionsPanel());
 
         panel.add(topSection, BorderLayout.NORTH);
@@ -1673,7 +1679,60 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
                 + "trustee, non-taxable) into EDJ IRAs. The tool treats Traditional IRA and Traditional 401(k) "
                 + "identically for RMD, so this is a label change, not a math change.</i></p>"
 
-                + "<h3 style='color:#2a5d34;'>8. RMDs and deliberately omitted features</h3>"
+                + "<h3 style='color:#2a5d34;'>8. Why PoS is the primary method &mdash; the withdrawal-rate flaw</h3>"
+                + "<p><b>Guyton-Klinger faithfulness.</b> The GK tab implements the 2006 Guyton-Klinger decision "
+                + "rules (Journal of Financial Planning, \"Decision Rules and Maximum Initial Withdrawal Rates\"). "
+                + "The core rules match the specification:</p>"
+                + "<ul>"
+                + "<li><b>Capital Preservation Rule (CPR, cut):</b> when the current withdrawal rate rises more "
+                + "than the upper guardrail (default 20%) above the initial rate &mdash; because the portfolio "
+                + "shrank &mdash; the withdrawal is cut 10%.</li>"
+                + "<li><b>Prosperity Rule (PR, raise):</b> when the current rate falls more than the lower "
+                + "guardrail (default 20%) below the initial rate &mdash; because the portfolio grew &mdash; the "
+                + "withdrawal is raised 10%.</li>"
+                + "<li><b>Inflation-skip (PMR0):</b> after a down-return year, the annual inflation raise is "
+                + "skipped if the withdrawal rate is above the initial rate.</li>"
+                + "</ul>"
+                + "<p><b>Two deliberate deviations from the textbook GK spec</b> (both conservative): this tool "
+                + "(a) does NOT suspend the guardrails in the final 15 years of the horizon (the original authors "
+                + "say the CPR/PR need not apply in the last 15 years; keeping them applied cuts spending later, "
+                + "which is more cautious), and (b) skips the inflation adjustment entirely in a down-plus-high-"
+                + "rate year rather than capping it at 6%. The GK tab is provided as a comparison overlay and as "
+                + "the engine behind the Stress Test tab &mdash; it is NOT the recommended planning method.</p>"
+                + "<p><b>The core problem with ALL withdrawal-rate methods.</b> The 4% rule and its dynamic "
+                + "descendants (including Guyton-Klinger) share a fundamental flaw in how they define success. "
+                + "A withdrawal-rate method takes a percentage of the CURRENT balance, and 'success' is "
+                + "conventionally measured as the portfolio never hitting zero. But a percentage of a balance can "
+                + "never mathematically reach zero: 4% of $100 is $4, 4% of $4 is $0.16, and so on &mdash; it "
+                + "approaches zero without ever arriving. <b>So a withdrawal-rate plan almost always 'succeeds' "
+                + "by the portfolio-survival test, even when the retiree's actual spending has collapsed to "
+                + "numbers no one could live on.</b> A $100 portfolio taking a $4 withdrawal 'succeeds' &mdash; "
+                + "while the retiree starves. The portfolio survives; the lifestyle does not.</p>"
+                + "<p>This is not a quirk of this implementation &mdash; it is the published critique. Kitces "
+                + "(\"Why Guyton-Klinger Guardrails Are Too Risky For Most Retirees\") documents a 45% cut in real "
+                + "income during the Great Depression under GK: the plan 'survived,' but spending was nearly "
+                + "halved. The method over-preserves capital in downturns at the cost of living standards, with "
+                + "no guarantee that withdrawals align with the retiree's actual needs or lifespan.</p>"
+                + "<p><b>This is exactly why the Surplus/gap column on the GK tab turns red in later years, and "
+                + "why the GK 'final balance' is misleading.</b> A red gap means the guardrail-driven paycheck "
+                + "plus guaranteed income fell short of the budgeted spending that year. In this model the GK "
+                + "withdrawal is set by the RULE (a percentage of balance, guardrail-adjusted), not by the "
+                + "spending need &mdash; and only that rule-driven withdrawal decrements the portfolio. The "
+                + "shortfall is displayed but not funded, and the RMD overage is redirected to Roth/MM rather "
+                + "than covering it. So the GK tab reports 'portfolio survived' while the red gaps show the "
+                + "paycheck under-funded the budget for years. The survival is real; the ADEQUACY is not.</p>"
+                + "<p><b>Why the PoS method is better &mdash; here and in general.</b> Probability of Success "
+                + "inverts the question. Instead of asking 'does the portfolio survive at withdrawal rate X,' it "
+                + "asks 'what SPENDING is sustainable at confidence level Y.' Spending &mdash; the retiree's "
+                + "actual dollars &mdash; is the constraint that matters, and PoS puts it at the center. By "
+                + "construction there is no unfunded gap: the Pro PoS tab solves for the withdrawal that funds "
+                + "the target lifestyle at the chosen confidence, re-solving each year against the observed "
+                + "balance. This is the risk-based-guardrails approach (Fitzpatrick and Tharp; see also Kitces, "
+                + "Blanchett), and it is the overwhelmingly preferred methodology for retirement income planning "
+                + "generally, not merely for this application. The GK tab is retained for comparison and for the "
+                + "Stress Test's spending-adjustment story; the Pro PoS tab is the tool to plan by.</p>"
+
+                + "<h3 style='color:#2a5d34;'>9. RMDs and deliberately omitted features</h3>"
                 + "<p><b>RMDs:</b> SECURE 2.0, begin at age 75 (born after 1960), computed from the IRS Uniform "
                 + "Lifetime Table on median Traditional-account balances.</p>"
                 + "<p><b>Deliberately omitted</b> (design decisions, not oversights):</p>"
@@ -1687,7 +1746,7 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
                 + "preserves it as a clean comparison baseline.</li>"
                 + "</ul>"
 
-                + "<h3 style='color:#2a5d34;'>9. Caveats</h3>"
+                + "<h3 style='color:#2a5d34;'>10. Caveats</h3>"
                 + "<p>This tool is a self-directed planning aid, not tax or financial advice. Tax figures are "
                 + "estimates from statutory tables current as of tax year 2026 and inflation-projected forward; "
                 + "real future law will differ. The OBBBA senior bonus (section 4), the annuity decision point, "
@@ -1862,6 +1921,251 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         p.add(north,                   BorderLayout.NORTH);
         p.add(new JScrollPane(tblOpt), BorderLayout.CENTER);
         return p;
+    }
+
+    // =========================================================================
+    //  STRESS TEST TAB  (v3)  -- Income Lab style
+    // -------------------------------------------------------------------------
+    //  Runs the existing Guyton-Klinger guardrail engine (simulateGK, UNCHANGED)
+    //  through each historical crisis sequence and reports the spending-
+    //  ADJUSTMENT and RECOVERY story rather than a pass/fail score. Philosophy
+    //  follows Income Lab's Retirement Stress Test: a dynamic (guardrail) plan
+    //  rarely fails outright -- it adjusts, usually temporarily, and recovers.
+    //  All metrics are derived from the GkRow series the engine already returns.
+    //  Uses current inputs (including the go-go multiplier); no prior run needed.
+    // =========================================================================
+    private JPanel buildStressTestPanel() {
+        JPanel p = new JPanel(new BorderLayout(0, 6));
+        p.setBackground(new Color(245, 245, 242));
+        p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        // == Intro / philosophy banner =====================================
+        JPanel banner = new JPanel(new BorderLayout());
+        banner.setBackground(new Color(230, 240, 255));
+        banner.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(150, 190, 240), 1),
+                BorderFactory.createEmptyBorder(6, 10, 6, 10)));
+        JLabel bannerText = new JLabel("<html><b>Retirement Stress Test</b> -- runs your Guyton-Klinger "
+                + "guardrail plan through the worst market periods in history and shows how spending would "
+                + "have been <b>adjusted and restored</b>, not whether it 'passes' or 'fails'. A dynamic "
+                + "plan bends; the question is how much and for how long.</html>");
+        bannerText.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        bannerText.setForeground(new Color(30, 60, 120));
+        banner.add(bannerText, BorderLayout.CENTER);
+
+        // == Controls ======================================================
+        JPanel ctrlRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
+        ctrlRow.setBackground(new Color(245, 245, 242));
+
+        btnRunStress = new JButton("Run Stress Test");
+        btnRunStress.setFont(new Font("SansSerif", Font.BOLD, 14));
+        btnRunStress.setBackground(new Color(24, 130, 80));
+        btnRunStress.setForeground(Color.WHITE);
+        btnRunStress.setFocusPainted(false);
+        btnRunStress.setOpaque(true);
+        btnRunStress.setBorderPainted(true);
+        btnRunStress.setBorder(BorderFactory.createLineBorder(new Color(16, 90, 55), 1));
+        btnRunStress.addActionListener(e -> runStressTest());
+
+        lblStressStatus = new JLabel("Click Run Stress Test to run your current plan through each historical crisis.");
+        lblStressStatus.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        lblStressStatus.setForeground(new Color(60, 60, 60));
+
+        ctrlRow.add(btnRunStress);
+        ctrlRow.add(lblStressStatus);
+
+        JPanel north = new JPanel(new BorderLayout(0, 6));
+        north.setBackground(new Color(245, 245, 242));
+        north.add(banner,  BorderLayout.NORTH);
+        north.add(ctrlRow, BorderLayout.CENTER);
+
+        // == Results table =================================================
+        String[] cols = {
+                "Historical Scenario", "Initial Spend", "Worst-Yr Spend (real)",
+                "Max Cut %", "# Guardrail Cuts", "Yrs to Recover",
+                "Final Balance", "Survived"
+        };
+        tblStressModel = new javax.swing.table.DefaultTableModel(cols, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+        tblStress = new JTable(tblStressModel) {
+            @Override public String getToolTipText(java.awt.event.MouseEvent e) {
+                int col = columnAtPoint(e.getPoint());
+                switch (col) {
+                    case 0: return "<html>The historical crisis the guardrail plan was run through.<br>"
+                            + "After the sequence ends, remaining years use your random distribution.</html>";
+                    case 1: return "<html>Spending in the first drawing year (after the go-go multiplier).<br>"
+                            + "This is the baseline the recovery metric returns to.</html>";
+                    case 2: return "<html>The lowest spending year during the crisis, in <b>real</b> (today's<br>"
+                            + "dollars) terms -- so an inflation-driven nominal rise is not mistaken for<br>"
+                            + "'no cut'. This is the trough of the guardrail adjustment.</html>";
+                    case 3: return "<html>Peak-to-trough spending cut: (initial - worst) / initial, in real<br>"
+                            + "terms. How deep the temporary spending reduction went.</html>";
+                    case 4: return "<html>Number of years the Capital Preservation Rule (CPR) cut the<br>"
+                            + "withdrawal 10%. Each is a guardrail adjustment triggered by the crisis.</html>";
+                    case 5: return "<html>Years from the spending trough until real spending returned to the<br>"
+                            + "initial level. 'not recovered' means spending stayed reduced through the<br>"
+                            + "remaining horizon. Income Lab emphasizes this recovery timeline.</html>";
+                    case 6: return "<html>Portfolio balance at the end of the full horizon (nominal).</html>";
+                    case 7: return "<html><b>Yes</b> = the portfolio never depleted through the full horizon.<br>"
+                            + "A guardrail plan that survives with reduced-then-restored spending is a<br>"
+                            + "success in the Income Lab sense, even if spending dipped along the way.</html>";
+                    default: return null;
+                }
+            }
+        };
+        tblStress.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        tblStress.setRowHeight(26);
+        tblStress.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
+        tblStress.setGridColor(new Color(220, 220, 215));
+        tblStress.setShowGrid(true);
+        tblStress.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        tblStress.setSelectionBackground(new Color(190, 220, 255));
+
+        int[] cw = { 220, 110, 150, 90, 130, 120, 130, 90 };
+        for (int i = 0; i < cw.length && i < tblStress.getColumnCount(); i++)
+            tblStress.getColumnModel().getColumn(i).setPreferredWidth(cw[i]);
+
+        // Coloring: survived/recovered green tones; not-recovered amber (NOT red).
+        tblStress.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+            private final Color OK_BG   = new Color(225, 245, 225);
+            private final Color WARN_BG = new Color(255, 240, 205);
+            @Override public java.awt.Component getTableCellRendererComponent(
+                    JTable t, Object v, boolean sel, boolean foc, int row, int col) {
+                java.awt.Component c = super.getTableCellRendererComponent(t, v, sel, foc, row, col);
+                if (!sel) {
+                    c.setBackground(Color.WHITE);
+                    Object survived = tblStressModel.getValueAt(row, 7);
+                    Object recover  = tblStressModel.getValueAt(row, 5);
+                    boolean didSurvive = "Yes".equals(survived);
+                    boolean didRecover = recover != null && !recover.toString().startsWith("not");
+                    if (col == 7) c.setBackground(didSurvive ? OK_BG : WARN_BG);
+                    if (col == 5) c.setBackground(didRecover ? OK_BG : WARN_BG);
+                }
+                setHorizontalAlignment(col == 0 ? LEFT : RIGHT);
+                return c;
+            }
+        });
+
+        // == Verdict line ==================================================
+        lblStressVerdict = new JLabel(" ");
+        lblStressVerdict.setFont(new Font("SansSerif", Font.BOLD, 13));
+        lblStressVerdict.setForeground(new Color(30, 90, 50));
+        lblStressVerdict.setBorder(BorderFactory.createEmptyBorder(8, 4, 4, 4));
+
+        JPanel south = new JPanel(new BorderLayout());
+        south.setBackground(new Color(245, 245, 242));
+        south.add(lblStressVerdict, BorderLayout.CENTER);
+
+        p.add(north,                       BorderLayout.NORTH);
+        p.add(new JScrollPane(tblStress),  BorderLayout.CENTER);
+        p.add(south,                       BorderLayout.SOUTH);
+        return p;
+    }
+
+    /**
+     * Run the GK guardrail engine through each historical scenario (indices 1-4)
+     * and populate the stress-test summary. Reuses simulateGK unchanged; all
+     * metrics derive from the returned GkRow series. Uses current inputs.
+     */
+    private void runStressTest() {
+        if (tblStressModel == null) return;
+        tblStressModel.setRowCount(0);
+        lblStressStatus.setText("Running guardrail plan through historical crises...");
+
+        int scenarioCount = HistoricalScenarios.SCENARIO_NAMES.length; // includes index 0 (random)
+        int survivedCount = 0, recoveredCount = 0, crisisCount = 0;
+        int worstCutPct = 0; String worstCutName = "";
+
+        for (int s = 1; s < scenarioCount; s++) {   // skip 0 (random/non-crisis)
+            crisisCount++;
+            // Fresh inputs per run (readInputs reads the UI); override scenario.
+            SimInputs inp = readInputs();
+            inp.scenarioIndex = s;
+            GkResults gk  = simulateGK(inp);
+
+            // -- Derive the adjustment/recovery story from the GkRow series ----
+            java.util.List<GkRow> rows = gk.rows;
+            double initialRealSpend = 0;   // first drawing year, real
+            int    initialIdx = -1;
+            double worstRealSpend = Double.MAX_VALUE;
+            int    worstIdx = -1;
+            int    cutCount = 0;
+
+            for (int i = 0; i < rows.size(); i++) {
+                GkRow r = rows.get(i);
+                if (!r.drawing) continue;
+                double realSpend = (r.inflFactor > 0) ? r.wdActual / r.inflFactor : r.wdActual;
+                if (initialIdx < 0) { initialRealSpend = realSpend; initialIdx = i; }
+                if (realSpend < worstRealSpend) { worstRealSpend = realSpend; worstIdx = i; }
+                if (r.ruleFlags != null && r.ruleFlags.contains("CPR")) cutCount++;
+            }
+            if (initialIdx < 0) { initialRealSpend = 0; worstRealSpend = 0; }
+
+            double maxCutPct = (initialRealSpend > 0)
+                    ? Math.max(0.0, (initialRealSpend - worstRealSpend) / initialRealSpend * 100.0) : 0;
+
+            // Years to recover: first drawing year AFTER the trough whose real
+            // spend returns to >= the initial real spend. -1 = never recovered.
+            int yrsToRecover = -1;
+            if (worstIdx >= 0 && worstRealSpend < initialRealSpend) {
+                for (int i = worstIdx + 1; i < rows.size(); i++) {
+                    GkRow r = rows.get(i);
+                    if (!r.drawing) continue;
+                    double realSpend = (r.inflFactor > 0) ? r.wdActual / r.inflFactor : r.wdActual;
+                    if (realSpend >= initialRealSpend) {
+                        yrsToRecover = rows.get(i).calYear - rows.get(worstIdx).calYear;
+                        break;
+                    }
+                }
+            } else if (worstRealSpend >= initialRealSpend) {
+                yrsToRecover = 0; // never dipped below initial -- no recovery needed
+            }
+
+            boolean survived = gk.finalBalance > 0;
+            if (survived) survivedCount++;
+            boolean recovered = (yrsToRecover >= 0);
+            if (recovered) recoveredCount++;
+            if ((int) Math.round(maxCutPct) > worstCutPct) {
+                worstCutPct = (int) Math.round(maxCutPct);
+                worstCutName = HistoricalScenarios.SCENARIO_NAMES[s].split(" \\(")[0];
+            }
+
+            tblStressModel.addRow(new Object[]{
+                    HistoricalScenarios.SCENARIO_NAMES[s],
+                    CURRENCY.format((long) initialRealSpend),
+                    CURRENCY.format((long) worstRealSpend),
+                    String.format("%.0f%%", maxCutPct),
+                    String.valueOf(cutCount),
+                    yrsToRecover < 0 ? "not recovered"
+                            : (yrsToRecover == 0 ? "no cut" : yrsToRecover + " yr"
+                                                              + (yrsToRecover == 1 ? "" : "s")),
+                    CURRENCY.format((long) gk.finalBalance),
+                    survived ? "Yes" : "No",
+            });
+        }
+
+        // -- Income Lab style verdict (adjustments, not pass/fail) ------------
+        String verdict;
+        if (survivedCount == crisisCount && recoveredCount == crisisCount) {
+            verdict = "Your plan adjusted through all " + crisisCount
+                    + " historical crises and restored spending in each; the portfolio survived every scenario"
+                    + (worstCutPct > 0 ? " (deepest temporary cut: " + worstCutPct + "% in the "
+                                         + worstCutName + ")." : ".");
+        } else if (survivedCount == crisisCount) {
+            verdict = "The portfolio survived all " + crisisCount + " crises. Spending recovered in "
+                    + recoveredCount + " of " + crisisCount + "; in the rest it stayed reduced through the "
+                    + "horizon -- a temporary-to-lasting adjustment, not a portfolio failure.";
+        } else {
+            verdict = "The portfolio survived " + survivedCount + " of " + crisisCount
+                    + " crises. Where it did not, the plan would need larger or longer spending "
+                    + "adjustments than the guardrails alone applied -- review spending or claiming choices.";
+        }
+        lblStressVerdict.setText("<html>" + verdict + "</html>");
+        lblStressVerdict.setForeground(survivedCount == crisisCount
+                ? new Color(30, 90, 50) : new Color(150, 90, 20));
+        lblStressStatus.setText("Done. Ran " + crisisCount
+                + " historical crises through your Guyton-Klinger guardrail plan.");
     }
 
     // == Apply SS dates and run IL simulation ================================
@@ -3773,14 +4077,33 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         topGk.add(gkMetrics, BorderLayout.NORTH);
         topGk.add(legend,    BorderLayout.SOUTH);
 
+        // Closing note: point users to the methodology critique.
+        JLabel gkNote = new JLabel("<html><i>The 4% rule and derivative dynamic-guardrail methods "
+                + "(including Guyton-Klinger) have a fundamental flaw: 'success' means the portfolio "
+                + "survives, not that spending stays livable -- a $100 portfolio taking a $4 withdrawal "
+                + "still 'succeeds.' This is why the PoS method is the overwhelmingly preferred methodology "
+                + "for this application. See section 8, \"Why PoS is the primary method,\" on the "
+                + "Assumptions &amp; Methods tab to learn about the problem and why PoS is the better "
+                + "option.</i></html>");
+        gkNote.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        gkNote.setForeground(new Color(120, 60, 20));
+        gkNote.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(220, 190, 150), 1),
+                BorderFactory.createEmptyBorder(5, 8, 5, 8)));
+
+        JPanel topGkWrap = new JPanel(new BorderLayout(0, 4));
+        topGkWrap.setBackground(new Color(245, 245, 242));
+        topGkWrap.add(topGk,  BorderLayout.NORTH);
+        topGkWrap.add(gkNote, BorderLayout.SOUTH);
+
         JScrollPane gkScroll = new JScrollPane(tblGk);
         gkScroll.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
         JPanel gkPanel = new JPanel(new BorderLayout(0, 4));
         gkPanel.setBackground(new Color(245, 245, 242));
         gkPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        gkPanel.add(topGk,    BorderLayout.NORTH);
-        gkPanel.add(gkScroll, BorderLayout.CENTER);
+        gkPanel.add(topGkWrap, BorderLayout.NORTH);
+        gkPanel.add(gkScroll,  BorderLayout.CENTER);
         return gkPanel;
     }
 
