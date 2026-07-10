@@ -688,7 +688,18 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
                 + "&nbsp;&nbsp;- standard deduction (MFJ + age-65 add-ons), all inflation-indexed<br>"
                 + "then run through the MFJ brackets + Arizona 2.5% + IRMAA surcharge.<br><br>"
                 + "When OFF, reverts to the legacy flat 'Base tax' escalator<br>"
-                + "(baseTax * (1+taxInflation)^year). See the Assumptions &amp; Methods tab.</html>");
+                + "(baseTax * (1+taxInflation)^year). See the Assumptions &amp; Methods tab.<br><br>"
+                + "<b>Deliberately NOT modeled &mdash; OBBBA 'senior bonus' deduction:</b><br>"
+                + "The up-to-$6,000/person 65+ bonus (tax years 2025-2028 only) is omitted<br>"
+                + "on purpose, for two reasons: (1) leaving it out slightly OVERSTATES tax,<br>"
+                + "which is the conservative and preferred direction; and (2) it avoids<br>"
+                + "encoding fragile temporary-statute logic -- a hard 2028 sunset plus an MFJ<br>"
+                + "MAGI phase-out from $150,000 (gone by $250,000). That phase-out matters<br>"
+                + "here because it keys off MAGI, the SAME quantity the fill-to-target Roth<br>"
+                + "conversion sizing drives -- so modeling the bonus would couple it to the<br>"
+                + "conversion engine rather than being a clean add-on. See section 4 of the<br>"
+                + "Assumptions &amp; Methods tab. Verify with a tax professional before relying<br>"
+                + "on this deduction.</html>");
 
         tglConvMode = new JToggleButton("Fill to MAGI target", true);
         tglConvMode.setToolTipText("<html><b>Roth conversion sizing mode</b><br>"
@@ -1513,6 +1524,15 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
         String html = ""
                 + "<html><body style='font-family:sans-serif; font-size:12px; color:#222;'>"
                 + "<h2 style='color:#2a5d34; margin-bottom:2px;'>Assumptions &amp; Methods</h2>"
+                + "<div style='background:#eef5ec; border-left:4px solid #2a5d34; padding:8px 12px; "
+                + "margin:6px 0 10px 0;'>"
+                + "<p style='margin:0; font-weight:bold; color:#1f4a29;'>This software is executed "
+                + "locally/offline: no per-seat licensing, no data leaving your machine.</p>"
+                + "<p style='margin:4px 0 0 0; color:#33562f;'>(no mortality credit, temporary "
+                + "one-big-beautiful-bill senior-bonus deduction omitted, fixed planning age) &mdash; errs "
+                + "toward under-spending, which is the safe direction for a plan you're actually going to "
+                + "live on.</p>"
+                + "</div>"
                 + "<p style='color:#555; margin-top:0;'><i>Read-only reference. Every coded assumption in the "
                 + "tool is documented here. This tab is the canonical source the tax, IRMAA, and conversion "
                 + "tooltips point to.</i></p>"
@@ -1570,8 +1590,9 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
                 + "<p><b>Modeled (permanent provisions, inflation-indexed):</b></p>"
                 + "<ul>"
                 + "<li>Base MFJ standard deduction: $32,200 (2026)</li>"
-                + "<li>Additional age-65 standard deduction: $1,600 per qualifying spouse, applied once each "
-                + "spouse reaches age 65 ($3,200 combined once both are 65+)</li>"
+                + "<li>Additional age-65 standard deduction: $1,650 per qualifying spouse (2026, per IRS "
+                + "Rev. Proc. 2025-32), applied once each spouse reaches age 65 ($3,300 combined once both "
+                + "are 65+). Supersedes the 2025 figure of $1,600.</li>"
                 + "</ul>"
                 + "<p><b>DELIBERATELY NOT modeled &mdash; OBBBA 'senior bonus' deduction (a decision):</b> The One "
                 + "Big Beautiful Bill Act (2025) added a temporary senior bonus deduction of up to $6,000 per "
@@ -4567,7 +4588,11 @@ public class IncomeLab_OptSocSec_v3 extends JFrame {
 
         // 2026 MFJ base standard deduction and age-65 additional (per spouse).
         static final double STD_DED_MFJ_2026        = 32_200.0;
-        static final double ADD_STD_DED_65_EACH_2026 = 1_600.0;
+        // Age-65 additional standard deduction, per qualifying spouse (MFJ).
+        // 2026 = $1,650 per IRS Rev. Proc. 2025-32 (IRC 63(f)). This supersedes
+        // the 2025 value of $1,600 (OBBBA / IR-2025-103) used in an earlier build.
+        // A couple both 65+ therefore gets 32,200 + 2 x 1,650 = 35,500.
+        static final double ADD_STD_DED_65_EACH_2026 = 1_650.0;
 
         // IRMAA (Medicare Part B + D combined surcharge, per COUPLE per year).
         // Tier assessed on MAGI from 2 years prior. 2026 base thresholds.
