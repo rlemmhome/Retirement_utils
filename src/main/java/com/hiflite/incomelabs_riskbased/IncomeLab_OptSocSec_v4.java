@@ -751,6 +751,7 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         cmbFilingStatus = new JComboBox<>(new String[]{
                 "Married filing jointly", "Single" });
         cmbFilingStatus.setSelectedIndex(0); // default: MFJ (preserves prior behavior)
+        cmbFilingStatus.addActionListener(e -> refreshTaxEngineEnabled());
         cmbFilingStatus.setToolTipText("<html><b>Filing status (federal + SS taxation + IRMAA basis)</b><br>"
                 + "Switches the entire tax basis between MFJ and Single. Affects the<br>"
                 + "standard deduction, the ordinary brackets, the age-65 add-on, the<br>"
@@ -1682,6 +1683,52 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
                 + "income but loses half the deduction and hits the brackets and IRMAA tiers at about half the "
                 + "income.</p>"
 
+                + "<h3 style='color:#2a5d34;'>3a. Single mode &mdash; spouse fields disabled (v4)</h3>"
+                + "<p>Selecting <b>Single</b> filing status does more than switch the tax basis: every "
+                + "<b>Spouse</b> input on the People, Accounts, and Social Security cards is <b>disabled, "
+                + "grayed, and locked against editing</b>, and is <b>excluded from every calculation</b> "
+                + "(income sum, RMD, portfolio total, and the Social Security optimizer). This applies to the "
+                + "spouse's birth year/month, life expectancy, PIA and SS start dates, and all four spouse "
+                + "account fields.</p>"
+                + "<p>The entered spouse <b>values are preserved and stay visible in gray</b> &mdash; they are "
+                + "not zeroed in the input fields &mdash; so switching back to <b>Married filing jointly</b> "
+                + "restores the full joint plan instantly, with no re-entry. A grayed spouse value is never "
+                + "counted in any total; if you see one, it is parked, not active.</p>"
+                + "<p><b>Consolidation is therefore mandatory for a survivor run, and it is one-directional.</b> "
+                + "Because the spouse balances are ignored while Single, the surviving person must hold the "
+                + "combined portfolio: consolidate the decedent's account balances into the primary/User "
+                + "account fields by hand. The toggle never moves money for you and never reverses a manual "
+                + "consolidation. For this reason, do survivor modeling in a <b>separate saved scenario</b> "
+                + "(Save-As a copy of the married plan): if you consolidate balances into the primary fields "
+                + "and later flip back to MFJ in the same file, the decedent's original balances become live "
+                + "again alongside your consolidated figure and double-count. A separate file keeps the "
+                + "pristine married plan safe.</p>"
+                + "<p>With the spouse's life-expectancy field disabled, the planning horizon follows the "
+                + "primary/User plan age. Put the <b>survivor in the User/primary fields</b> so the horizon and "
+                + "the age-65 add-on both anchor to the survivor's age.</p>"
+
+                + "<p><b>How to consolidate (which field money lands in).</b> The default, and what this tool "
+                + "assumes, is that the survivor rolls the decedent's accounts into their own IRAs:</p>"
+                + "<ul>"
+                + "<li>Spouse Traditional IRA + Spouse Traditional 401K &rarr; add into <b>User Traditional IRA</b></li>"
+                + "<li>Spouse Roth IRA + Spouse Roth 401K &rarr; add into <b>User Roth IRA</b></li>"
+                + "</ul>"
+                + "<p>The one hard rule is that <b>pre-tax stays pre-tax and Roth stays Roth</b>: a Traditional "
+                + "balance may only be consolidated into a Traditional (User) field, and a Roth balance only into "
+                + "a Roth field. Moving Traditional money into a Roth field would represent a taxable Roth "
+                + "conversion, which is not what consolidation means and is not modeled here.</p>"
+                + "<p>The <b>IRA-versus-401K label does not affect the math.</b> RMDs are computed on the combined "
+                + "Traditional balance at the survivor's age whether that balance sits in the 'IRA' or the '401K' "
+                + "field, so collapsing all Traditional into the User Traditional IRA field (and all Roth into "
+                + "the User Roth IRA field) is both correct and the simplest way to enter it.</p>"
+                + "<p><b>Caveat &mdash; the real event has options this tool does not model.</b> A surviving spouse "
+                + "is an eligible designated beneficiary with choices beyond a straight IRA rollover: leaving "
+                + "funds in the employer plan, keeping an inherited IRA, or (under SECURE 2.0) electing to be "
+                + "treated as the deceased for RMD purposes &mdash; an election that can let a <i>younger</i> "
+                + "survivor defer RMDs until the older decedent would have reached RMD age. These can shift RMD "
+                + "timing and are worth reviewing with a fee-only fiduciary and a CPA at the actual event. The "
+                + "consolidation model here is a sound planning baseline, not tax advice.</p>"
+
                 + "<p><b>2026 MFJ ordinary brackets</b> (taxable income = MAGI &minus; deductions):</p>"
                 + "<ul>"
                 + "<li>10% : $0 &ndash; $24,800</li>"
@@ -2605,6 +2652,40 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         // Fill buffer + cap are live only in computed + fill mode.
         if (spConvBuffer != null) spConvBuffer.setEnabled(computed && fillMode);
         if (spConvCap != null)    spConvCap.setEnabled(computed && fillMode);
+
+        // v4: spouse fields follow filing status (see method).
+        refreshSpouseFieldsEnabled();
+    }
+
+    /**
+     * v4: In SINGLE filing status, every Spouse input is disabled (grayed and
+     * locked against editing) and excluded from all calculations. The entered
+     * VALUES are preserved and remain visible in gray, so switching back to
+     * Married filing jointly restores the full joint plan with no re-entry.
+     *
+     * Two things happen together and must stay in sync:
+     *   (1) here -- the widgets are disabled/grayed/locked; and
+     *   (2) in the SimInputs builder -- the spouse values are passed as 0 to
+     *       the simulation when status is SINGLE, so no downstream calculation
+     *       (income sum, RMD, portfolio total, SS optimizer) uses them.
+     * The toggle never mutates the stored widget values and never consolidates
+     * accounts; consolidating the decedent's balances into the surviving
+     * (primary/User) person's fields is a manual step and is one-directional.
+     */
+    private void refreshSpouseFieldsEnabled() {
+        if (cmbFilingStatus == null) return; // guard: called during construction
+        boolean single = (cmbFilingStatus.getSelectedIndex() == 1);
+        boolean on = !single; // spouse fields live only when NOT single
+        JSpinner[] spouseFields = {
+                spWomanBirthYear, spWomanBirthMonth, spWomanPlanAge,
+                spWomanPIA, spWomanSSStartYear, spWomanSSStartMonth,
+                spWomanRoth401K, spWomanRothIRA, spWomanTradIRA, spWomanTrad401K
+        };
+        for (JSpinner s : spouseFields) {
+            if (s != null) s.setEnabled(on);
+        }
+        // Account-total label reflects filing status (spouse excluded in Single).
+        updateAccountTotal();
     }
 
     private void saveScenario(javax.swing.JTextField tfDesc) {
@@ -3067,6 +3148,28 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         i.womanTrad401K  = iv(spWomanTrad401K);
         i.manPlanAge     = iv(spManPlanAge);
         i.womanPlanAge   = iv(spWomanPlanAge);
+
+        // v4: SINGLE filing status -> exclude the spouse entirely from the
+        // simulation. The widget values are preserved (and shown grayed in the
+        // UI); here we pass ZERO into the model so no downstream calculation --
+        // income sum, RMD, portfolio total, SS optimizer -- uses the spouse.
+        // For a survivor run the decedent's balances are consolidated by hand
+        // into the primary/User fields, so zeroing the spouse accounts here is
+        // correct (their money now lives in the User account fields).
+        // NOTE: read the combo directly -- i.filingStatus is assigned further
+        // below, so we cannot rely on it here.
+        boolean singleFiler = (cmbFilingStatus != null
+                && cmbFilingStatus.getSelectedIndex() == 1);
+        if (singleFiler) {
+            i.womanBirthYear = 0; i.womanBirthMonth = 0;
+            i.womanSSStartYear = 0; i.womanSSStartMonth = 0;
+            i.womanPIA = 0;
+            i.womanSSMonthly = 0; i.womanSSAmount = 0;
+            i.womanRoth401K = 0; i.womanRothIRA = 0;
+            i.womanTradIRA = 0;  i.womanTrad401K = 0;
+            i.womanPlanAge = 0;  // horizon then follows the primary/User plan age
+        }
+
         i.portfolio      = i.manTradIRA + i.manRothIRA + i.manTrad401K + i.manRoth401K
                 + i.womanRoth401K + i.womanRothIRA + i.womanTradIRA + i.womanTrad401K;
         i.nomReturn          = dv(spNomReturn)       / 100.0;
@@ -5215,12 +5318,26 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
     private boolean distributing = false;
     private void updateAccountTotal() {
         try {
-            long total = (long)iv(spManTradIRA) + iv(spManRothIRA) + iv(spManTrad401K) + iv(spManRoth401K)
-                    + iv(spWomanRoth401K) + iv(spWomanRothIRA) + iv(spWomanTradIRA) + iv(spWomanTrad401K);
-            lblAccountTotal.setText("Account total: " + CURRENCY.format(total));
+            boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
+            long userTotal = (long)iv(spManTradIRA) + iv(spManRothIRA)
+                    + iv(spManTrad401K) + iv(spManRoth401K);
+            long spouseTotal = (long)iv(spWomanRoth401K) + iv(spWomanRothIRA)
+                    + iv(spWomanTradIRA) + iv(spWomanTrad401K);
+            long total = userTotal + spouseTotal;
+
+            if (single) {
+                // Spouse accounts are grayed and excluded from the simulation,
+                // so the total reflects only the active (User) accounts, with a
+                // reminder to consolidate the decedent's balances by hand.
+                lblAccountTotal.setText("Account total: " + CURRENCY.format(userTotal)
+                        + "   (spouse accounts excluded -- consolidate manually)");
+            } else {
+                lblAccountTotal.setText("Account total: " + CURRENCY.format(total));
+            }
             if (!distributing) {
                 distributing = true;
-                spPortfolio.setValue((int) Math.min(total, 20_000_000));
+                long shown = single ? userTotal : total;
+                spPortfolio.setValue((int) Math.min(shown, 20_000_000));
                 distributing = false;
             }
         } catch (Exception ignored) {}
@@ -5229,14 +5346,20 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
     private void distributePortfolioDelta() {
         if (distributing) return;
         try {
+            boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
             long newTotal = iv(spPortfolio);
-            long oldTotal = (long)iv(spManTradIRA) + iv(spManRothIRA) + iv(spManTrad401K) + iv(spManRoth401K)
-                    + iv(spWomanRoth401K) + iv(spWomanRothIRA) + iv(spWomanTradIRA) + iv(spWomanTrad401K);
+            // In Single mode the spouse accounts are excluded, so distribute the
+            // portfolio delta across the User accounts only (spouse fields stay
+            // as-is, grayed and unused).
+            JSpinner[] accts = single
+                    ? new JSpinner[]{spManTradIRA, spManRothIRA, spManTrad401K, spManRoth401K}
+                    : new JSpinner[]{spManTradIRA, spManRothIRA, spManTrad401K, spManRoth401K,
+                    spWomanRoth401K, spWomanRothIRA, spWomanTradIRA, spWomanTrad401K};
+            long oldTotal = 0;
+            for (JSpinner s : accts) oldTotal += iv(s);
             long delta = newTotal - oldTotal;
             if (delta == 0 || oldTotal == 0) return;
             distributing = true;
-            JSpinner[] accts = {spManTradIRA, spManRothIRA, spManTrad401K, spManRoth401K,
-                    spWomanRoth401K, spWomanRothIRA, spWomanTradIRA, spWomanTrad401K};
             double[] shares = new double[accts.length];
             for (int k = 0; k < accts.length; k++)
                 shares[k] = iv(accts[k]) / (double) oldTotal;
@@ -5255,7 +5378,12 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
             }
             long finalTotal = 0;
             for (JSpinner s : accts) finalTotal += iv(s);
-            lblAccountTotal.setText("Account total: " + CURRENCY.format(finalTotal));
+            if (single) {
+                lblAccountTotal.setText("Account total: " + CURRENCY.format(finalTotal)
+                        + "   (spouse accounts excluded -- consolidate manually)");
+            } else {
+                lblAccountTotal.setText("Account total: " + CURRENCY.format(finalTotal));
+            }
             distributing = false;
         } catch (Exception ignored) { distributing = false; }
     }
