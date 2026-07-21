@@ -140,6 +140,7 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
     private JLabel   lblSSBenefitNote;
     private JSpinner spSSCola;
     private JSpinner spAnnuity, spAnnuityStartYear, spAnnuityStartMonth;
+    private JCheckBox chkUseAnnuity; // v4: activate/deactivate annuity (default off)
     private JSpinner spNomReturn, spStdDev, spInflation, spInflationStdDev;
     private JSpinner spLivingExp, spMedical, spMedInflation;
     private JSpinner spBaseTax, spTaxInflation;
@@ -585,7 +586,17 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         spAnnuity           = spinI(0, 0, 500_000, 500, "#,###");
         spAnnuityStartYear  = spinI(2028, 2020, 2040, 1, "#");
         spAnnuityStartMonth = spinI(4,    1,    12,   1, "#");
+        chkUseAnnuity       = new JCheckBox("Use annuity", false); // default: deactivated
+        chkUseAnnuity.setToolTipText("<html><b>Use annuity</b><br>"
+                + "When OFF (default), the annuity is deactivated: its income is treated as $0 in<br>"
+                + "the simulation and the SS optimizer, and the three annuity fields below are<br>"
+                + "grayed and locked. Their values are preserved, so turning this back ON restores<br>"
+                + "the annuity with no re-entry.<br><br>"
+                + "The on/off state is saved with the scenario. Scenarios saved before this control<br>"
+                + "existed have no stored state and load deactivated.</html>");
+        chkUseAnnuity.addActionListener(e -> refreshAnnuityFieldsEnabled());
         inner.add(card("Annuity (non-COLA)", new Object[]{
+                "Use annuity",                chkUseAnnuity,
                 "Annual annuity income ($)",  spAnnuity,
                 "Annuity start year",         spAnnuityStartYear,
                 "Annuity start month",        spAnnuityStartMonth,
@@ -798,6 +809,7 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
         refreshTaxEngineEnabled();  // set initial enabled/greyed state
+        refreshAnnuityFieldsEnabled();  // v4: initial annuity enable/greyed state
 
         // == Pro PoS advisory guardrails ===================================
         spProPosUpperGuardrail = spinD(20.0, 5.0, 50.0, 1.0, "0.0#");
@@ -1852,6 +1864,11 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
                 + "inflation-indexed. In practice the IRMAA cliff usually binds first; the table reports which "
                 + "ceiling bound the conversion each year.</li>"
                 + "</ul>"
+                + "<p><b>Fill mode + go-go interaction.</b> In Fill mode + go-go, the code protects a "
+                + "<b>Roth conversion</b> from crossing the line, but nothing stops the <b>go-go withdrawal</b> "
+                + "alone from pushing MAGI over an IRMAA threshold or into the 24% bracket. A go-go multiplier "
+                + "that is higher than expected can breach either limit on its own. You can look for a Roth "
+                + "conversion column of zeroes for hints of where you may need to look.</p>"
                 + "<p><i>Account note: when the spouse retires, her 401(k) balances roll over (trustee-to-"
                 + "trustee, non-taxable) into EDJ IRAs. The tool treats Traditional IRA and Traditional 401(k) "
                 + "identically for RMD, so this is a label change, not a math change.</i></p>"
@@ -1929,6 +1946,31 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
                 + "real future law will differ. The OBBBA senior bonus (section 4), the annuity decision point, "
                 + "and any threshold-sensitive conversion should be verified with a fee-only fiduciary and/or a "
                 + "tax professional.</p>"
+
+                + "<h3 style='color:#2a5d34;'>11. SS Optimizer &mdash; objective, mortality weighting, and modes</h3>"
+                + "<p>The SS Optimizer is a fast <b>deterministic pre-filter</b>, separate from the Monte Carlo "
+                + "PoS engine. It scans claiming-month combinations and scores each with a single point-estimate "
+                + "path (fixed return and inflation), then lets you click a row to apply those dates and run the "
+                + "full simulation. It intentionally does <b>not</b> compute the detailed tax engine (no computed "
+                + "federal/IRMAA/SS-taxability); it uses the flat 'Base tax' escalator. Its job is to rank "
+                + "claiming strategies for your desired spending shape, not to precompute taxes.</p>"
+                + "<p><b>Objective.</b> The optimizer maximizes <i>guaranteed</i> income (Social Security plus "
+                + "annuity) accumulated during the go-go years &mdash; more guaranteed income when you are "
+                + "spending most means less portfolio draw in those years. Projected final balance is only a "
+                + "tiebreaker (legacy is not a goal).</p>"
+                + "<p><b>Mortality weighting (v4).</b> Each person's Social Security in the objective is weighted "
+                + "by a survival probability that uses your <b>life-expectancy</b> inputs: a linear ramp of 1.0 "
+                + "at the withdrawal-start age, 0.5 at that person's life expectancy (the median age of death, so "
+                + "about half survive to it), tapering to 0 symmetrically beyond. The annuity is a contractual "
+                + "stream, not a life, so it is not weighted. Because near-term dollars are near-certain to be "
+                + "enjoyed while late-80s dollars are coin-flips, this generally <b>favors earlier claiming</b> "
+                + "&mdash; consistent with the analysis that rejected deferring to 70. Note this changes what the "
+                + "optimizer maximizes (survival-weighted, not certain), so rankings shift earlier; review the "
+                + "top rows against your own judgment.</p>"
+                + "<p><b>Filing status.</b> In <b>Single</b> mode the optimizer scans only the primary/User "
+                + "person's claim months (the spouse does not claim), and spouse Social Security is excluded. In "
+                + "MFJ it scans the full two-person grid. The <b>Use annuity</b> checkbox also applies: when the "
+                + "annuity is deactivated, it contributes $0 to the optimizer's guaranteed income.</p>"
 
                 + "</body></html>";
 
@@ -2349,8 +2391,12 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
     private void applyAndRun(int bobYear, int bobMonth, int joYear, int joMonth) {
         spManSSStartYear.setValue(bobYear);
         spManSSStartMonth.setValue(bobMonth);
-        spWomanSSStartYear.setValue(joYear);
-        spWomanSSStartMonth.setValue(joMonth);
+        // v4: joYear==0 is the single-mode sentinel (no spouse claim); leave the
+        // spouse SS spinners untouched (they are disabled in Single mode anyway).
+        if (joYear > 0) {
+            spWomanSSStartYear.setValue(joYear);
+            spWomanSSStartMonth.setValue(joMonth);
+        }
         updateSSBenefitNote();
         if (mainTabs != null) mainTabs.setSelectedIndex(0);
         runSimulation();
@@ -2371,7 +2417,7 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         final int womanBY  = iv(spWomanBirthYear), womanBM  = iv(spWomanBirthMonth);
         final int manPIA   = iv(spManPIA),          womanPIA = iv(spWomanPIA);
         final double ssCola= dv(spSSCola) / 100.0;
-        final int annuity  = iv(spAnnuity);
+        final int annuity  = (chkUseAnnuity != null && chkUseAnnuity.isSelected()) ? iv(spAnnuity) : 0;
         final int annSY    = iv(spAnnuityStartYear), annSM = iv(spAnnuityStartMonth);
         final int baseYear = iv(spSimStartYear);
         final int wdYear   = iv(spWithdrawStartYear), wdMonth = iv(spWithdrawStartMonth);
@@ -2386,6 +2432,11 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         final double taxI  = dv(spTaxInflation) / 100.0;
         final double goGo  = dv(spGoGo);
         final int goGoDur  = iv(spGoGoDuration);
+        // v4: filing status (single -> one-person scan) and life expectancies
+        // (for the mortality survival ramp).
+        final boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
+        final int manLE   = iv(spManPlanAge);
+        final int womanLE = iv(spWomanPlanAge);
 
         SwingWorker<Void, String> worker = new SwingWorker<>() {
             @Override protected Void doInBackground() {
@@ -2396,7 +2447,18 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
                 int sy = today.getYear(), sm = today.getMonthValue();
 
                 java.util.List<int[]> bobMonths = buildSsRange(manBY, manBM, sy, sm);
-                java.util.List<int[]> joMonths  = buildSsRange(womanBY, womanBM, sy, sm);
+                java.util.List<int[]> joMonths;
+                if (single) {
+                    // v4: SINGLE filing -> the spouse does not claim. Scan only
+                    // the primary/User person's claim months. A single sentinel
+                    // {0,0} means "no spouse claim"; scoreCombination yields $0
+                    // spouse SS for calYear >= 0 only when PIA is also zeroed, so
+                    // we also pass womanPIA as 0 below in single mode.
+                    joMonths = new java.util.ArrayList<>();
+                    joMonths.add(new int[]{0, 0});
+                } else {
+                    joMonths = buildSsRange(womanBY, womanBM, sy, sm);
+                }
 
                 int total = bobMonths.size() * joMonths.size();
                 publish(String.format("Scanning %,d combinations...", total));
@@ -2409,11 +2471,12 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
                         SsOptResult r = scoreCombination(
                                 bob[0], bob[1], jo[0], jo[1],
                                 manBY, manBM, womanBY, womanBM,
-                                manPIA, womanPIA, ssCola,
+                                manPIA, single ? 0 : womanPIA, ssCola,
                                 annuity, annSY, annSM,
                                 baseYear, wdYear, wdMonth, horizon,
                                 portfolio, ret, infl, living, med, medI,
-                                baseTax, taxI, goGo, goGoDur);
+                                baseTax, taxI, goGo, goGoDur,
+                                manLE, womanLE, single);
                         results.add(r);
                         done++;
                         if (done % 200 == 0) {
@@ -2467,6 +2530,25 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         return result;
     }
 
+    /**
+     * v4: Linear survival probability for the SS optimizer's mortality weighting.
+     * Returns 1.0 at (and before) the withdrawal-start age, declines linearly to
+     * 0.5 at the life-expectancy age (LE is the median age of death, so ~50%
+     * survive to it), and continues down to 0.0 at LE + (LE - startAge),
+     * symmetric about LE. Clamped to [0, 1]. If LE <= startAge (degenerate),
+     * returns 1.0 through startAge and 0 after, avoiding a divide-by-zero.
+     */
+    private static double survivalRamp(int age, int startAge, int lifeExpectancy) {
+        if (age <= startAge) return 1.0;
+        int span = lifeExpectancy - startAge;
+        if (span <= 0) return 0.0;               // degenerate: LE at/before start
+        // slope: from 1.0 at startAge to 0.5 at LE -> lose 0.5 over 'span' years
+        double surv = 1.0 - 0.5 * (age - startAge) / (double) span;
+        if (surv < 0.0) return 0.0;
+        if (surv > 1.0) return 1.0;
+        return surv;
+    }
+
     /** Deterministic year-by-year scoring (React logic ported to Java) */
     private SsOptResult scoreCombination(
             int bobY, int bobM, int joY, int joM,
@@ -2477,10 +2559,13 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
             int portfolio, double ret, double infl,
             double living, double med, double medI,
             double baseTax, double taxI,
-            double goGo, int goGoDur) {
+            double goGo, int goGoDur,
+            int manLE, int womanLE, boolean single) {
 
         double bobMonthly   = calcSSMonthlyBenefit(manPIA,   manBY, manBM, bobY, bobM);
-        double joMonthly    = calcSSMonthlyBenefit(womanPIA, womanBY, womanBM, joY, joM);
+        // In single mode the spouse does not claim (PIA passed as 0 -> $0).
+        double joMonthly    = single ? 0
+                : calcSSMonthlyBenefit(womanPIA, womanBY, womanBM, joY, joM);
         double bobAnnual    = bobMonthly * 12;
         double joAnnual     = joMonthly  * 12;
 
@@ -2536,10 +2621,27 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
                 portWdYr1   = portDraw;
                 inflAccYr1  = inflAcc;
             }
-            // Sum GUARANTEED income (SS + annuity) across go-go years.
-            // This is the primary score: more guaranteed income during go-go = less portfolio draw.
-            // Total income always equals max(totalSpend, guaranteed) which varies too little.
-            if (draw && goGoRem > 0) goGoTotal += guaranteed;  // nominal; display converts
+            // v4: MORTALITY-WEIGHTED go-go objective.
+            // Weight each person's SS by their survival probability in this year
+            // using a linear ramp: 1.0 at the withdrawal-start age, 0.5 at that
+            // person's life expectancy (LE is the median -> ~50% survive to it),
+            // tapering to 0 symmetrically beyond LE (LE + (LE - startAge)). The
+            // annuity is a contractual stream, not a life, so it is not weighted.
+            // This makes the optimizer favor claiming strategies that place
+            // guaranteed income into years the couple is more likely to be alive
+            // to enjoy -- generally rewarding earlier claiming.
+            int bobAge   = calYear - manBY;
+            int womanAge = calYear - womanBY;
+            int bobStartAge   = wdYear - manBY;
+            int womanStartAge = wdYear - womanBY;
+            double manSurv   = survivalRamp(bobAge,   bobStartAge,   manLE);
+            double womanSurv = single ? 0.0 : survivalRamp(womanAge, womanStartAge, womanLE);
+            double weightedGuaranteed = manSS * manSurv + womanSS * womanSurv + ann;
+
+            // Sum SURVIVAL-WEIGHTED GUARANTEED income (SS + annuity) across go-go
+            // years. This is the primary score: more (likely-to-be-enjoyed)
+            // guaranteed income during go-go = less portfolio draw when it counts.
+            if (draw && goGoRem > 0) goGoTotal += weightedGuaranteed;  // nominal; display converts
 
             bal = Math.max(0, bal * (1 + ret) - portDraw);
         }
@@ -2572,8 +2674,9 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         int show = results.size();  // show all combinations
         for (int rank = 0; rank < show; rank++) {
             SsOptResult r = results.get(rank);
+            boolean joClaims = (r.joYear > 0);  // v4: sentinel {0,0} = single mode, no spouse claim
             int bobAgeM = (r.bobYear - manBY)*12   + (r.bobMonth - manBM);
-            int joAgeM  = (r.joYear  - womanBY)*12 + (r.joMonth  - womanBM);
+            int joAgeM  = joClaims ? (r.joYear - womanBY)*12 + (r.joMonth - womanBM) : 0;
             int portfolio = iv(spPortfolio);
             double initRate = portfolio > 0 ? r.portWdYr1 / portfolio * 100.0 : 0;
             tblOptModel.addRow(new Object[]{
@@ -2581,9 +2684,9 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
                     String.format("%02d/%d", r.bobMonth, r.bobYear),
                     ssAgeStr(bobAgeM),
                     CURRENCY.format((long) r.bobMonthly),
-                    String.format("%02d/%d", r.joMonth, r.joYear),
-                    ssAgeStr(joAgeM),
-                    CURRENCY.format((long) r.joMonthly),
+                    joClaims ? String.format("%02d/%d", r.joMonth, r.joYear) : "--",
+                    joClaims ? ssAgeStr(joAgeM) : "--",
+                    joClaims ? CURRENCY.format((long) r.joMonthly) : "--",
                     CURRENCY.format((long) r.combinedAnnual),
                     CURRENCY.format((long)(r.totalIncomeYr1 / (showRealDollars && r.inflAccYr1 > 0 ? r.inflAccYr1 : 1.0))),
                     CURRENCY.format((long)(r.portWdYr1 / (showRealDollars && r.inflAccYr1 > 0 ? r.inflAccYr1 : 1.0))),
@@ -2688,6 +2791,22 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         updateAccountTotal();
     }
 
+    /**
+     * v4: The "Use annuity" checkbox activates/deactivates the annuity. When
+     * OFF (default), the three annuity spinners are disabled (grayed and locked)
+     * and their values are preserved; the annuity is passed as $0 into both the
+     * main simulation and the SS optimizer (see the SimInputs builder and the
+     * optimizer snapshot). Turning it back ON restores the annuity with no
+     * re-entry. The on/off state is persisted with the scenario.
+     */
+    private void refreshAnnuityFieldsEnabled() {
+        if (chkUseAnnuity == null) return; // guard: called during construction
+        boolean on = chkUseAnnuity.isSelected();
+        if (spAnnuity != null)           spAnnuity.setEnabled(on);
+        if (spAnnuityStartYear != null)  spAnnuityStartYear.setEnabled(on);
+        if (spAnnuityStartMonth != null) spAnnuityStartMonth.setEnabled(on);
+    }
+
     private void saveScenario(javax.swing.JTextField tfDesc) {
         String desc = tfDesc.getText().trim();
         if (desc.isEmpty()) desc = "scenario";
@@ -2725,6 +2844,7 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         props.setProperty("woman.ssStartYear",      String.valueOf(iv(spWomanSSStartYear)));
         props.setProperty("woman.ssStartMonth",     String.valueOf(iv(spWomanSSStartMonth)));
         props.setProperty("annuity.amount",         String.valueOf(iv(spAnnuity)));
+        props.setProperty("annuity.enabled",        String.valueOf(chkUseAnnuity.isSelected()));
         props.setProperty("annuity.startYear",      String.valueOf(iv(spAnnuityStartYear)));
         props.setProperty("annuity.startMonth",     String.valueOf(iv(spAnnuityStartMonth)));
         props.setProperty("man.tradIRA",            String.valueOf(iv(spManTradIRA)));
@@ -2814,6 +2934,11 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         setSpinnerI(spWomanSSStartYear,   props, "woman.ssStartYear",      warnings);
         setSpinnerI(spWomanSSStartMonth,  props, "woman.ssStartMonth",     warnings);
         setSpinnerI(spAnnuity,            props, "annuity.amount",         warnings);
+        // v4: annuity on/off. Absent in pre-feature scenarios -> default off.
+        if (chkUseAnnuity != null) {
+            String ae = props.getProperty("annuity.enabled");
+            chkUseAnnuity.setSelected(ae != null && ae.trim().equalsIgnoreCase("true"));
+        }
         setSpinnerI(spAnnuityStartYear,   props, "annuity.startYear",      warnings);
         setSpinnerI(spAnnuityStartMonth,  props, "annuity.startMonth",     warnings);
         setSpinnerI(spManTradIRA,         props, "man.tradIRA",            warnings);
@@ -2877,6 +3002,7 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
         updateAccountTotal();
         updateSSBenefitNote();
         refreshTaxEngineEnabled();  // greying may change if loaded toggles differ
+        refreshAnnuityFieldsEnabled();  // v4: apply loaded annuity on/off state
         addRecentFile(file.getAbsolutePath());
         if (cmbRecent != null) loadRecentFiles(cmbRecent);
         String warnMsg = warnings.isEmpty() ? "" : "  [Warnings: " + String.join(", ", warnings) + "]";
@@ -3135,7 +3261,9 @@ public class IncomeLab_OptSocSec_v4 extends JFrame {
                 i.womanSSStartYear, i.womanSSStartMonth);
         i.manSSAmount        = (int) Math.round(i.manSSMonthly   * 12);
         i.womanSSAmount      = (int) Math.round(i.womanSSMonthly * 12);
-        i.annuity            = iv(spAnnuity);
+        // v4: annuity is included only when "Use annuity" is checked (default off).
+        i.annuity            = (chkUseAnnuity != null && chkUseAnnuity.isSelected())
+                ? iv(spAnnuity) : 0;
         i.annuityStartYear   = iv(spAnnuityStartYear);
         i.annuityStartMonth  = iv(spAnnuityStartMonth);
         i.manTradIRA     = iv(spManTradIRA);
