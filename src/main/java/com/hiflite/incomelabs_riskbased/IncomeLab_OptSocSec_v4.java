@@ -82,6 +82,7 @@ import java.util.List;
  * Compile:  javac IncomeLab_OptSocSec_v4.java
  * Run:      java com.hiflite.incomelabs_riskbased.IncomeLab_OptSocSec_v4
  * Requires Java 11+. No external dependencies.
+ *
  */
 public class IncomeLab_OptSocSec_v4 extends JFrame {
 
