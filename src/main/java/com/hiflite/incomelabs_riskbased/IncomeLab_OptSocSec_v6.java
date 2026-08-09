@@ -205,6 +205,20 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
     // == Output widgets =======================================================
     private JTabbedPane       mainTabs;  // direct ref for tab switching
     private JLabel            lblAnswer, lblSub, lblDetail;
+    private JLabel            lblBaseline;      // v6: trigger balance + baseline comparison
+    private JButton           btnSetBaseline;   // v6: capture this run as the annual baseline
+    private JSpinner          spMinChangePct;   // v6: minimum material change %
+    // v6: annual baseline captured deliberately (NOT on every save), so the
+    // year-over-year comparison is against the figure Bob actually drew
+    // against, not against a mid-session experiment.
+    private boolean baselineSet = false;
+    private int     baselineActualWd = 0, baselineBalance = 0, baselineHorizon = 0;
+    private double  baselineGoGoMult = 1.0;
+    private String  baselineDate = "";
+    // last run values, used when the baseline button is pressed
+    private int     lastRunActualWd = 0, lastRunBalance = 0, lastRunHorizon = 0;
+    private double  lastRunGoGoMult = 1.0;
+    private boolean lastRunValid = false;
     private JLabel            lblActualPoS, lblMedianFinal, lblYr10Wd, lblInitRate;
     private JTable            tblPro;
     private DefaultTableModel tblProModel;
@@ -373,9 +387,53 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             }
         });
 
+        // v6: capture the annual baseline DELIBERATELY. Ordinary saves leave it
+        // alone, so a session of experiments cannot silently overwrite the figure
+        // you actually drew against last year.
+        btnSetBaseline = new JButton("Set as annual baseline");
+        btnSetBaseline.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        btnSetBaseline.setFocusPainted(false);
+        btnSetBaseline.setEnabled(false);
+        btnSetBaseline.setToolTipText("<html><b>Set as annual baseline (v6)</b><br>"
+                + "Records THIS run's Actual wd, portfolio balance, horizon and go-go<br>"
+                + "state as the reference for future year-over-year comparisons.<br><br>"
+                + "Press it once a year, when you commit to the withdrawal figure you<br>"
+                + "will actually draw against. Ordinary <i>Save Scenario</i> does NOT change<br>"
+                + "the baseline, so experimenting freely will not corrupt it.<br><br>"
+                + "The baseline is stored in the .ilscen file and survives reload.</html>");
+        btnSetBaseline.addActionListener(e -> {
+            if (!lastRunValid) return;
+            baselineActualWd = lastRunActualWd;
+            baselineBalance  = lastRunBalance;
+            baselineHorizon  = lastRunHorizon;
+            baselineGoGoMult = lastRunGoGoMult;
+            baselineDate     = java.time.LocalDate.now().toString();
+            baselineSet      = true;
+            refreshBaselineLine();
+            JOptionPane.showMessageDialog(this,
+                    "Annual baseline set to " + CURRENCY.format(baselineActualWd)
+                            + " (portfolio " + CURRENCY.format(baselineBalance) + ")"
+                            + "\nDated " + baselineDate
+                            + "\n\nRemember to Save Scenario to keep it.",
+                    "Baseline captured", JOptionPane.INFORMATION_MESSAGE);
+        });
+
+        spMinChangePct = spinD(5.0, 0.0, 25.0, 1.0, "0.0");
+        spMinChangePct.setToolTipText("<html><b>Minimum material change %% (v6)</b><br>"
+                + "Year-over-year withdrawal changes smaller than this are reported as<br>"
+                + "<i>no material change</i> rather than prompting action, so ordinary<br>"
+                + "market noise between annual runs does not read as a signal.<br><br>"
+                + "<b>Default 5%%</b>, matching the threshold risk-based guardrail<br>"
+                + "methodologies commonly use.</html>");
+
         JPanel scenBtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         scenBtnRow.setOpaque(false); scenBtnRow.setAlignmentX(LEFT_ALIGNMENT);
         scenBtnRow.add(btnSave); scenBtnRow.add(btnLoad);
+        JPanel baseRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        baseRow.setOpaque(false); baseRow.setAlignmentX(LEFT_ALIGNMENT);
+        baseRow.add(btnSetBaseline);
+        baseRow.add(new JLabel("Min chg %"));
+        baseRow.add(spMinChangePct);
 
         JPanel scenSaveCard = new JPanel();
         scenSaveCard.setLayout(new BoxLayout(scenSaveCard, BoxLayout.Y_AXIS));
@@ -403,6 +461,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         scenBtnRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,32));
         scenSaveCard.add(Box.createVerticalStrut(4));
         scenSaveCard.add(scenBtnRow);
+        scenSaveCard.add(baseRow);
         JLabel recentFilesLbl = new JLabel("Recent files");
         recentFilesLbl.setFont(new Font("SansSerif",Font.PLAIN,13));
         recentFilesLbl.setForeground(new Color(75,75,75));
@@ -709,7 +768,13 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         spBaseTax      = spinI( 17_500, 0, 200_000, 1_000, "#,###");
         spTaxInflation = spinD(3.79,    0.0, 10.0,  0.01,  "0.00#");
         spGoGo         = spinD(1.000,   1.0,  5.0,  0.001, "0.000#");
-        spGoGo.setToolTipText("<html><b>Common multiplier ranges:</b><br><br>"
+        spGoGo.setToolTipText("<html><b>This is a front-loading lever, not just a travel toggle.</b><br>"
+                + "Raising it bends the spending curve forward in time -- more in the<br>"
+                + "years you can best use it, less later. A flat or back-loaded curve is<br>"
+                + "a failure mode for most retirees, since late-year dollars carry lower<br>"
+                + "utility. Your <b>Surplus/gap</b> column is where the front-loaded money<br>"
+                + "actually shows up.<br><br>"
+                + "<b>Common multiplier ranges:</b><br><br>"
                 + "&nbsp;&nbsp;<b>1.2x&nbsp;(20% more)</b> -- Conservative; suitable if you already have<br>"
                 + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
                 + "an active lifestyle baked into your baseline<br><br>"
@@ -732,6 +797,15 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 "Go-go years multiplier",             spGoGo,
                 "Go-go years duration (from wd start)", spGoGoDuration,
         }));
+        // v6: frame the multiplier as a spending-curve lever rather than a
+        // travel line item -- the distinction drives how it should be set.
+        JLabel lblGoGoNote = new JLabel(
+                "<html><i>Front-loads the spending curve -- higher early, tapering later.</i></html>");
+        lblGoGoNote.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        lblGoGoNote.setForeground(new Color(110, 110, 110));
+        lblGoGoNote.setAlignmentX(LEFT_ALIGNMENT);
+        lblGoGoNote.setBorder(BorderFactory.createEmptyBorder(0, 4, 2, 0));
+        inner.add(lblGoGoNote);
         inner.add(Box.createVerticalStrut(4));
 
         // == Tax engine + Roth conversion (v3) =============================
@@ -972,7 +1046,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 + "it does NOT change any withdrawal amount.<br><br>"
                 + "If this year's base withdrawal RATE (draw / balance, go-go removed) rises<br>"
                 + "more than this % <b>above</b> the Year-1 base rate, the table flags a<br>"
-                + "<b>[^] raise alert</b>, signalling the portfolio has outperformed and you<br>"
+                + "<b>[^] above</b> flag in the Rate drift column, signalling the portfolio has<br>"
                 + "could sustainably spend more.<br><b>Default: 20%</b></html>");
         spProPosLowerGuardrail = spinD(20.0, 5.0, 50.0, 1.0, "0.0#");
         spProPosLowerGuardrail.setToolTipText("<html><b>Pro PoS -- Lower advisory guardrail (cut alert)</b><br>"
@@ -980,7 +1054,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 + "it does NOT change any withdrawal amount.<br><br>"
                 + "If this year's base withdrawal RATE (draw / balance, go-go removed) falls<br>"
                 + "more than this % <b>below</b> the Year-1 base rate, the table flags a<br>"
-                + "<b>[v] cut alert</b>, suggesting you consider trimming discretionary spend.<br>"
+                + "<b>[v] below</b> flag in the Rate drift column, suggesting you re-run and<br>"
                 + "<b>Default: 20%</b></html>");
         inner.add(card("Pro PoS Guardrails (advisory alerts only)", new Object[]{
                 "Upper guardrail (% above yr1, raise alert)", spProPosUpperGuardrail,
@@ -1120,6 +1194,15 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         lblDetail.setForeground(new Color(100, 100, 100));
 
         tglDollars = new JToggleButton("Showing: Future $ (nominal)");
+        tglDollars.setToolTipText("<html><b>Real vs nominal dollars</b><br>"
+                + "Converts <i>future-dated</i> figures between today's purchasing power<br>"
+                + "and future nominal dollars.<br><br>"
+                + "<b>Affects:</b> Portfolio bal, Yr 10 withdrawal, True median final<br>"
+                + "balance, and every dollar column in the tables.<br><br>"
+                + "<b>Does NOT affect</b> the headline withdrawal or the re-run trigger<br>"
+                + "balance. Both are base-year figures where the inflation factor is<br>"
+                + "1.000, so real and nominal are the same number -- they are marked<br>"
+                + "<i>(today's $)</i> for that reason. This is correct, not a display bug.</html>");
         tglDollars.setFont(new Font("SansSerif", Font.PLAIN, 13));
         tglDollars.setFocusPainted(false);
         tglDollars.addActionListener(e -> {
@@ -1143,9 +1226,32 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         JPanel aMid = new JPanel(new BorderLayout(2, 2)); aMid.setOpaque(false);
         aMid.add(lblAnswer, BorderLayout.CENTER);
         aMid.add(lblSub,    BorderLayout.SOUTH);
+        lblBaseline = new JLabel(" ");
+        lblBaseline.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        lblBaseline.setForeground(new Color(70, 90, 120));
+        lblBaseline.setToolTipText("<html><b>Re-run trigger &amp; annual baseline (v6)</b><br>"
+                + "<b>Re-run if below:</b> the portfolio balance at which your withdrawal<br>"
+                + "rate would drift past your Pro PoS upper guardrail. Check it against<br>"
+                + "your actual account any time between scheduled runs -- if you are<br>"
+                + "under it, re-run early instead of waiting for your annual date.<br><br>"
+                + "<b>vs baseline:</b> compares this run's Actual wd against the figure you<br>"
+                + "captured with <i>Set as annual baseline</i>, and splits the change into:<br>"
+                + "&nbsp;&nbsp;* <b>portfolio</b> -- your balance moved<br>"
+                + "&nbsp;&nbsp;* <b>horizon</b> -- one fewer year to fund raises the safe rate<br>"
+                + "&nbsp;&nbsp;* <b>go-go</b> -- you changed the multiplier, or it turned off at<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;the end of the go-go window (planned, not distress). Raising<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;go-go also slightly LOWERS the base draw, since the survival<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;test spends more during those years -- both effects are shown.<br>"
+                + "The split reconciles exactly to the total change.<br><br>"
+                + "Changes smaller than the minimum-change %% are reported as<br>"
+                + "<i>no material change</i> so ordinary noise does not prompt action.</html>");
+
+        JPanel aSouth = new JPanel(new BorderLayout(2, 2)); aSouth.setOpaque(false);
+        aSouth.add(lblDetail,   BorderLayout.NORTH);
+        aSouth.add(lblBaseline, BorderLayout.SOUTH);
         answerBox.add(aNorth,   BorderLayout.NORTH);
         answerBox.add(aMid,     BorderLayout.CENTER);
-        answerBox.add(lblDetail,BorderLayout.SOUTH);
+        answerBox.add(aSouth,   BorderLayout.SOUTH);
 
         // == Metrics row ==================================================
         JPanel metricsRow = new JPanel(new GridLayout(1, 4, 8, 0));
@@ -1203,7 +1309,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         String[] cols = {
                 "User Age", "Cal yr", "Portfolio bal (50th%)",         // 0 1 2
                 "Pro PoS withdrawal", "Actual wd", "Wd %",              // 3 4 5
-                "Alert",                                                  // 6
+                "Rate drift",                                             // 6 (v6: renamed from "Alert")
                 "User SS", "Spouse SS", "Annuity", "Fixed Inc",          // 7 8 9 10
                 "Living Exp", "Medical", "Tax (est)",                    // 11 12 13
                 "Total spend", "Total income", "Surplus/gap",            // 14 15 16
@@ -1355,12 +1461,12 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                                         + CURRENCY.format((long)(Math.abs(er.surplus) / d)));
                     }
                     case COL_ALERT -> {
-                        if ("[^] raise".equals(er.alert))
+                        if ("[^] above".equals(er.alert))
                             return "<html><b>[^] Raise alert</b><br>"
                                     + "This year's base withdrawal RATE (draw / balance, go-go removed)<br>"
                                     + "rose above the upper guardrail vs. the Year-1 base rate.<br>"
                                     + "Portfolio has outperformed; sustainable to spend more.</html>";
-                        if ("[v] cut".equals(er.alert))
+                        if ("[v] below".equals(er.alert))
                             return "<html><b>[v] Cut alert</b><br>"
                                     + "This year's base withdrawal RATE (draw / balance, go-go removed)<br>"
                                     + "fell below the lower guardrail vs. the Year-1 base rate.<br>"
@@ -1385,7 +1491,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                                         + "&nbsp;&nbsp;Withdrawal:&nbsp;&nbsp;&nbsp;-%s</html>",
                                 er.balDelta >= 0 ? "+" : "",
                                 CURRENCY.format((long)(er.balDelta / d)),
-                                CURRENCY.format((long)(er.investmentGrowth / d)),
+                                CURRENCY.format((long) (showRealDollars
+                                        ? er.investmentGrowthReal : er.investmentGrowth)),
                                 CURRENCY.format((long)(er.wdActual / d)));
                     }
                     case COL_TAX -> {
@@ -1568,6 +1675,20 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                             + "which this model deliberately does not track. A negative gap is a<br>"
                             + "planning signal, not a shortfall you would actually face, unless you<br>"
                             + "had spent every surplus dollar along the way.</html>";
+                    case 6  -> "<html><b>Rate drift (projected) -- advisory only</b><br>"
+                            + "Flags when this year's base withdrawal RATE has drifted past your<br>"
+                            + "Pro PoS guardrail versus the rate in year 1. The go-go multiplier is<br>"
+                            + "divided out first, so it compares underlying draws.<br><br>"
+                            + "<b>Read this as projection, not instruction.</b> Three cautions:<br>"
+                            + "&nbsp;&nbsp;* It assumes you <b>never re-run</b>. Every re-run resets year 1, so<br>"
+                            + "&nbsp;&nbsp;&nbsp;&nbsp;drift shown for a future year will usually never occur.<br>"
+                            + "&nbsp;&nbsp;* <b>Row 1 can never flag</b> -- drift is zero there by construction --<br>"
+                            + "&nbsp;&nbsp;&nbsp;&nbsp;so this column cannot trigger the run you actually act on.<br>"
+                            + "&nbsp;&nbsp;* Late rows flag <b>structurally</b>: a shorter remaining horizon<br>"
+                            + "&nbsp;&nbsp;&nbsp;&nbsp;supports a higher safe rate, so '[^] above' becomes normal with<br>"
+                            + "&nbsp;&nbsp;&nbsp;&nbsp;age rather than signalling anything wrong.<br><br>"
+                            + "To decide whether to act, use the <b>re-run trigger balance</b> and the<br>"
+                            + "<b>vs baseline</b> comparison shown under the headline figure instead.</html>";
                     case 5  -> "<html><b>Wd % -- effective withdrawal rate</b><br>"
                             + "= Actual wd / portfolio balance.<br>"
                             + "Shows what percentage of the portfolio is being spent this year.<br>"
@@ -1598,6 +1719,11 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                             + "is assumed re-invested at a return at least matching inflation and<br>"
                             + "remains in your asset base.</html>";
                     case 22 -> "<html><b>Portfolio Chg -- portfolio balance change</b><br>"
+                            + "<b>Basis follows the dollar toggle.</b> In <i>Today's $ (real)</i> this is the<br>"
+                            + "change in PURCHASING POWER: each year's balance is deflated by its<br>"
+                            + "own price level before subtracting. In <i>Future $ (nominal)</i> it is the<br>"
+                            + "raw dollar change. The real figure can be negative while the nominal<br>"
+                            + "one is positive -- that is inflation eating the gain, not an error.<br>"
                             + "= end-of-year balance - start-of-year balance.<br>"
                             + "= market growth - spending withdrawal.<br>"
                             + "Green = portfolio grew. Red = portfolio shrank.</html>";
@@ -1679,8 +1805,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                     if ((col == 3 || col == 4) && goGo) {
                         c.setBackground(GOGO_WD_BG); c.setForeground(new Color(0, 90, 50));
                     } else if (col == COL_ALERT) {
-                        if ("[^] raise".equals(er.alert)) c.setForeground(new Color(59, 109, 17));
-                        else if ("[v] cut".equals(er.alert)) c.setForeground(new Color(163, 45, 45));
+                        if ("[^] above".equals(er.alert)) c.setForeground(new Color(59, 109, 17));
+                        else if ("[v] below".equals(er.alert)) c.setForeground(new Color(163, 45, 45));
                     } else if (col == COL_CMB_RMD || col == COL_ROTH_MM) {
                         if (er.rmdOverage > 0) { c.setBackground(ORANGE_BG); c.setForeground(ORANGE_FG); }
                     } else if ((col == 18 || col == 19) && er.rmdOverage > 0) {
@@ -3175,6 +3301,14 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         props.setProperty("tax.deathYear",          String.valueOf(iv(spDeathYear)));
         props.setProperty("tax.hisRmdShare",        String.valueOf(dv(spHisRmdShare)));
         props.setProperty("tax.survivorSpendCut",   String.valueOf(dv(spSurvivorSpendCut)));
+        // v6: annual baseline (only written when one has been captured)
+        props.setProperty("base.set",        String.valueOf(baselineSet));
+        props.setProperty("base.actualWd",   String.valueOf(baselineActualWd));
+        props.setProperty("base.balance",    String.valueOf(baselineBalance));
+        props.setProperty("base.horizon",    String.valueOf(baselineHorizon));
+        props.setProperty("base.goGoMult",   String.valueOf(baselineGoGoMult));
+        props.setProperty("base.date",       baselineDate == null ? "" : baselineDate);
+        props.setProperty("base.minChgPct",  String.valueOf(dv(spMinChangePct)));
         // v5 state tax
         props.setProperty("tax.stateCode",          selectedStateCode());
         props.setProperty("tax.customStateRate",    String.valueOf(dv(spCustomStateRate)));
@@ -3309,6 +3443,18 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             setSpinnerD(spHisRmdShare,    props, "tax.hisRmdShare",        warnings);
         if (props.getProperty("tax.survivorSpendCut") != null)
             setSpinnerD(spSurvivorSpendCut, props, "tax.survivorSpendCut", warnings);
+        // v6: annual baseline
+        try {
+            baselineSet      = Boolean.parseBoolean(props.getProperty("base.set", "false"));
+            baselineActualWd = Integer.parseInt(props.getProperty("base.actualWd", "0").trim());
+            baselineBalance  = Integer.parseInt(props.getProperty("base.balance", "0").trim());
+            baselineHorizon  = Integer.parseInt(props.getProperty("base.horizon", "0").trim());
+            baselineGoGoMult = Double.parseDouble(props.getProperty("base.goGoMult", "1.0").trim());
+            baselineDate     = props.getProperty("base.date", "");
+        } catch (Exception ignore) { baselineSet = false; }
+        if (props.getProperty("base.minChgPct") != null)
+            setSpinnerD(spMinChangePct, props, "base.minChgPct", warnings);
+        refreshBaselineLine();
         // v5: state tax. Absent in older scenarios -> default Arizona (prior
         // behavior). Custom fields load regardless; they are inert unless the
         // state is Custom, and syncCustomStateProfile() rebuilds the profile.
@@ -3944,6 +4090,14 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             Arrays.sort(nextBalArr);
             int nextMedBal = (int) nextBalArr[fanPaths / 2];
 
+            // v6: next-year median inflation factor, needed to express the balance
+            // CHANGE in real dollars. A nominal delta spans two price levels, so
+            // deflating it by one year's factor is not a real change.
+            double[] nextInflArr = new double[fanPaths];
+            for (int p = 0; p < fanPaths; p++) nextInflArr[p] = res.fanInflFactors[p][y + 1];
+            Arrays.sort(nextInflArr);
+            double nextInflFactor = nextInflArr[fanPaths / 2];
+
             double manSS      = manSSSurv(inp, y);   // v6: survivor-aware
             double womanSS    = womanSSSurv(inp, y);  // v6: survivor-aware
             double ann        = annuityThisYear(inp, y);
@@ -4096,8 +4250,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 double yr1Rate = yr1Wd / (double) inp.portfolio;            // base-draw rate at start
                 if (yr1Rate > 0) {
                     double vsYr1 = (curRate - yr1Rate) / yr1Rate;
-                    if      (vsYr1 >= inp.proPosUpperGuardrail)  alert = "[^] raise";
-                    else if (vsYr1 <= -inp.proPosLowerGuardrail) alert = "[v] cut";
+                    if      (vsYr1 >= inp.proPosUpperGuardrail)  alert = "[^] above";
+                    else if (vsYr1 <= -inp.proPosLowerGuardrail) alert = "[v] below";
                 }
             }
 
@@ -4145,12 +4299,18 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             row.goGoMult      = goGoMult;
             row.alert         = alert;
             row.balDelta      = nextMedBal - medBal;
+            // v6: true real change = (next balance in its own dollars)
+            //                       - (this balance in its own dollars)
+            row.balDeltaReal  = (int) ((nextInflFactor > 0 ? nextMedBal / nextInflFactor : 0)
+                    - (inflFactor > 0 ? medBal / inflFactor : 0));
             // v2 fix: realized median growth = (next median balance - this median
             // balance) + the withdrawal removed this year. The prior version used
             // medBal * nomReturn (a flat nominal-mean estimate) which never
             // reconciled with the median balance delta, badly so under stress
             // scenarios where the path return differs from the nominal mean.
             row.investmentGrowth = (nextMedBal - medBal) + wdActual;
+            row.investmentGrowthReal = row.balDeltaReal
+                    + (int) (inflFactor > 0 ? wdActual / inflFactor : wdActual);   // v6
             res.medianRows.add(row);
         }
         res.gkResults = simulateGK(inp);
@@ -4237,7 +4397,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         int yr1   = res.yr1Withdrawal;
         double rate = yr1 / (double) inp.portfolio * 100.0;
 
-        lblAnswer.setText(CURRENCY.format(yr1) + " / yr");
+        // v6: the year-1 figure is a BASE-YEAR amount (inflation factor 1.000),
+        // so it is identical under the real/nominal toggle. Label it so the user
+        // is not left wondering why this number does not move when others do.
+        lblAnswer.setText(CURRENCY.format(yr1) + " / yr (today's $)");
         lblSub.setText(String.format(
                 "  %.2f%% of portfolio  .  %.0f%% PoS target  .  %d-year horizon  .  true stochastic median",
                 rate, inp.targetPoS * 100, inp.horizon));
@@ -4255,6 +4418,15 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 ? res.medianRows.get(res.medianRows.size() - 1).inflFactor : 1.0;
         int yr10wd  = res.medianRows.size() >= 10 ? res.medianRows.get(9).wdActual : 0;
         double d10  = res.medianRows.size() >= 10 ? res.medianRows.get(9).inflFactor : 1.0;
+
+        // v6: remember this run so the baseline button and comparison line work.
+        lastRunActualWd = !res.medianRows.isEmpty() ? res.medianRows.get(0).wdActual : yr1;
+        lastRunBalance  = inp.portfolio;
+        lastRunHorizon  = inp.horizon;
+        lastRunGoGoMult = (inp.goGoDuration > 0) ? inp.goGoMultiplier : 1.0;
+        lastRunValid    = true;
+        if (btnSetBaseline != null) btnSetBaseline.setEnabled(true);
+        refreshBaselineLine();
 
         lblActualPoS.setText(String.format("%.1f%%", res.actualPoS * 100));
         lblMedianFinal.setText(showRealDollars
@@ -4293,8 +4465,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                     r.womanRmd > 0 ? CURRENCY.format((long)(r.womanRmd / d)) : "--",       // 19
                     r.combRmd  > 0 ? CURRENCY.format((long)(r.combRmd  / d)) : "--",       // 20
                     r.rmdOverage > 0 ? CURRENCY.format((long)(r.rmdOverage / d)) : "--",   // 21
-                    (r.balDelta >= 0 ? "+" : "-")
-                            + CURRENCY.format((long)(Math.abs(r.balDelta) / d)),           // 22
+                    ((showRealDollars ? r.balDeltaReal : r.balDelta) >= 0 ? "+" : "-")
+                            + CURRENCY.format((long) Math.abs(
+                            showRealDollars ? r.balDeltaReal : r.balDelta)),       // 22 (v6)
                     (r.drawing && r.irmaa > 0)
                             ? CURRENCY.format((long)(r.irmaa / d)) : "--",                 // 23 IRMAA
                     (r.drawing && r.conversion > 0)
@@ -4718,6 +4891,12 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
 
             double nextBal = Math.max(0, bal * (1 + yearReturn) - wdActual);
             row.balDelta   = (int)(nextBal - bal);
+            // v6: true real change -- each balance deflated by ITS OWN year's
+            // price level, so the column agrees with the balance column in
+            // real-dollar mode instead of contradicting it.
+            double nextInflF = inflFactor * (1 + yearInfl);
+            row.balDeltaReal = (int) ((nextInflF > 0 ? nextBal / nextInflF : 0)
+                    - (inflFactor > 0 ? bal / inflFactor : 0));
             prevYearLoss   = (nextBal < bal);
             bal            = nextBal;
             gk.rows.add(row);
@@ -4747,10 +4926,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 "Rules (raw)",                                                // 6 hidden
                 "Rule flags",                                                 // 7 visible
                 "User SS", "Spouse SS", "Annuity", "Fixed Inc",              // 8 9 10 11
-                "Living Exp", "Medical", "Tax (est)",                        // 12 13 14
+                "Living Exp", "Medical", "Tax (est) *",                      // 12 13 14 (v6: * legacy)
                 "Total spend", "Total income", "Surplus/gap",                // 15 16 17
                 "Infl factor",                                                // 18
-                "User RMD", "Spouse RMD", "Combined RMD", "-> Roth/MM",       // 19 20 21 22
+                "User RMD *", "Spouse RMD *", "Combined RMD *", "-> Roth/MM *", // 19 20 21 22 (v6: * legacy)
                 "Portfolio Chg"                                                  // 23
         };
         tblGkModel = new DefaultTableModel(gkCols, 0) {
@@ -4877,8 +5056,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                     return String.format("<html><b>Portfolio change: %s%s</b><br>"
                                     + "&nbsp;&nbsp;Market growth: +%s<br>"
                                     + "&nbsp;&nbsp;Withdrawal:   -%s<br>",
-                            gr.balDelta >= 0 ? "+" : "",
-                            CURRENCY.format((long)(gr.balDelta / d)),
+                            (showRealDollars ? gr.balDeltaReal : gr.balDelta) >= 0 ? "+" : "",
+                            CURRENCY.format((long) Math.abs(
+                                    showRealDollars ? gr.balDeltaReal : gr.balDelta)),
                             CURRENCY.format((long)(gr.investmentGrowth / d)),
                             CURRENCY.format((long)(gr.wdActual / d)));
                 }
@@ -4960,18 +5140,46 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                                     + "= Total income - Total spend.<br>"
                                     + "This column represents the amount over the expected living<br>"
                                     + "expenses that is available for spending.</html>");
-                    case 22 -> gkHeader.setToolTipText(
-                            "<html><b>-> Roth/MM -- RMD overage redirected</b><br>"
-                                    + "= max(0, Combined RMD - GK actual withdrawal).<br>"
-                                    + "Excess RMD above planned GK spending is redirected<br>"
-                                    + "to Roth IRA or money market -- NOT spent.<br>"
-                                    + "The simulated portfolio balance is not reduced by RMDs; the overage<br>"
-                                    + "is assumed re-invested at a return at least matching inflation and<br>"
-                                    + "remains in your asset base.</html>");
                     case 23 -> gkHeader.setToolTipText(
                             "<html><b>Portfolio Chg -- portfolio balance change</b><br>"
                                     + "= market growth - GK spending withdrawal.<br>"
                                     + "Green = grew. Red = shrank.</html>");
+                    case 19, 20, 21 -> gkHeader.setToolTipText(
+                            "<html><b>RMD -- legacy basis (GK tab)</b><br>"
+                                    + "This tab computes RMDs on the ORIGINAL pre-v6 account model: the<br>"
+                                    + "Traditional buckets grow at the portfolio return and are reduced<br>"
+                                    + "<b>only by their own RMDs</b>. They are never drawn down by spending<br>"
+                                    + "or by Roth conversions.<br><br>"
+                                    + "Consequence: those balances -- and therefore these RMD figures --<br>"
+                                    + "are <b>overstated, increasingly so over time</b>. The Pro PoS tab uses<br>"
+                                    + "the v6 combined-bucket model where Traditional is genuinely spent<br>"
+                                    + "down, and typically shows much smaller RMDs, falling to zero once<br>"
+                                    + "Traditional is exhausted. On the same scenario, 2051 can read<br>"
+                                    + "~$140K here versus $0 there.<br><br>"
+                                    + "<b>Use the Pro PoS RMD columns for planning.</b> These are retained so<br>"
+                                    + "the Guyton-Klinger methodology stays self-contained and comparable<br>"
+                                    + "to its published form.</html>");
+                    case 22 -> gkHeader.setToolTipText(
+                            "<html><b>-&gt; Roth/MM -- legacy basis (GK tab)</b><br>"
+                                    + "The part of the forced distribution larger than that year's GK<br>"
+                                    + "spending. It is derived from the RMD columns, so it <b>inherits the<br>"
+                                    + "same overstatement</b> described there: the Traditional buckets behind<br>"
+                                    + "it are never reduced by spending or conversions.<br><br>"
+                                    + "Display only -- it does not move money in this tab.<br>"
+                                    + "<b>Use the Pro PoS Money Mkt column for planning.</b></html>");
+                    case 14 -> gkHeader.setToolTipText(
+                            "<html><b>Tax (est) -- legacy flat basis (GK tab)</b><br>"
+                                    + "This tab always uses the <b>flat</b> tax model (Base tax yr 1, grown at<br>"
+                                    + "Tax inflation), regardless of whether <i>Use computed tax engine</i> is<br>"
+                                    + "checked. It does not compute federal brackets, Arizona tax, Social<br>"
+                                    + "Security taxability, IRMAA, or the Single-filer switch after a death<br>"
+                                    + "event.<br><br>"
+                                    + "Consequence: this column stays roughly <b>constant in real terms for<br>"
+                                    + "the whole horizon</b> -- it will not fall when Traditional is exhausted,<br>"
+                                    + "and will not rise at the widow's-tax transition.<br><br>"
+                                    + "<b>Use the Pro PoS Tax column for planning.</b> Retained so the<br>"
+                                    + "Guyton-Klinger methodology stays self-contained and comparable to<br>"
+                                    + "its published form.</html>");
                     default -> gkHeader.setToolTipText(null);
                 }
             }
@@ -5065,6 +5273,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         legend.add(gkLegendChip(new Color(255, 210, 210), new Color(150, 30, 30),  "CPR[v] -- cut 10%"));
         legend.add(gkLegendChip(new Color(210, 240, 210), new Color(30, 110, 30),  "PR[^]  -- raised 10%"));
         legend.add(gkLegendChip(new Color(255, 200, 120), new Color(140, 60, 0),   "RMD overage -> Roth/MM"));
+        // v6: flag the columns that are still computed on the pre-v6 basis.
+        legend.add(gkLegendChip(new Color(232, 232, 232), new Color(90, 90, 90),
+                "* legacy basis -- see tooltips"));
 
         JPanel topGk = new JPanel(new BorderLayout(0, 4));
         topGk.setBackground(new Color(245, 245, 242));
@@ -5152,8 +5363,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                         gr.womanRmd > 0 ? CURRENCY.format((long)(gr.womanRmd / d)) : "--",      // 20
                         gr.combRmd  > 0 ? CURRENCY.format((long)(gr.combRmd  / d)) : "--",      // 21
                         gr.rmdOverage>0  ? CURRENCY.format((long)(gr.rmdOverage/d)) : "--",     // 22
-                        (gr.balDelta >= 0 ? "+" : "-")
-                                + CURRENCY.format((long)(Math.abs(gr.balDelta) / d)),              // 23
+                        ((showRealDollars ? gr.balDeltaReal : gr.balDelta) >= 0 ? "+" : "-")
+                                + CURRENCY.format((long) Math.abs(
+                                showRealDollars ? gr.balDeltaReal : gr.balDelta)),         // 23 (v6)
                 });
             }
             // Update GK metrics header
@@ -5369,6 +5581,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         double inflFactor;
         int  manRmd, womanRmd, combRmd, rmdOverage;
         int  investmentGrowth, balDelta;
+        int  balDeltaReal;          // v6: true real-dollar change (see EnhRow)
         boolean drawing, goGoActive, preAnchor;
     }
 
@@ -6108,6 +6321,11 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         double goGoMult;
         String alert;
         int  balDelta, investmentGrowth;
+        // v6: real-dollar equivalents. balDelta/investmentGrowth are NOMINAL
+        // deltas spanning two different price levels; deflating them by a
+        // single year factor made the column contradict the balance column in
+        // real mode (balance falling while the change read positive).
+        int  balDeltaReal, investmentGrowthReal;
     }
 
     static class ProResults {
@@ -6173,6 +6391,96 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         JSpinner s = new JSpinner(new SpinnerNumberModel(val,min,max,step));
         s.setEditor(new JSpinner.NumberEditor(s,fmt));
         s.setFont(new Font("SansSerif",Font.PLAIN,14)); return s;
+    }
+
+    // v6: re-run trigger balance + year-over-year baseline comparison.
+    // Trigger balance: the rate drifts past the upper guardrail when the balance
+    // falls to portfolio/(1+g) -- because rate = wd/balance and wd is fixed for
+    // the year. One number to check against the real account between runs.
+    // Baseline comparison: the withdrawal is essentially rate x balance, so the
+    // year-over-year change splits exactly into a portfolio effect and a rate
+    // (horizon) effect, with no residual:
+    //     portfolio effect = (balNow - balBase) * rateBase
+    //     horizon  effect = balNow * (rateNow - rateBase)
+    private void refreshBaselineLine() {
+        if (lblBaseline == null) return;
+        if (!lastRunValid) { lblBaseline.setText(" "); return; }
+        StringBuilder sb = new StringBuilder("<html>");
+
+        double g = (spProPosUpperGuardrail != null) ? dv(spProPosUpperGuardrail) / 100.0 : 0.20;
+        if (lastRunBalance > 0 && g > 0) {
+            long trig = (long) (lastRunBalance / (1.0 + g));
+            sb.append("Re-run if portfolio falls below <b>")
+                    .append(CURRENCY.format(trig))
+                    .append("</b> (a ")
+                    .append(String.format("%.0f%%", (1.0 - trig / (double) lastRunBalance) * 100))
+                    .append(" drop, your ")
+                    .append(String.format("%.0f%%", g * 100))
+                    .append(" upper guardrail) <i>(today's $)</i>");
+        }
+
+        if (baselineSet && baselineActualWd > 0 && baselineBalance > 0 && lastRunBalance > 0) {
+            // v6: THREE-way attribution. Splitting out the go-go multiplier keeps
+            // a deliberate multiplier edit from masquerading as market movement --
+            // raising go-go also LOWERS the sustainable base draw, because the
+            // survival test spends more during the go-go window.
+            double mB = (baselineGoGoMult > 0) ? baselineGoGoMult : 1.0;
+            double mN = (lastRunGoGoMult  > 0) ? lastRunGoGoMult  : 1.0;
+            double baseB = baselineActualWd / mB;      // base draw, multiplier removed
+            double baseN = lastRunActualWd  / mN;
+            double rBase = baseB / (double) baselineBalance;
+            double rNow  = baseN / (double) lastRunBalance;
+            // Standard two-factor decomposition of a product change:
+            //   d(base * mult) = d(base) * mult_OLD + base_NEW * d(mult)
+            // The portfolio and rate effects must therefore carry the OLD
+            // multiplier (mB), not the new one. Using mN double-counted the
+            // multiplier and the split failed to reconcile whenever the go-go
+            // multiplier changed between runs (e.g. -11,658 shown against an
+            // actual -10,227 when go-go went 1.25x -> 1.00x). With mB the three
+            // parts sum exactly to the total change in every case.
+            double balEff  = (lastRunBalance - baselineBalance) * rBase * mB;
+            double rateEff = lastRunBalance * (rNow - rBase) * mB;
+            double multEff = baseN * (mN - mB);
+            double totChg  = lastRunActualWd - (double) baselineActualWd;
+            double pct     = (baselineActualWd != 0) ? totChg / baselineActualWd * 100.0 : 0;
+            double minChg  = (spMinChangePct != null) ? dv(spMinChangePct) : 5.0;
+            boolean multChanged = Math.abs(mN - mB) > 0.001;
+            int     horizonDelta = baselineHorizon - lastRunHorizon;
+
+            sb.append("<br>vs baseline of ").append(baselineDate).append(": ")
+                    .append(CURRENCY.format(baselineActualWd)).append(" -> <b>")
+                    .append(CURRENCY.format(lastRunActualWd)).append("</b> (")
+                    .append(String.format("%+.1f%%", pct)).append(")");
+
+            // The threshold governs the ACTION language only. The explanation is
+            // always shown: a deliberate input edit is not noise, whatever its size.
+            if (Math.abs(pct) < minChg) {
+                sb.append(" -- <i>no material change (under ")
+                        .append(String.format("%.0f%%", minChg)).append(")</i>");
+            }
+            sb.append("<br>&nbsp;&nbsp;portfolio ")
+                    .append(String.format("%+.1f%%", (lastRunBalance / (double) baselineBalance - 1) * 100))
+                    .append(" (").append(signed(balEff)).append("); ")
+                    .append(horizonDelta > 0
+                            ? "horizon " + horizonDelta + " fewer year(s) to fund"
+                            : (horizonDelta < 0 ? "horizon lengthened"
+                            : "rate change (assumptions)"))
+                    .append(" (").append(signed(rateEff)).append(")");
+            if (multChanged) {
+                sb.append("; <b>go-go ")
+                        .append(String.format("%.2fx -> %.2fx", mB, mN))
+                        .append("</b> (").append(signed(multEff)).append(")")
+                        .append(mN < mB ? " -- planned, not distress" : " -- your edit");
+            }
+        } else {
+            sb.append("<br><i>No annual baseline set -- press "
+                    + "'Set as annual baseline' to enable year-over-year comparison.</i>");
+        }
+        sb.append("</html>");
+        lblBaseline.setText(sb.toString());
+    }
+    private static String signed(double v) {
+        return (v >= 0 ? "+" : "-") + CURRENCY.format((long) Math.abs(v));
     }
 
     private JLabel mkMetricLabel() {
