@@ -1,3 +1,7 @@
+// ==============================================================
+// IncomeLab_OptSocSec_v6.java
+// Last modified: Sunday, August 09, 2026 at 10:58 AM MST (UTC-7)
+// ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
 import javax.swing.*;
