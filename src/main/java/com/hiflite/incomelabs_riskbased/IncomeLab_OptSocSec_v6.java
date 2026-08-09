@@ -177,6 +177,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
     private JSpinner   spDeathYear;         // v6: calendar year of death
     private JSpinner   spHisRmdShare;       // v6: User's % of combined Traditional (RMD split)
     private JSpinner   spSurvivorSpendCut;  // v6: survivor living-expense reduction %
+    private JCheckBox  chkSSColaTracksInfl;  // v6: SS rides simulated inflation
+    private JSpinner   spColaShortfall;      // v6: annual COLA haircut
+    private JLabel     lblColaWarn;          // v6: guard note on historical sequences
     private JSpinner spGkUpperGuardrail, spGkLowerGuardrail;
     private JSpinner spManTradIRA, spManRothIRA, spManTrad401K, spManRoth401K;
     private JSpinner spWomanRoth401K, spWomanRothIRA, spWomanTradIRA, spWomanTrad401K;
@@ -1037,6 +1040,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         refreshTaxEngineEnabled();  // set initial enabled/greyed state
         refreshStateFieldsEnabled();  // v5: initial state-field enable/greyed state
         refreshDeathFieldsEnabled();  // v6: initial death-event enable/greyed state
+        refreshColaWarn();            // v6: initial COLA guard note
         refreshAnnuityFieldsEnabled();  // v4: initial annuity enable/greyed state
 
         // == Pro PoS advisory guardrails ===================================
@@ -1063,6 +1067,44 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         inner.add(Box.createVerticalStrut(4));
 
         // == Historical Stress Scenario card =====================================
+        chkSSColaTracksInfl = new JCheckBox("SS COLA tracks simulated inflation");
+        chkSSColaTracksInfl.setSelected(false);   // default OFF: preserves saved scenarios
+        chkSSColaTracksInfl.setToolTipText("<html><b>SS COLA tracks simulated inflation (v6)</b><br>"
+                + "<b>Off (default):</b> Social Security compounds at your fixed SS COLA<br>"
+                + "input. Reproduces every pre-v6 scenario exactly and keeps a<br>"
+                + "deliberately conservative COLA assumption for random runs.<br><br>"
+                + "<b>On:</b> Social Security instead grows with the SIMULATED inflation,<br>"
+                + "holding constant real purchasing power -- which is what CPI<br>"
+                + "indexing actually does under current law. On stochastic runs each<br>"
+                + "fan path uses ITS OWN inflation, so the PoS calculation is affected<br>"
+                + "too, not just the displayed table.<br><br>"
+                + "<b>Turn this ON for historical stress sequences.</b> With a fixed 2.4%%<br>"
+                + "COLA against 1966-82 inflation (~5.4%%/yr), modelled SS loses about<br>"
+                + "60%% of its real value over 30 years -- an artifact, not a risk. That<br>"
+                + "single distortion can turn a survivable stress run into a failing one.</html>");
+
+        spColaShortfall = spinD(0.2, 0.0, 2.0, 0.1, "0.0#");
+        spColaShortfall.setToolTipText("<html><b>COLA shortfall (%%/yr) -- v6</b><br>"
+                + "A constant annual haircut on the inflation-tracked COLA, so Social<br>"
+                + "Security drifts slowly DOWN in real terms instead of holding flat.<br>"
+                + "Only applies when <i>SS COLA tracks simulated inflation</i> is on.<br><br>"
+                + "<b>Why a shortfall exists:</b> SS is indexed to <b>CPI-W</b>, which weights a<br>"
+                + "working-age wage-earner basket. Retirees spend proportionally more<br>"
+                + "on healthcare and housing, which inflate faster. The BLS<br>"
+                + "experimental <b>CPI-E</b> (elderly) has historically run about<br>"
+                + "<b>0.2 pp/yr higher</b> -- hence the default.<br><br>"
+                + "Note CPI-W is a HEADLINE index: food and energy ARE included.<br>"
+                + "(Core CPI excludes them, but core is not used for COLA.)<br><br>"
+                + "Raise toward <b>0.4-0.5%%</b> if you also want it to absorb the Medicare<br>"
+                + "Part B drag. Do NOT raise it for the taxation drag -- the frozen<br>"
+                + "$32,000/$44,000 provisional thresholds are already modelled<br>"
+                + "directly by the tax engine, so that would double-count.<br><br>"
+                + "Real SS remaining after 30 yrs: 0.2%% -> 94%%, 0.3%% -> 91%%, 0.5%% -> 86%%.</html>");
+
+        lblColaWarn = new JLabel(" ");
+        lblColaWarn.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        lblColaWarn.setForeground(new Color(150, 60, 0));
+
         cmbScenario = new JComboBox<>(HistoricalScenarios.SCENARIO_NAMES);
         cmbScenario.setToolTipText(HistoricalScenarios.getDescription(0));
         cmbScenario.addActionListener(e -> {
@@ -1106,6 +1148,26 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         scenarioNote.setBorder(BorderFactory.createEmptyBorder(4,0,0,0));
         scenarioNote.setAlignmentX(LEFT_ALIGNMENT);
         cardScenario.add(scenarioNote);
+
+        // v6: COLA option + guard note live with the sequence selector, because
+        // that pairing is exactly where a fixed COLA misleads.
+        chkSSColaTracksInfl.setAlignmentX(LEFT_ALIGNMENT);
+        chkSSColaTracksInfl.setBorder(BorderFactory.createEmptyBorder(6,0,0,0));
+        cardScenario.add(chkSSColaTracksInfl);
+        JPanel colaRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        colaRow.setOpaque(false);
+        colaRow.setAlignmentX(LEFT_ALIGNMENT);
+        colaRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        JLabel colaLbl = new JLabel("COLA shortfall (%/yr)");
+        colaLbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        colaLbl.setForeground(new Color(75, 75, 75));
+        spColaShortfall.setPreferredSize(new Dimension(80, 26));
+        colaRow.add(colaLbl); colaRow.add(spColaShortfall);
+        cardScenario.add(colaRow);
+        lblColaWarn.setAlignmentX(LEFT_ALIGNMENT);
+        cardScenario.add(lblColaWarn);
+        chkSSColaTracksInfl.addActionListener(e -> refreshColaWarn());
+        cmbScenario.addActionListener(e -> refreshColaWarn());
 
         inner.add(cardScenario);
         inner.add(Box.createVerticalStrut(4));
@@ -3141,6 +3203,19 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
     // and only when the computed tax engine is on (the death event is a tax /
     // RMD feature). The share field stays live even without a death event,
     // because the his/her split drives both-living RMD math too.
+    // v6: warn when a historical sequence is selected while SS is still on the
+    // fixed COLA -- the combination that makes a survivable stress run look fatal.
+    private void refreshColaWarn() {
+        if (lblColaWarn == null || cmbScenario == null || chkSSColaTracksInfl == null) return;
+        boolean hist = cmbScenario.getSelectedIndex() > 0;
+        boolean tracking = chkSSColaTracksInfl.isSelected();
+        if (spColaShortfall != null) spColaShortfall.setEnabled(tracking);
+        lblColaWarn.setText(hist && !tracking
+                ? "<html><i>Fixed COLA vs simulated inflation -- SS will be<br>"
+                + "understated in high-inflation sequences.</i></html>"
+                : " ");
+    }
+
     private void refreshDeathFieldsEnabled() {
         if (cmbDeathWho == null) return; // guard: called during construction
         boolean computed = (chkComputedTax != null) && chkComputedTax.isSelected();
@@ -3301,6 +3376,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         props.setProperty("tax.deathYear",          String.valueOf(iv(spDeathYear)));
         props.setProperty("tax.hisRmdShare",        String.valueOf(dv(spHisRmdShare)));
         props.setProperty("tax.survivorSpendCut",   String.valueOf(dv(spSurvivorSpendCut)));
+        props.setProperty("ss.colaTracksInflation", String.valueOf(
+                chkSSColaTracksInfl != null && chkSSColaTracksInfl.isSelected()));
+        props.setProperty("ss.colaShortfall",      String.valueOf(dv(spColaShortfall)));
         // v6: annual baseline (only written when one has been captured)
         props.setProperty("base.set",        String.valueOf(baselineSet));
         props.setProperty("base.actualWd",   String.valueOf(baselineActualWd));
@@ -3443,6 +3521,11 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             setSpinnerD(spHisRmdShare,    props, "tax.hisRmdShare",        warnings);
         if (props.getProperty("tax.survivorSpendCut") != null)
             setSpinnerD(spSurvivorSpendCut, props, "tax.survivorSpendCut", warnings);
+        if (chkSSColaTracksInfl != null)
+            chkSSColaTracksInfl.setSelected(Boolean.parseBoolean(
+                    props.getProperty("ss.colaTracksInflation", "false")));
+        if (props.getProperty("ss.colaShortfall") != null)
+            setSpinnerD(spColaShortfall, props, "ss.colaShortfall", warnings);
         // v6: annual baseline
         try {
             baselineSet      = Boolean.parseBoolean(props.getProperty("base.set", "false"));
@@ -3492,6 +3575,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         refreshTaxEngineEnabled();  // greying may change if loaded toggles differ
         refreshStateFieldsEnabled();  // v5: apply loaded state selection greying
         refreshDeathFieldsEnabled();  // v6: apply loaded death-event greying
+        refreshColaWarn();            // v6: apply loaded COLA guard note
         refreshAnnuityFieldsEnabled();  // v4: apply loaded annuity on/off state
         addRecentFile(file.getAbsolutePath());
         if (cmbRecent != null) loadRecentFiles(cmbRecent);
@@ -3820,6 +3904,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         i.herRmdShare = 1.0 - i.hisRmdShare;   // shares are complementary
         i.survivorSpendCut = (spSurvivorSpendCut != null)
                 ? dv(spSurvivorSpendCut) / 100.0 : 0.20;   // v6
+        i.ssColaTracksInflation = (chkSSColaTracksInfl != null)
+                && chkSSColaTracksInfl.isSelected();   // v6
+        i.ssColaShortfall = (spColaShortfall != null)
+                ? dv(spColaShortfall) / 100.0 : 0.002;   // v6
         i.goGoMultiplier     = dv(spGoGo);
         i.goGoDuration       = iv(spGoGoDuration);
         i.proPosUpperGuardrail = dv(spProPosUpperGuardrail) / 100.0;
@@ -3895,6 +3983,11 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             res.fanInflFactors[p][0] = 1.0;
             fpTrad[p][0] = trad; fpRoth[p][0] = roth; fpMM[p][0] = taxable;
 
+            // v6: this path's inflation factor at each SS start year, captured as
+            // the loop passes it, so SS can ride the path's own inflation when
+            // ssColaTracksInflation is on. Stays 0 (harmless) when the option is off.
+            double pManStartInfl = 0, pWomanStartInfl = 0;
+
             for (int y = 0; y < inp.horizon; y++) {
                 int calYear  = inp.baseYear + y;
                 int manAge   = calYear - inp.manBirthYear;
@@ -3906,6 +3999,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 double ret   = ri1[0];
                 double infl  = ri1[1];
                 res.fanInflFactors[p][y + 1] = res.fanInflFactors[p][y] * (1 + infl);
+                if (calYear == inp.manSSStartYear)   pManStartInfl   = res.fanInflFactors[p][y];
+                if (calYear == inp.womanSSStartYear) pWomanStartInfl = res.fanInflFactors[p][y];
 
                 int goGoRem = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
                 int wd = 0;
@@ -3932,12 +4027,14 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 //     first then from the converted Roth if taxable is short. ---
                 if (drawing && inp.computedTax) {
                     double convGross = fanConversion(inp, y, calYear, manAge,
-                            womanAge, trad, roth, survivor, wdActual);
+                            womanAge, trad, roth, survivor, wdActual,
+                            res.fanInflFactors[p][y], pManStartInfl, pWomanStartInfl);
                     convGross = Math.min(convGross, Math.max(0, trad));
                     if (convGross > 0) {
                         fpConv[p][y] = convGross;      // v6: record for display consistency
                         double convNet = fanConversionNet(inp, y, calYear, manAge,
-                                womanAge, trad, roth, convGross, survivor, wdActual);
+                                womanAge, trad, roth, convGross, survivor, wdActual,
+                                res.fanInflFactors[p][y], pManStartInfl, pWomanStartInfl);
                         double convTax = Math.max(0, convGross - Math.max(0, convNet));
                         trad -= convGross;              // gross leaves Traditional
                         roth += convGross;              // gross lands in Roth...
@@ -4016,6 +4113,18 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         //    and give RMDs a stable Traditional base. They represent a TYPICAL
         //    split rather than one literal scenario -- the right trade-off for a
         //    median table.
+        // v6: median inflation factor for EVERY year, so Social Security can be
+        // grown on the simulated inflation path when ssColaTracksInflation is on.
+        double[] medInfl = new double[inp.horizon + 1];
+        for (int yy = 0; yy <= inp.horizon; yy++) {
+            double[] ia = new double[fanPaths];
+            for (int p = 0; p < fanPaths; p++) ia[p] = res.fanInflFactors[p][yy];
+            Arrays.sort(ia);
+            medInfl[yy] = ia[fanPaths / 2];
+        }
+        double medManStartInfl   = inflAt(medInfl, inp.baseYear, inp.manSSStartYear);
+        double medWomanStartInfl = inflAt(medInfl, inp.baseYear, inp.womanSSStartYear);
+
         // v3: MAGI history for the IRMAA 2-year lookback (index by sim year).
         double[] magiHistory = new double[inp.horizon];
         for (int y = 0; y < inp.horizon; y++) {
@@ -4098,8 +4207,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             Arrays.sort(nextInflArr);
             double nextInflFactor = nextInflArr[fanPaths / 2];
 
-            double manSS      = manSSSurv(inp, y);   // v6: survivor-aware
-            double womanSS    = womanSSSurv(inp, y);  // v6: survivor-aware
+            double ssInflNow  = inflAt(medInfl, inp.baseYear, calYear);   // v6
+            double manSS      = manSSSurv(inp, y, ssInflNow, medManStartInfl, medWomanStartInfl);
+            double womanSS    = womanSSSurv(inp, y, ssInflNow, medManStartInfl, medWomanStartInfl);
             double ann        = annuityThisYear(inp, y);
             double guaranteed = manSS + womanSS + ann;
             boolean survivor  = isSurvivorYear(inp, calYear);   // v6
@@ -4613,20 +4723,55 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 manM, manAdj, womM, womAdj));
     }
 
-    private double manSSThisYear(SimInputs inp, int y) {
+    // v6: median inflation factor at a given calendar year, clamped to range.
+    private static double inflAt(double[] medInfl, int baseYear, int calYear) {
+        if (medInfl == null || medInfl.length == 0) return 0;
+        int idx = calYear - baseYear;
+        if (idx < 0) idx = 0;
+        if (idx >= medInfl.length) idx = medInfl.length - 1;
+        return medInfl[idx];
+    }
+
+    // v6: growth factor applied to a benefit between its start year and calYear.
+    // Default (ssColaTracksInflation == false) compounds the fixed ssCola, which
+    // is what every pre-v6 scenario expects. When the option is on, the benefit
+    // instead rides the SIMULATED inflation: inflFactor(calYear)/inflFactor(start),
+    // i.e. constant real purchasing power. inflNow/inflAtStart are passed in by
+    // the caller because they are path- or median-specific; passing equal values
+    // (or zeros) safely degrades to no growth beyond the fixed-COLA branch.
+    private double ssGrowth(SimInputs inp, int yearsSinceStart,
+                            double inflNow, double inflAtStart) {
+        if (inp.ssColaTracksInflation && inflAtStart > 0 && inflNow > 0) {
+            // simulated inflation, then a constant annual haircut == "inflation
+            // minus shortfall" compounded over the years since the benefit began.
+            double sf = Math.max(0, inp.ssColaShortfall);
+            return (inflNow / inflAtStart) / Math.pow(1 + sf, Math.max(0, yearsSinceStart));
+        }
+        return Math.pow(1 + inp.ssCola, yearsSinceStart);
+    }
+
+    private double manSSThisYear(SimInputs inp, int y, double inflNow, double inflAtStart) {
         int calYear = inp.baseYear + y;
         if (calYear < inp.manSSStartYear) return 0;
         if (calYear == inp.manSSStartYear)
             return inp.manSSAmount * (13.0 - inp.manSSStartMonth) / 12.0;
-        return inp.manSSAmount * Math.pow(1 + inp.ssCola, calYear - inp.manSSStartYear);
+        return inp.manSSAmount
+                * ssGrowth(inp, calYear - inp.manSSStartYear, inflNow, inflAtStart);
+    }
+    private double manSSThisYear(SimInputs inp, int y) {   // fixed-COLA convenience
+        return manSSThisYear(inp, y, 0, 0);
     }
 
-    private double womanSSThisYear(SimInputs inp, int y) {
+    private double womanSSThisYear(SimInputs inp, int y, double inflNow, double inflAtStart) {
         int calYear = inp.baseYear + y;
         if (calYear < inp.womanSSStartYear) return 0;
         if (calYear == inp.womanSSStartYear)
             return inp.womanSSAmount * (13.0 - inp.womanSSStartMonth) / 12.0;
-        return inp.womanSSAmount * Math.pow(1 + inp.ssCola, calYear - inp.womanSSStartYear);
+        return inp.womanSSAmount
+                * ssGrowth(inp, calYear - inp.womanSSStartYear, inflNow, inflAtStart);
+    }
+    private double womanSSThisYear(SimInputs inp, int y) {
+        return womanSSThisYear(inp, y, 0, 0);
     }
 
     private double annuityThisYear(SimInputs inp, int y) {
@@ -4658,22 +4803,26 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
     // stops and the survivor keeps the LARGER of the two benefits (standard
     // survivor rule). We compute both raw benefits, then in survivor years route
     // the larger to the survivor's slot and zero the decedent's.
-    private double manSSSurv(SimInputs inp, int y) {
+    private double manSSSurv(SimInputs inp, int y, double iNow, double iManStart, double iWomanStart) {
         int calYear = inp.baseYear + y;
-        double raw = manSSThisYear(inp, y);
+        double raw = manSSThisYear(inp, y, iNow, iManStart);
         if (!isSurvivorYear(inp, calYear)) return raw;
         if (inp.deathWho == 1) return 0;                 // user died -> no user SS
         // spouse died -> user (survivor) keeps larger of the two this year
-        return Math.max(manSSThisYear(inp, y), womanSSThisYear(inp, y));
+        return Math.max(manSSThisYear(inp, y, iNow, iManStart),
+                womanSSThisYear(inp, y, iNow, iWomanStart));
     }
-    private double womanSSSurv(SimInputs inp, int y) {
+    private double manSSSurv(SimInputs inp, int y) { return manSSSurv(inp, y, 0, 0, 0); }
+    private double womanSSSurv(SimInputs inp, int y, double iNow, double iManStart, double iWomanStart) {
         int calYear = inp.baseYear + y;
-        double raw = womanSSThisYear(inp, y);
+        double raw = womanSSThisYear(inp, y, iNow, iWomanStart);
         if (!isSurvivorYear(inp, calYear)) return raw;
         if (inp.deathWho == 2) return 0;                 // spouse died -> no spouse SS
         // user died -> spouse (survivor) keeps larger of the two this year
-        return Math.max(manSSThisYear(inp, y), womanSSThisYear(inp, y));
+        return Math.max(manSSThisYear(inp, y, iNow, iManStart),
+                womanSSThisYear(inp, y, iNow, iWomanStart));
     }
+    private double womanSSSurv(SimInputs inp, int y) { return womanSSSurv(inp, y, 0, 0, 0); }
 
     // Combined RMD off a single Traditional balance, split by the his/her share
     // and each half aged on its owner. In a survivor year only the survivor's
@@ -4699,10 +4848,12 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
     private double fanConversion(SimInputs inp, int y, int calYear,
                                  int manAge, int womanAge,
                                  double trad, double roth, boolean survivor,
-                                 double wdActual) {
+                                 double wdActual,
+                                 double iNow, double iManStart, double iWomanStart) {
         TaxEngine.FilingStatus fs = filingFor(inp, calYear);
         double inflFactor = Math.pow(1 + inp.inflation, y);
-        double grossSS = manSSSurv(inp, y) + womanSSSurv(inp, y);
+        double grossSS = manSSSurv(inp, y, iNow, iManStart, iWomanStart)
+                + womanSSSurv(inp, y, iNow, iManStart, iWomanStart);
         double rmd     = combinedRmd(inp, trad, calYear, manAge, womanAge);
         double ann     = annuityThisYear(inp, y);
         // v6 FIX: match the display basis -- ordinary income is the actual
@@ -4726,10 +4877,12 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                                     int manAge, int womanAge,
                                     double trad, double roth,
                                     double convGross, boolean survivor,
-                                    double wdActual) {
+                                    double wdActual,
+                                    double iNow, double iManStart, double iWomanStart) {
         TaxEngine.FilingStatus fs = filingFor(inp, calYear);
         double inflFactor = Math.pow(1 + inp.inflation, y);
-        double grossSS = manSSSurv(inp, y) + womanSSSurv(inp, y);
+        double grossSS = manSSSurv(inp, y, iNow, iManStart, iWomanStart)
+                + womanSSSurv(inp, y, iNow, iManStart, iWomanStart);
         double rmd     = combinedRmd(inp, trad, calYear, manAge, womanAge);
         double ann     = annuityThisYear(inp, y);
         double ordinaryBeforeConv = Math.max(rmd, Math.min(wdActual, Math.max(0, trad))) + ann;  // v6 FIX
@@ -4782,6 +4935,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         double wdGK           = 0;
         boolean prevYearLoss  = false;
         double inflFactor     = 1.0; // updated each year from actual yearInfl
+        // v6: GK inflation factor at each SS start year, captured as the loop
+        // passes it (see the Pro PoS fan loop for the same pattern).
+        double gkManStartInfl = 0, gkWomanStartInfl = 0;
 
         double manTradIRA    = inp.manTradIRA;
         double manTrad401K   = inp.manTrad401K;
@@ -4808,9 +4964,11 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             // Cumulative inflation factor from actual per-year inflation
             if (y == 0) inflFactor = 1.0;
             else        inflFactor *= (1 + yearInfl);
+            if (calYear == inp.manSSStartYear)   gkManStartInfl   = inflFactor;
+            if (calYear == inp.womanSSStartYear) gkWomanStartInfl = inflFactor;
 
-            double manSS      = manSSSurv(inp, y);   // v6: survivor-aware
-            double womanSS    = womanSSSurv(inp, y);  // v6: survivor-aware
+            double manSS      = manSSSurv(inp, y, inflFactor, gkManStartInfl, gkWomanStartInfl);
+            double womanSS    = womanSSSurv(inp, y, inflFactor, gkManStartInfl, gkWomanStartInfl);
             double ann        = annuityThisYear(inp, y);
             double guaranteed = manSS + womanSS + ann;
             double living     = drawing ? inp.livingExp   * inflFactor : 0;
@@ -6291,6 +6449,16 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         // (Part B + Medigap + Part D + self-insurance reserve each stop for
         // the decedent). Default 0.20 = the standard survivor estimate --
         // housing, utilities and insurance do not halve.
+        // v6: when true, Social Security grows with the SIMULATED inflation
+        // (constant real purchasing power, which is what CPI indexing does)
+        // instead of compounding the fixed ssCola. Matters most in historical
+        // high-inflation sequences, where a fixed COLA badly understates SS.
+        boolean ssColaTracksInflation = false;   // v6
+        // v6: annual haircut applied to the inflation-tracked COLA. SS is indexed
+        // to CPI-W, which weights a working-age basket; retirees spend more on
+        // healthcare and housing, and the experimental CPI-E has historically run
+        // about 0.2 pp/yr higher. Only used when ssColaTracksInflation is true.
+        double ssColaShortfall = 0.002;   // v6
         double survivorSpendCut = 0.20;   // v6
         static final double SURVIVOR_MEDICAL_FACTOR = 0.5;   // v6, mechanical
         double goGoMultiplier; int goGoDuration;
