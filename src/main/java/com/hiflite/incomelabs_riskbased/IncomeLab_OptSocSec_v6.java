@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v6.java
-// Last modified: Sunday, August 09, 2026 at 10:58 AM MST (UTC-7)
+// Last modified: Sunday, August 09, 2026 at 06:39 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -183,6 +183,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
     private JSpinner   spSurvivorSpendCut;  // v6: survivor living-expense reduction %
     private JCheckBox  chkSSColaTracksInfl;  // v6: SS rides simulated inflation
     private JSpinner   spColaShortfall;      // v6: annual COLA haircut
+    private JSpinner   spSeqOffset;          // v6: shift the sequence N years in
+    private JComboBox<String> cmbOptSort;    // v6: what the SS Optimizer ranks by
+    private JLabel     lblOptObjective;      // v6: banner naming the active objective
     private JLabel     lblColaWarn;          // v6: guard note on historical sequences
     private JSpinner spGkUpperGuardrail, spGkLowerGuardrail;
     private JSpinner spManTradIRA, spManRothIRA, spManTrad401K, spManRoth401K;
@@ -1045,6 +1048,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         refreshStateFieldsEnabled();  // v5: initial state-field enable/greyed state
         refreshDeathFieldsEnabled();  // v6: initial death-event enable/greyed state
         refreshColaWarn();            // v6: initial COLA guard note
+        refreshOptObjective();        // v6: initial optimizer objective banner
         refreshAnnuityFieldsEnabled();  // v4: initial annuity enable/greyed state
 
         // == Pro PoS advisory guardrails ===================================
@@ -1086,6 +1090,23 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 + "COLA against 1966-82 inflation (~5.4%%/yr), modelled SS loses about<br>"
                 + "60%% of its real value over 30 years -- an artifact, not a risk. That<br>"
                 + "single distortion can turn a survivable stress run into a failing one.</html>");
+
+        spSeqOffset = spinI(0, 0, 20, 1, "0");
+        spSeqOffset.setToolTipText("<html><b>Sequence starts N years in (v6)</b><br>"
+                + "Shifts the historical crisis N years into the projection. Years<br>"
+                + "before it use ordinary random draws; the sequence then replays<br>"
+                + "in full from that point.<br><br>"
+                + "<b>0 (default):</b> the crisis lands in year 1 -- maximum remaining<br>"
+                + "runway, but no surplus banked yet.<br><br>"
+                + "<b>Why shift it:</b> year 1 is not your worst case. A crisis a few<br>"
+                + "years in finds the portfolio already partly drawn AND the go-go<br>"
+                + "multiplier still running, which is usually the harder test. Push<br>"
+                + "it past the go-go window and the plan is far more resilient,<br>"
+                + "because the elevated spending has already ended.<br><br>"
+                + "Try 0, 5 and 10 on the same sequence -- the spread between them<br>"
+                + "is your real sequence-of-returns exposure.<br><br>"
+                + "Applies everywhere the sequence does: the Pro PoS fan paths, the<br>"
+                + "PoS solver, the GK loop, and the Stress Test tab.</html>");
 
         spColaShortfall = spinD(0.2, 0.0, 2.0, 0.1, "0.0#");
         spColaShortfall.setToolTipText("<html><b>COLA shortfall (%%/yr) -- v6</b><br>"
@@ -1152,6 +1173,18 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         scenarioNote.setBorder(BorderFactory.createEmptyBorder(4,0,0,0));
         scenarioNote.setAlignmentX(LEFT_ALIGNMENT);
         cardScenario.add(scenarioNote);
+
+        // v6: sequence offset sits directly under the sequence selector.
+        JPanel offRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        offRow.setOpaque(false);
+        offRow.setAlignmentX(LEFT_ALIGNMENT);
+        offRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        JLabel offLbl = new JLabel("Sequence starts N years in");
+        offLbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        offLbl.setForeground(new Color(75, 75, 75));
+        spSeqOffset.setPreferredSize(new Dimension(70, 26));
+        offRow.add(offLbl); offRow.add(spSeqOffset);
+        cardScenario.add(offRow);
 
         // v6: COLA option + guard note live with the sequence selector, because
         // that pairing is exactly where a fixed COLA misleads.
@@ -2406,6 +2439,32 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 BorderFactory.createLineBorder(new Color(150, 190, 240), 1),
                 BorderFactory.createEmptyBorder(6, 10, 6, 10)));
 
+        cmbOptSort = new JComboBox<>(new String[]{
+                "Go-Go Guar (guaranteed income during go-go years)",
+                "Survivor Floor (income the survivor keeps for life)",
+                "Combined SS at full claim" });
+        cmbOptSort.setToolTipText("<html><b>What the optimizer ranks by (v6)</b><br>"
+                + "<b>Go-Go Guar</b> -- mortality-weighted guaranteed income accumulated<br>"
+                + "across the go-go years. Structurally <b>favours claiming early</b>: a<br>"
+                + "delayed benefit pays nothing during that window, so delay always<br>"
+                + "scores badly here however valuable it is later.<br><br>"
+                + "<b>Survivor Floor</b> -- the annual benefit the surviving spouse keeps<br>"
+                + "after the first death, which is the LARGER of the two claimed<br>"
+                + "benefits. <b>Favours delaying the higher earner</b>, permanently raising<br>"
+                + "the survivor's income for life.<br><br>"
+                + "<b>Combined SS at full claim</b> -- total household benefit once both<br>"
+                + "have claimed, ignoring when it starts.<br><br"
+                + "These give DIFFERENT answers on purpose. Go-Go Guar optimises the<br>"
+                + "travel decade; Survivor Floor optimises the survivor's protection.<br>"
+                + "That difference is the trade-off -- the optimizer cannot decide it<br>"
+                + "for you, because it has no death event and no spending-shape<br>"
+                + "preference.</html>");
+
+        lblOptObjective = new JLabel(" ");
+        lblOptObjective.setFont(new Font("SansSerif", Font.BOLD, 12));
+        lblOptObjective.setForeground(new Color(150, 60, 0));
+        cmbOptSort.addActionListener(e -> refreshOptObjective());
+
         chkOptimize = new JCheckBox("Optimize SS start dates (scan all combinations)", false);
         chkOptimize.setFont(new Font("SansSerif", Font.BOLD, 14));
         chkOptimize.setForeground(new Color(20, 60, 140));
@@ -2421,6 +2480,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         modeNote.setForeground(new Color(80, 80, 80));
 
         modeRow.add(chkOptimize);
+        modeRow.add(new JLabel("   Rank by:"));
+        modeRow.add(cmbOptSort);
+        modeRow.add(lblOptObjective);
         modeRow.add(modeNote);
 
         // == Optimizer controls =============================================
@@ -2477,7 +2539,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 "Rank", "User SS Start", "User Age", "User Mo. ($)",
                 "Spouse SS Start",  "Spouse Age",  "Spouse Mo. ($)",
                 "Combined SS/yr", "Total Inc Yr1", "Port Wd Yr1",
-                "Init Rate %", "Go-Go Guar", "Proj Final Bal"
+                "Init Rate %", "Go-Go Guar", "Survivor Floor", "Proj Final Bal"
         };
         tblOptModel = new javax.swing.table.DefaultTableModel(optCols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -2605,7 +2667,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
 
         // == Results table =================================================
         String[] cols = {
-                "Historical Scenario", "Initial Spend", "Worst-Yr Spend (real)",
+                "Historical Scenario", "Starts yr", "Initial Spend", "Worst-Yr Spend (real)",
                 "Max Cut %", "# Guardrail Cuts", "Yrs to Recover",
                 "Final Balance", "Survived"
         };
@@ -2757,6 +2819,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
 
             tblStressModel.addRow(new Object[]{
                     HistoricalScenarios.SCENARIO_NAMES[s],
+                    // v6: the offset is a live input read by readInputs(), so it
+                    // applies here even when the Sequence dropdown is on Random
+                    // and the spinner looks greyed out. Show it, don't hide it.
+                    (inp.seqOffset == 0 ? "yr 1" : "+" + inp.seqOffset + " yr"),
                     CURRENCY.format((long) initialRealSpend),
                     CURRENCY.format((long) worstRealSpend),
                     String.format("%.0f%%", maxCutPct),
@@ -2788,8 +2854,13 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         lblStressVerdict.setText("<html>" + verdict + "</html>");
         lblStressVerdict.setForeground(survivedCount == crisisCount
                 ? new Color(30, 90, 50) : new Color(150, 90, 20));
+        int stressOff = readInputs().seqOffset;   // v6
         lblStressStatus.setText("Done. Ran " + crisisCount
-                + " historical crises through your Guyton-Klinger guardrail plan.");
+                + " historical crises through your Guyton-Klinger guardrail plan"
+                + (stressOff > 0
+                ? " -- each sequence STARTING " + stressOff + " YEARS IN"
+                + " (from the 'Sequence starts N years in' spinner)."
+                : ", each starting in year 1."));
     }
 
     // == Apply SS dates and run IL simulation ================================
@@ -2896,10 +2967,31 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 // Sort by totalIncomeYr1 desc (most total income in first drawing year)
                 // Primary: maximize total income across all go-go years
                 // Secondary: maximize projected final balance (legacy)
+                // v6: the objective is selectable. Go-Go Guar (default) maximises
+                // mortality-weighted guaranteed income during the go-go window,
+                // which structurally penalises delay -- a delayed benefit pays
+                // nothing in that window. Survivor Floor instead maximises the
+                // income the surviving spouse keeps for life, which is the reason
+                // to delay the HIGHER earner. They give different answers on
+                // purpose; that difference IS the trade-off.
+                final int sortMode = (cmbOptSort != null) ? cmbOptSort.getSelectedIndex() : 0;
                 results.sort((a, b) -> {
-                    int cmp = Double.compare(b.goGoTotalIncome, a.goGoTotalIncome);
-                    if (cmp != 0) return cmp;
-                    return Double.compare(b.projFinalBal, a.projFinalBal);
+                    int cmp;
+                    switch (sortMode) {
+                        case 1 -> {   // Survivor Floor
+                            cmp = Double.compare(b.survivorFloor, a.survivorFloor);
+                            if (cmp == 0) cmp = Double.compare(b.goGoTotalIncome, a.goGoTotalIncome);
+                        }
+                        case 2 -> {   // Combined SS at full claim
+                            cmp = Double.compare(b.combinedAnnual, a.combinedAnnual);
+                            if (cmp == 0) cmp = Double.compare(b.goGoTotalIncome, a.goGoTotalIncome);
+                        }
+                        default -> {  // Go-Go Guar
+                            cmp = Double.compare(b.goGoTotalIncome, a.goGoTotalIncome);
+                            if (cmp == 0) cmp = Double.compare(b.projFinalBal, a.projFinalBal);
+                        }
+                    }
+                    return cmp;
                 });
 
                 // Publish to table
@@ -3057,6 +3149,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         r.bobMonthly    = bobMonthly;
         r.joMonthly     = joMonthly;
         r.combinedAnnual= bobAnnual + joAnnual;
+        // v6: survivor keeps the LARGER of the two benefits.
+        r.survivorFloor = Math.max(r.bobMonthly, r.joMonthly) * 12.0;
         r.totalIncomeYr1= totalIncYr1;
         r.portWdYr1     = portWdYr1;
         r.projFinalBal  = bal;                 // nominal; display converts to real if needed
@@ -3097,6 +3191,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                     CURRENCY.format((long)(r.portWdYr1 / (showRealDollars && r.inflAccYr1 > 0 ? r.inflAccYr1 : 1.0))),
                     String.format("%.2f%%", initRate),
                     CURRENCY.format((long)(r.goGoTotalIncome / (showRealDollars && r.inflAccFinal > 0 ? r.inflAccFinal : 1.0))),
+                    CURRENCY.format((long) r.survivorFloor),   // v6: already an annual figure at claim
                     CURRENCY.format((long)(r.projFinalBal / (showRealDollars && r.inflAccFinal > 0 ? r.inflAccFinal : 1.0))),
             });
             optRowDates.add(new int[]{r.bobYear, r.bobMonth, r.joYear, r.joMonth});
@@ -3119,6 +3214,12 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         double bobMonthly, joMonthly, combinedAnnual;
         double totalIncomeYr1, portWdYr1, projFinalBal;
         double goGoTotalIncome;  // sum of guaranteed income across all go-go years
+        // v6: the SURVIVOR INCOME FLOOR for this combination -- the annual
+        // benefit the surviving spouse keeps after the first death, which is
+        // the LARGER of the two claimed benefits. Delaying the higher earner
+        // raises this floor permanently; the go-go objective cannot see that,
+        // because a delayed benefit pays nothing during the go-go window.
+        double survivorFloor;
         double inflAccYr1   = 1.0;   // inflation factor at withdrawal start year (default 1=nominal)
         double inflAccFinal = 1.0;   // inflation factor at end of horizon (default 1=nominal)
     }
@@ -3209,11 +3310,24 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
     // because the his/her split drives both-living RMD math too.
     // v6: warn when a historical sequence is selected while SS is still on the
     // fixed COLA -- the combination that makes a survivable stress run look fatal.
+    // v6: name the active objective so nobody reads rank 1 as "the answer".
+    private void refreshOptObjective() {
+        if (lblOptObjective == null || cmbOptSort == null) return;
+        lblOptObjective.setText(switch (cmbOptSort.getSelectedIndex()) {
+            case 1 -> "Ranking by SURVIVOR FLOOR -- favours delaying the higher earner. "
+                    + "Does not consider the go-go spending window.";
+            case 2 -> "Ranking by COMBINED SS AT FULL CLAIM -- ignores when the income starts.";
+            default -> "Ranking by GO-GO GUAR -- favours claiming EARLY by construction. "
+                    + "Does not consider the survivor's income floor.";
+        });
+    }
+
     private void refreshColaWarn() {
         if (lblColaWarn == null || cmbScenario == null || chkSSColaTracksInfl == null) return;
         boolean hist = cmbScenario.getSelectedIndex() > 0;
         boolean tracking = chkSSColaTracksInfl.isSelected();
         if (spColaShortfall != null) spColaShortfall.setEnabled(tracking);
+        if (spSeqOffset != null) spSeqOffset.setEnabled(hist);
         lblColaWarn.setText(hist && !tracking
                 ? "<html><i>Fixed COLA vs simulated inflation -- SS will be<br>"
                 + "understated in high-inflation sequences.</i></html>"
@@ -3383,6 +3497,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         props.setProperty("ss.colaTracksInflation", String.valueOf(
                 chkSSColaTracksInfl != null && chkSSColaTracksInfl.isSelected()));
         props.setProperty("ss.colaShortfall",      String.valueOf(dv(spColaShortfall)));
+        props.setProperty("stress.seqOffset",      String.valueOf(iv(spSeqOffset)));
         // v6: annual baseline (only written when one has been captured)
         props.setProperty("base.set",        String.valueOf(baselineSet));
         props.setProperty("base.actualWd",   String.valueOf(baselineActualWd));
@@ -3530,6 +3645,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                     props.getProperty("ss.colaTracksInflation", "false")));
         if (props.getProperty("ss.colaShortfall") != null)
             setSpinnerD(spColaShortfall, props, "ss.colaShortfall", warnings);
+        if (props.getProperty("stress.seqOffset") != null)
+            setSpinnerI(spSeqOffset, props, "stress.seqOffset", warnings);
         // v6: annual baseline
         try {
             baselineSet      = Boolean.parseBoolean(props.getProperty("base.set", "false"));
@@ -3912,6 +4029,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 && chkSSColaTracksInfl.isSelected();   // v6
         i.ssColaShortfall = (spColaShortfall != null)
                 ? dv(spColaShortfall) / 100.0 : 0.002;   // v6
+        i.seqOffset = (spSeqOffset != null) ? iv(spSeqOffset) : 0;   // v6
         i.goGoMultiplier     = dv(spGoGo);
         i.goGoDuration       = iv(spGoGoDuration);
         i.proPosUpperGuardrail = dv(spProPosUpperGuardrail) / 100.0;
@@ -4519,7 +4637,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 "  %.2f%% of portfolio  .  %.0f%% PoS target  .  %d-year horizon  .  true stochastic median",
                 rate, inp.targetPoS * 100, inp.horizon));
         String scenLabel = inp.scenarioIndex > 0
-                ? " . [Stress: " + HistoricalScenarios.SCENARIO_NAMES[inp.scenarioIndex].split(" \\(")[0] + "]"
+                ? " . [Stress: " + HistoricalScenarios.SCENARIO_NAMES[inp.scenarioIndex].split(" \\(")[0]
+                + (inp.seqOffset > 0 ? ", +" + inp.seqOffset + " yr" : "") + "]"
                 : "";
         lblDetail.setText(String.format(
                 "User (age %d) . Spouse (age %d) . Draws begin %02d/%d . "
@@ -4608,8 +4727,13 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
 
     private String buildSummary(ProResults res) {
         SimInputs inp = res.inp;
-        int yr1 = res.yr1Withdrawal;
+        // v6 FIX: report the ACTUAL first-year draw, i.e. the go-go-adjusted
+        // withdrawal the Pro PoS table shows in "Actual wd". Using the base
+        // yr1Withdrawal here made the Summary's income and surplus disagree with
+        // the table for the same year -- by the whole go-go uplift (e.g. a $7.5K
+        // surplus reported against the table's ~$23K).
         EnhRow r1 = res.medianRows.stream().filter(r -> r.drawing).findFirst().orElse(null);
+        int yr1   = (r1 != null && r1.wdActual > 0) ? r1.wdActual : res.yr1Withdrawal;
         int guar1 = r1 != null ? r1.guaranteed : 0;
         int spd1  = r1 != null ? r1.totalSpend : 0;
         int inc1  = yr1 + guar1;
@@ -4628,7 +4752,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
 
         return preDrawSection + String.format(
                 "== INCOME PoS -- FIRST WITHDRAWAL YEAR (%d) ==\n"
-                        + "  Portfolio withdrawal:  %s/yr  (%.2f%% of $%,.0f)\n"
+                        + "  Portfolio withdrawal:  %s/yr  (%.2f%% of $%,.0f, go-go adjusted)\n"
                         + "  Method: true stochastic median . annual re-solve on observed balance\n"
                         + "  + Guaranteed income:   %s\n"
                         + "  = Total income:        %s\n"
@@ -4636,7 +4760,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                         + "  -> %s of %s\n\n"
                         + "== SOCIAL SECURITY ==\n"
                         + "  User: %s/yr from %02d/%d (age %d) . Spouse: %s/yr from %02d/%d (age %d)\n"
-                        + "  COLA %.1f%%/yr\n\n"
+                        + "  COLA %.1f%%/yr%s\n\n"
                         + "== ANNUITY ==\n"
                         + "  %s/yr from %d (non-COLA)\n\n"
                         + "== RMD SCHEDULE (SECURE 2.0 -- age 75) ==\n"
@@ -4645,7 +4769,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                         + "  Roth accounts (no RMD): %s\n\n"
                         + "== SPENDING ==\n"
                         + "  Base tax %s in %d . Medical %s at %.1f%%/yr\n"
-                        + "  Go-go multiplier: %.3f? for first %d years (through %d)\n\n"
+                        + "  Go-go multiplier: %.3fx for first %d years (through %d)\n\n"
                         + "== MARKET ASSUMPTIONS ==\n"
                         + "  Return: %.2f%% / %.2f%% std dev . Inflation: %.2f%% / %.2f%% std dev\n\n"
                         + "== RESULTS ==\n"
@@ -4661,6 +4785,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 CURRENCY.format(inp.womanSSAmount), inp.womanSSStartMonth, inp.womanSSStartYear,
                 inp.womanAge + (inp.womanSSStartYear - inp.baseYear),
                 inp.ssCola * 100,
+                inp.ssColaTracksInflation
+                        ? String.format("  [COLA TRACKS SIMULATED INFLATION, shortfall %.1f%%/yr"
+                        + " -- the fixed COLA above is NOT in use]", inp.ssColaShortfall * 100)
+                        : "",
                 CURRENCY.format(inp.annuity), inp.annuityStartYear,
                 CURRENCY.format(inp.manTradIRA) + " + " + CURRENCY.format(inp.manTrad401K), manRmdYear,
                 CURRENCY.format(inp.womanTradIRA) + " + " + CURRENCY.format(inp.womanTrad401K), womanRmdYear,
@@ -4674,7 +4802,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 inp.nomReturn * 100, inp.stdDev * 100, inp.inflation * 100, inp.inflationStdDev * 100,
                 res.actualPoS * 100, res.fanPathCount,
                 formatMoney(res.medianFinalBalance),
-                inp.horizon, inp.baseYear + inp.horizon);
+                inp.horizon, inp.baseYear + inp.horizon - 1);   // v6: last row, not one past it
     }
 
     // ========================================================================
@@ -5552,8 +5680,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
      */
     private double[] getReturnAndInflation(SimInputs inp, int simYear, SeededRng rng) {
         double[][] seq = HistoricalScenarios.getSequence(inp.scenarioIndex);
-        if (seq != null && simYear < seq.length) {
-            return new double[]{ seq[simYear][1], seq[simYear][2] };
+        int off = Math.max(0, inp.seqOffset);            // v6
+        if (seq != null && simYear >= off && (simYear - off) < seq.length) {
+            return new double[]{ seq[simYear - off][1], seq[simYear - off][2] };
         }
         double ret  = inp.nomReturn + inp.stdDev * rng.nextGaussian();
         double infl = Math.max(0, inp.inflation + inp.inflationStdDev * rng.nextGaussian());
@@ -6463,6 +6592,12 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         // healthcare and housing, and the experimental CPI-E has historically run
         // about 0.2 pp/yr higher. Only used when ssColaTracksInflation is true.
         double ssColaShortfall = 0.002;   // v6
+        // v6: shift the historical sequence N years into the projection. 0 = the
+        // crisis lands in year 1 (maximum runway, no banked surplus). A crisis a
+        // few years in is usually WORSE: the portfolio is partly drawn AND the
+        // go-go multiplier may still be running. Years before the offset use
+        // ordinary random draws.
+        int seqOffset = 0;   // v6
         double survivorSpendCut = 0.20;   // v6
         static final double SURVIVOR_MEDICAL_FACTOR = 0.5;   // v6, mechanical
         double goGoMultiplier; int goGoDuration;
