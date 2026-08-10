@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v6.java
-// Last modified: Sunday, August 09, 2026 at 06:39 PM MST (UTC-7)
+// Last modified: Sunday, August 09, 2026 at 08:33 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -162,6 +162,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
     private JSpinner spLivingExp, spMedical, spMedInflation;
     private JSpinner spBaseTax, spTaxInflation;
     private JSpinner spGoGo, spGoGoDuration;
+    private JSpinner spSlowGo, spSlowGoDuration;   // v6: slow-go tier
     private JSpinner spProPosUpperGuardrail, spProPosLowerGuardrail;
     // v3 tax engine: computed-tax toggle, Roth conversion controls
     private JCheckBox  chkComputedTax;      // true = TaxEngine, false = legacy flat escalator
@@ -794,6 +795,30 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 + "&nbsp;&nbsp;<b>1.5x&nbsp;(50% more)</b> -- Used for people expecting significant travel,<br>"
                 + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
                 + "bucket-list spending, or major lifestyle upgrades</html>");
+        spSlowGo = spinD(1.000, 1.0, 5.0, 0.005, "0.000#");
+        spSlowGo.setToolTipText("<html><b>Slow-go multiplier (v6)</b><br>"
+                + "The MIDDLE tier of the spending curve. Applies for its own number<br>"
+                + "of years immediately AFTER the go-go window ends, then spending<br>"
+                + "drops to 1.0 (no-go) for the remainder.<br><br>"
+                + "<b>Default 1.000 / 0 years = disabled</b>, which reproduces every<br>"
+                + "pre-v6 scenario exactly.<br><br>"
+                + "<b>Why you want this:</b> with only a go-go tier the curve is a cliff --<br>"
+                + "elevated spending, then an abrupt drop to flat. Meanwhile the<br>"
+                + "PoS re-solve keeps raising your sustainable withdrawal as the<br>"
+                + "horizon shortens, so late-life Actual wd climbs steeply while<br>"
+                + "Total spend stays flat. The difference piles up as unspent<br>"
+                + "Surplus -- which is legacy by accident, not by choice.<br>"
+                + "A slow-go tier of 1.05-1.15 converts that surplus into actual<br>"
+                + "living: travel in your seventies, home help, comfort.</html>");
+
+        spSlowGoDuration = spinI(0, 0, 30, 1, "#");
+        spSlowGoDuration.setToolTipText("<html><b>Slow-go years (v6)</b><br>"
+                + "How many years the slow-go multiplier runs, starting the year<br>"
+                + "AFTER the go-go window ends. 0 disables the tier.<br><br>"
+                + "Example: go-go 1.25 for 10 years then slow-go 1.10 for 10 years<br>"
+                + "gives elevated spending 2027-2036, moderately elevated<br>"
+                + "2037-2046, and baseline thereafter.</html>");
+
         spGoGoDuration = spinI(10,      0,    20,    1,     "#");
         spGoGoDuration.setToolTipText("<html><b>Go-go years duration</b><br>"
                 + "Number of years from withdrawal start that the go-go<br>"
@@ -806,11 +831,13 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 "Medical inflation (%/yr)",           spMedInflation,
                 "Go-go years multiplier",             spGoGo,
                 "Go-go years duration (from wd start)", spGoGoDuration,
+                "Slow-go multiplier (v6)",             spSlowGo,
+                "Slow-go years (after go-go)",         spSlowGoDuration,
         }));
         // v6: frame the multiplier as a spending-curve lever rather than a
         // travel line item -- the distinction drives how it should be set.
         JLabel lblGoGoNote = new JLabel(
-                "<html><i>Front-loads the spending curve -- higher early, tapering later.</i></html>");
+                "<html><i>Front-loads the spending curve: go-go, then slow-go, then no-go.<br>Leaving slow-go at 1.000/0 makes the drop a cliff.</i></html>");
         lblGoGoNote.setFont(new Font("SansSerif", Font.PLAIN, 11));
         lblGoGoNote.setForeground(new Color(110, 110, 110));
         lblGoGoNote.setAlignmentX(LEFT_ALIGNMENT);
@@ -1416,7 +1443,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 "User RMD", "Spouse RMD", "Combined RMD", "-> Roth/MM",  // 18 19 20 21
                 "Portfolio Chg",                                            // 22
                 "IRMAA", "Roth Conv", "Conv Tax",                          // 23 24 25 (v3)
-                "Trad Bal", "Roth Bal", "Money Mkt"                        // 26 27 28 (v6)
+                "Trad Bal", "Roth Bal", "Money Mkt",                       // 26 27 28 (v6)
+                "Spend mult"                                              // 29 (v6)
         };
         tblProModel = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -1424,7 +1452,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
 
         tblPro = new JTable(tblProModel) {
             @Override public String getToolTipText(MouseEvent e) {
-                int col = columnAtPoint(e.getPoint());
+                int col = convertColumnIndexToModel(columnAtPoint(e.getPoint()));
                 int row = rowAtPoint(e.getPoint());
                 if (row < 0 || lastResults == null) return null;
                 List<EnhRow> rows = lastResults.medianRows;
@@ -1459,6 +1487,39 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                                         + "remain relatively stable in real-dollar terms.<br><br>"
                                         + "This year's nominal value: %s</html>",
                                 CURRENCY.format((long)(er.annuity / d)));
+                    }
+                    case 5 -> {
+                        // v6: Wd % cell -- explain the colour AND show the actual
+                        // figures that tripped (or did not trip) the guardrail.
+                        double up  = (spProPosUpperGuardrail != null) ? dv(spProPosUpperGuardrail) : 20.0;
+                        double dn  = (spProPosLowerGuardrail != null) ? dv(spProPosLowerGuardrail) : 20.0;
+                        String verdict;
+                        if ("[^] above".equals(er.alert)) {
+                            verdict = "<font color='#155E2D'><b>GREEN -- rate is at or above the upper "
+                                    + "guardrail.</b></font><br>Capacity to spend more than plan.";
+                        } else if ("[v] below".equals(er.alert)) {
+                            verdict = "<font color='#A32D2D'><b>RED -- rate is at or below the lower "
+                                    + "guardrail.</b></font><br>Consider trimming discretionary spend.";
+                        } else {
+                            verdict = "<b>Inside the guardrails</b> -- no signal.";
+                        }
+                        return String.format(
+                                "<html><b>Wd %% -- effective withdrawal rate</b><br>"
+                                        + "= Actual wd / portfolio balance for this year.<br><br>"
+                                        + "<b>The numbers behind the colour</b> (go-go divided out of both,<br>"
+                                        + "so this compares underlying base draws):<br>"
+                                        + "&nbsp;&nbsp;Base rate this year:&nbsp;&nbsp;<b>%.3f%%</b><br>"
+                                        + "&nbsp;&nbsp;Base rate in year 1:&nbsp;&nbsp;<b>%.3f%%</b><br>"
+                                        + "&nbsp;&nbsp;Change vs year 1:&nbsp;&nbsp;&nbsp;&nbsp;<b>%+.1f%%</b><br>"
+                                        + "&nbsp;&nbsp;Your guardrails:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+%.0f%% / -%.0f%%<br><br>"
+                                        + "%s<br><br>"
+                                        + "<b>Read as context, not instruction.</b> The rate rises with age for<br>"
+                                        + "a structural reason -- a shorter remaining horizon supports a<br>"
+                                        + "higher safe rate -- so green appears from roughly year 6 onward in<br>"
+                                        + "almost any plan. Judge a year against that trend.<br><br>"
+                                        + "For decisions use the <b>re-run trigger balance</b> and the<br>"
+                                        + "<b>vs baseline</b> comparison under the headline figure.</html>",
+                                er.baseRate * 100, er.yr1Rate * 100, er.rateVsYr1 * 100, up, dn, verdict);
                     }
                     case 4 -> {
                         // Actual wd -- show the go-go breakdown if active
@@ -1715,15 +1776,29 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 80, 85, 90, 85,             // 18-21
                 90,                         // 22
                 80, 90, 90,                 // 23-25 (v3 IRMAA, Roth Conv, Conv Tax)
-                100, 100, 100                // 26-28 (v6 Trad Bal, Roth Bal, Money Mkt)
+                100, 100, 100,               // 26-28 (v6 Trad Bal, Roth Bal, Money Mkt)
+                85                           // 29 (v6 Spend mult)
         };
         for (int i = 0; i < cw.length && i < tblPro.getColumnCount(); i++)
             tblPro.getColumnModel().getColumn(i).setPreferredWidth(cw[i]);
 
+        // v6: hide the Rate drift column from the VIEW while leaving it in the
+        // MODEL. Model index 6 is unchanged, so every tooltip case, width entry
+        // and row-builder position keeps its number -- no renumbering, and the
+        // value stays available if it is ever wanted back. The signal it carried
+        // now lives as colour on the Wd % number instead.
+        try {
+            javax.swing.table.TableColumn driftCol =
+                    tblPro.getColumnModel().getColumn(6);
+            tblPro.getColumnModel().removeColumn(driftCol);
+        } catch (Exception ignore) { }
+
         // Header tooltips -- override getToolTipText directly for reliable per-column display
         JTableHeader hdr = new JTableHeader(tblPro.getColumnModel()) {
             @Override public String getToolTipText(MouseEvent e) {
-                int col = columnAtPoint(e.getPoint());
+                // v6: header lives on the VIEW; the tooltip switch is keyed on
+                // MODEL indices, and they differ now that a column is hidden.
+                int col = tblPro.convertColumnIndexToModel(columnAtPoint(e.getPoint()));
                 return switch (col) {
                     case 4  -> "<html><b>Actual wd -- spending withdrawal</b><br>"
                             + "= Pro PoS withdrawal x go-go multiplier (if applicable).<br>"
@@ -1789,6 +1864,19 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                             + "To decide whether to act, use the <b>re-run trigger balance</b> and the<br>"
                             + "<b>vs baseline</b> comparison shown under the headline figure instead.</html>";
                     case 5  -> "<html><b>Wd % -- effective withdrawal rate</b><br>"
+                            + "<b>Colour = guardrail signal (v6).</b> <font color='#155E2D'><b>Deep green</b></font>"
+                            + " means this year's base<br>"
+                            + "rate sits at least your upper guardrail ABOVE the year-1 rate --<br>"
+                            + "capacity to spend more. <font color='#A32D2D'><b>Red</b></font>"
+                            + " means it is that far BELOW --<br>"
+                            + "consider trimming. Plain means inside the guardrails.<br><br>"
+                            + "<b>Read it as context, not instruction.</b> The rate rises with age<br>"
+                            + "for a purely structural reason -- a shorter remaining horizon<br>"
+                            + "supports a higher safe rate -- so green appears from roughly<br>"
+                            + "year 6 onward in almost every plan. Judge a year against that<br>"
+                            + "trend, not against the colour alone.<br><br>"
+                            + "For actual decisions use the <b>re-run trigger balance</b> and the<br>"
+                            + "<b>vs baseline</b> comparison under the headline figure.<br><br>"
                             + "= Actual wd / portfolio balance.<br>"
                             + "Shows what percentage of the portfolio is being spent this year.<br>"
                             + "Hover individual cells for guardrail status.</html>";
@@ -1886,6 +1974,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         tblPro.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
             private final Color GOGO_BG    = new Color(232, 248, 240);
             private final Color GOGO_WD_BG = new Color(180, 230, 205);
+            // v6: slow-go tier -- deliberately paler than go-go so the three
+            // phases read as high / medium / none at a glance.
+            private final Color SLOWGO_BG    = new Color(243, 250, 246);
+            private final Color SLOWGO_WD_BG = new Color(214, 240, 226);
             private final Color AMBER_BG   = new Color(255, 220, 100);
             private final Color AMBER_FG   = new Color(130, 80, 0);
             private final Color ORANGE_BG  = new Color(255, 200, 120);
@@ -1894,17 +1986,35 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             @Override public Component getTableCellRendererComponent(
                     JTable t, Object v, boolean sel, boolean foc, int row, int col) {
                 Component c = super.getTableCellRendererComponent(t, v, sel, foc, row, col);
+                // v6 FIX: 'col' arrives as a VIEW index, but every test below is
+                // written against MODEL indices. Once the Rate drift column was
+                // hidden the two diverged by one for every column past it, which
+                // silently shifted all colouring -- Portfolio Chg and Surplus/gap
+                // stopped going red and the RMD highlighting moved one column right.
+                col = t.convertColumnIndexToModel(col);
                 if (!sel && lastResults != null && row < lastResults.medianRows.size()) {
                     EnhRow er = lastResults.medianRows.get(row);
-                    boolean goGo = er.goGoActive;
-                    c.setBackground(goGo ? GOGO_BG : (row % 2 == 0 ? Color.WHITE : new Color(248, 248, 245)));
+                    boolean goGo   = er.goGoActive;
+                    boolean slowGo = er.slowGoActive;
+                    c.setBackground(goGo ? GOGO_BG
+                            : slowGo ? SLOWGO_BG
+                            : (row % 2 == 0 ? Color.WHITE : new Color(248, 248, 245)));
                     c.setForeground(Color.BLACK);
                     String s = v == null ? "" : v.toString();
 
                     if ((col == 3 || col == 4) && goGo) {
                         c.setBackground(GOGO_WD_BG); c.setForeground(new Color(0, 90, 50));
+                    } else if ((col == 3 || col == 4) && slowGo) {
+                        c.setBackground(SLOWGO_WD_BG); c.setForeground(new Color(0, 80, 60));
+                    } else if (col == 5) {
+                        // v6: the guardrail signal now lives as COLOUR on the Wd %
+                        // number itself, instead of a separate always-on column.
+                        // Deep green = rate well above yr1 (capacity to spend more);
+                        // red = well below (consider trimming).
+                        if ("[^] above".equals(er.alert)) c.setForeground(new Color(21, 94, 45));
+                        else if ("[v] below".equals(er.alert)) c.setForeground(new Color(163, 45, 45));
                     } else if (col == COL_ALERT) {
-                        if ("[^] above".equals(er.alert)) c.setForeground(new Color(59, 109, 17));
+                        if ("[^] above".equals(er.alert)) c.setForeground(new Color(21, 94, 45));
                         else if ("[v] below".equals(er.alert)) c.setForeground(new Color(163, 45, 45));
                     } else if (col == COL_CMB_RMD || col == COL_ROTH_MM) {
                         if (er.rmdOverage > 0) { c.setBackground(ORANGE_BG); c.setForeground(ORANGE_FG); }
@@ -2199,6 +2309,16 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 + "Rev. Proc. 2025-32), applied once each spouse reaches age 65 ($3,300 combined once both "
                 + "are 65+). Supersedes the 2025 figure of $1,600.</li>"
                 + "</ul>"
+                + "<p><b>DELIBERATELY NOT modeled &mdash; LONG-TERM CARE:</b> A two- to three-year "
+                + "long-term-care event commonly runs $300,000&ndash;$500,000 and is typically the largest "
+                + "single financial risk in a retirement plan &mdash; larger than any sequence risk in the "
+                + "Stress Test tab. <b>Nothing in this tool provides for it.</b> The Medical input covers "
+                + "routine premiums and out-of-pocket costs only.</p>"
+                + "<p>Two ways to bring it into the model yourself: carry an <b>LTC insurance policy and "
+                + "include the premium inside Living expenses</b>, or add a <b>self-insurance amount to the "
+                + "Medical figure</b> and let it inflate at your medical rate. Either choice makes the cost "
+                + "visible in every projection. Ignoring it does not make it go away &mdash; it just moves "
+                + "the risk off the screen.</p>"
                 + "<p><b>DELIBERATELY NOT modeled &mdash; OBBBA 'senior bonus' deduction (a decision):</b> The One "
                 + "Big Beautiful Bill Act (2025) added a temporary senior bonus deduction of up to $6,000 per "
                 + "person age 65+, available for tax years <b>2025&ndash;2028 only</b>, with an MFJ phase-out "
@@ -2676,7 +2796,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         };
         tblStress = new JTable(tblStressModel) {
             @Override public String getToolTipText(java.awt.event.MouseEvent e) {
-                int col = columnAtPoint(e.getPoint());
+                int col = convertColumnIndexToModel(columnAtPoint(e.getPoint()));
                 switch (col) {
                     case 0: return "<html>The historical crisis the guardrail plan was run through.<br>"
                             + "After the sequence ends, remaining years use your random distribution.</html>";
@@ -3102,6 +3222,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
 
             // Spending
             int goGoRem = Math.max(0, goGoDur - Math.max(0, y - startY));
+            // v6 NOTE: the SS Optimizer scorer intentionally uses go-go ONLY. Its
+            // objective is guaranteed income across the go-go window; folding in
+            // slow-go would silently change what the Go-Go Guar column means.
             double goGoMult = (goGoRem > 0) ? goGo : 1.0;
             double spendLiving = draw ? living * inflAcc * goGoMult : 0;
             double spendMed    = draw ? med * Math.pow(1 + medI, y) : 0;
@@ -3498,6 +3621,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 chkSSColaTracksInfl != null && chkSSColaTracksInfl.isSelected()));
         props.setProperty("ss.colaShortfall",      String.valueOf(dv(spColaShortfall)));
         props.setProperty("stress.seqOffset",      String.valueOf(iv(spSeqOffset)));
+        props.setProperty("spending.slowGo",       String.valueOf(dv(spSlowGo)));
+        props.setProperty("spending.slowGoDuration", String.valueOf(iv(spSlowGoDuration)));
         // v6: annual baseline (only written when one has been captured)
         props.setProperty("base.set",        String.valueOf(baselineSet));
         props.setProperty("base.actualWd",   String.valueOf(baselineActualWd));
@@ -3647,6 +3772,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             setSpinnerD(spColaShortfall, props, "ss.colaShortfall", warnings);
         if (props.getProperty("stress.seqOffset") != null)
             setSpinnerI(spSeqOffset, props, "stress.seqOffset", warnings);
+        if (props.getProperty("spending.slowGo") != null)
+            setSpinnerD(spSlowGo, props, "spending.slowGo", warnings);
+        if (props.getProperty("spending.slowGoDuration") != null)
+            setSpinnerI(spSlowGoDuration, props, "spending.slowGoDuration", warnings);
         // v6: annual baseline
         try {
             baselineSet      = Boolean.parseBoolean(props.getProperty("base.set", "false"));
@@ -4031,6 +4160,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 ? dv(spColaShortfall) / 100.0 : 0.002;   // v6
         i.seqOffset = (spSeqOffset != null) ? iv(spSeqOffset) : 0;   // v6
         i.goGoMultiplier     = dv(spGoGo);
+        i.slowGoMultiplier   = (spSlowGo != null) ? dv(spSlowGo) : 1.0;         // v6
+        i.slowGoDuration     = (spSlowGoDuration != null) ? iv(spSlowGoDuration) : 0;  // v6
         i.goGoDuration       = iv(spGoGoDuration);
         i.proPosUpperGuardrail = dv(spProPosUpperGuardrail) / 100.0;
         i.proPosLowerGuardrail = dv(spProPosLowerGuardrail) / 100.0;
@@ -4131,7 +4262,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                             inp, p * 1000L + y * 37 + seed,
                             Math.max(20, solvePaths / 8), Math.min(binIters, 10), goGoRem);
                 }
-                double mult   = (goGoRem > 0) ? inp.goGoMultiplier : 1.0;
+                double mult   = spendMultFor(inp, y, startY);   // v6
                 int wdActual  = drawing ? (int)(wd * mult) : 0;
                 res.fanWithdrawals[p][y] = wdActual;
 
@@ -4303,7 +4434,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             double womanRmd = calcRmd(medTrad * ws, womanAge);
             double combRmd  = manRmd + womanRmd;
 
-            double goGoMult  = (goGoRem > 0) ? inp.goGoMultiplier : 1.0;
+            double goGoMult  = spendMultFor(inp, y, startY);   // v6
             double startPror = (drawing && calYear == inp.withdrawStartYear)
                     ? (13.0 - inp.withdrawStartMonth) / 12.0 : 1.0;
             int wdActual   = drawing ? (int)(wd * goGoMult * startPror) : 0;
@@ -4477,11 +4608,13 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             // and is immune to horizon shrinkage. Go-go years are normalized out by
             // dividing each side by its own go-go multiplier so the rate reflects
             // the underlying base draw, not the temporary go-go uplift.
+            double rowBaseRate = 0, rowYr1Rate = 0, rowRateVsYr1 = 0;   // v6
             if (drawing && medBal > 0 && inp.portfolio > 0 && goGoMult > 0) {
                 double curRate = (wdActual / goGoMult) / (double) medBal;   // base-draw rate now
                 double yr1Rate = yr1Wd / (double) inp.portfolio;            // base-draw rate at start
                 if (yr1Rate > 0) {
                     double vsYr1 = (curRate - yr1Rate) / yr1Rate;
+                    rowBaseRate = curRate; rowYr1Rate = yr1Rate; rowRateVsYr1 = vsYr1;  // v6
                     if      (vsYr1 >= inp.proPosUpperGuardrail)  alert = "[^] above";
                     else if (vsYr1 <= -inp.proPosLowerGuardrail) alert = "[v] below";
                 }
@@ -4510,6 +4643,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             row.conversion    = convThisYear;
             row.convTax       = convTaxThisYear;
             row.convNetToRoth = convNetToRoth;
+            row.baseRate      = rowBaseRate;     // v6
+            row.yr1Rate       = rowYr1Rate;      // v6
+            row.rateVsYr1     = rowRateVsYr1;    // v6
             row.tradBal       = (int) medTrad;    // v6
             row.rothBal       = (int) medRoth;    // v6
             row.mmBal         = (int) medMM;      // v6
@@ -4528,6 +4664,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             row.inflFactor    = inflFactor;
             row.drawing       = drawing;
             row.goGoActive    = goGoRem > 0;
+            // v6: slow-go is "elevated but not go-go" -- multiplier above 1.0
+            // while the go-go window has already closed.
+            row.slowGoActive  = (goGoRem <= 0) && (goGoMult > 1.0005);
             row.goGoMult      = goGoMult;
             row.alert         = alert;
             row.balDelta      = nextMedBal - medBal;
@@ -4710,6 +4849,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                     r.tradBal > 0 ? CURRENCY.format((long)(r.tradBal / d)) : "--",          // 26 Trad Bal (v6)
                     r.rothBal > 0 ? CURRENCY.format((long)(r.rothBal / d)) : "--",          // 27 Roth Bal (v6)
                     r.mmBal > 0 ? CURRENCY.format((long)(r.mmBal / d)) : "--",              // 28 Money Mkt (v6)
+                    String.format("%.3fx", r.goGoMult),                                     // 29 Spend mult (v6)
             });
         }
 
@@ -4912,6 +5052,19 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         if (calYear == inp.annuityStartYear)
             return inp.annuity * (13.0 - inp.annuityStartMonth) / 12.0;
         return inp.annuity;
+    }
+
+    // v6: spending multiplier for a given simulation year. Phase 1 = go-go,
+    // phase 2 = slow-go (immediately after), phase 3 = no-go at 1.0. Centralised
+    // so the display, the fan paths and the PoS SOLVER cannot drift apart --
+    // if the solver missed slow-go it would report a spending level as safe
+    // that had never been tested.
+    static double spendMultFor(SimInputs inp, int simYear, int startY) {
+        int y = simYear - startY;
+        if (y < 0) return 1.0;
+        if (y < inp.goGoDuration) return inp.goGoMultiplier;
+        if (y < inp.goGoDuration + inp.slowGoDuration) return inp.slowGoMultiplier;
+        return 1.0;
     }
 
     // ===================== v6: death-event helpers ==========================
@@ -5228,7 +5381,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
 
         tblGk = new JTable(tblGkModel) {
             @Override public String getToolTipText(MouseEvent e) {
-                int col = columnAtPoint(e.getPoint());
+                int col = convertColumnIndexToModel(columnAtPoint(e.getPoint()));
                 int row = rowAtPoint(e.getPoint());
                 if (row < 0 || lastResults == null || lastResults.gkResults == null) return null;
                 List<GkRow> rows = lastResults.gkResults.rows;
@@ -5386,7 +5539,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         JTableHeader gkHeader = tblGk.getTableHeader();
         gkHeader.addMouseMotionListener(new MouseMotionAdapter() {
             @Override public void mouseMoved(MouseEvent e) {
-                int col = gkHeader.columnAtPoint(e.getPoint());
+                int col = tblGk.convertColumnIndexToModel(gkHeader.columnAtPoint(e.getPoint()));
                 switch (col) {
                     case 3 -> gkHeader.setToolTipText(
                             "<html><b>GK withdrawal</b><br>"
@@ -6601,6 +6754,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         double survivorSpendCut = 0.20;   // v6
         static final double SURVIVOR_MEDICAL_FACTOR = 0.5;   // v6, mechanical
         double goGoMultiplier; int goGoDuration;
+        // v6: slow-go tier. Runs immediately AFTER the go-go window for its
+        // own duration, then no-go (1.0) for the rest. Defaults 1.0 / 0 leave
+        // every pre-existing scenario numerically identical.
+        double slowGoMultiplier = 1.0; int slowGoDuration = 0;
         double proPosUpperGuardrail, proPosLowerGuardrail;   // Pro PoS advisory alerts only
         double gkUpperGuardrail, gkLowerGuardrail;           // Guyton-Klinger active adjustments
         double gkPreRate;
@@ -6617,6 +6774,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         // v3 tax engine detail
         int  irmaa, conversion, magi, taxableSS, ordinaryTax, fedTax, stateTax;
         int  convTax, convNetToRoth;   // v3: conversion tax + net landing in Roth
+        // v6: the actual figures behind the Wd % guardrail colour, so the cell
+        // tooltip can show WHY a row is green or red rather than just that it is.
+        double baseRate, yr1Rate, rateVsYr1;
         int  tradBal, rothBal;         // v6: median Traditional / Roth bucket balances
         int  mmBal;                    // v6: median Money Market (taxable) bucket
         boolean survivorYear;          // v6: true once the death event has fired
@@ -6625,6 +6785,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         int  convCeiling;
         double inflFactor;
         boolean drawing, goGoActive;
+        boolean slowGoActive;   // v6: middle spending tier, after go-go
         double goGoMult;
         String alert;
         int  balDelta, investmentGrowth;
