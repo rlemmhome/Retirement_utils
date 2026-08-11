@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v6.java
-// Last modified: Monday, August 10, 2026 at 09:13 PM MST (UTC-7)
+// Last modified: Tuesday, August 11, 2026 at 03:53 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -1612,11 +1612,23 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                         // v6: three phases now, not two. Naming the wrong tier --
                         // or claiming a 1.0 multiplier during slow-go -- made the
                         // tooltip contradict the Actual wd figure beside it.
+                        // v6: when a bridge exists the multiplier alone does NOT
+                        // reconcile to Actual wd -- the bridge is added after it.
+                        // Show the intermediate base draw so the arithmetic ties.
+                        String bridgeLines = "";
+                        if (er.ssBridge > 0) {
+                            long base = Math.round((er.withdrawal / d) * er.goGoMult);
+                            bridgeLines = "&nbsp;&nbsp;= base draw:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+                                    + CURRENCY.format(base) + "<br>"
+                                    + "&nbsp;&nbsp;+ SS bridge:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+                                    + CURRENCY.format((long)(er.ssBridge / d)) + "<br>";
+                        }
                         if (er.goGoActive) {
                             return String.format(
                                     "<html><b>Actual wd -- GO-GO years active</b><br>"
                                             + "&nbsp;&nbsp;Pro PoS withdrawal: %s<br>"
                                             + "&nbsp;&nbsp;x go-go multiplier:&nbsp;&nbsp;%.3f<br>"
+                                            + bridgeLines
                                             + "&nbsp;&nbsp;= Actual wd:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br><br>"
                                             + "The first tier of the spending curve -- elevated for<br>"
                                             + "your active early-retirement travel years.<br>"
@@ -1627,6 +1639,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                                     "<html><b>Actual wd -- SLOW-GO years active</b><br>"
                                             + "&nbsp;&nbsp;Pro PoS withdrawal: %s<br>"
                                             + "&nbsp;&nbsp;x slow-go multiplier: %.3f<br>"
+                                            + bridgeLines
                                             + "&nbsp;&nbsp;= Actual wd:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br><br>"
                                             + "The MIDDLE tier of the spending curve. Go-go ended<br>"
                                             + "after %d year(s); this tier runs %d year(s) before<br>"
@@ -1640,7 +1653,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                             return String.format(
                                     "<html><b>Actual wd -- NO-GO years</b><br>"
                                             + "Both elevated tiers have ended -- multiplier = 1.000.<br>"
-                                            + "Actual wd = Pro PoS withdrawal (%s).<br><br>"
+                                            + (er.ssBridge > 0
+                                            ? "Pro PoS withdrawal (%s) + SS bridge "
+                                            + CURRENCY.format((long)(er.ssBridge / d)) + ".<br><br>"
+                                            : "Actual wd = Pro PoS withdrawal (%s).<br><br>")
                                             + "Go-go ran %d year(s), slow-go %d year(s).</html>",
                                     posWdStr, lastResults.inp.goGoDuration,
                                     lastResults.inp.slowGoDuration);
@@ -1910,7 +1926,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                             + "year -- go-go, slow-go, or 1.000 in the no-go years.<br>"
                             + "Hover any cell to see which tier applies and the arithmetic.<br>"
                             + "This is the amount spent and deducted from the portfolio each year.<br>"
-                            + "During go-go years: Actual wd = Pro PoS wd x go-go multiplier.<br>"
+                            + "Actual wd = Pro PoS wd x the spending multiplier for that year,<br>"
+                            + "PLUS any SS bridge draw (see the SS bridge column). The bridge<br>"
+                            + "is added AFTER the multiplier, so in bridge years Actual wd is<br>"
+                            + "more than multiplier x Pro PoS wd.<br>"
                             + "After go-go years: Actual wd = Pro PoS wd (multiplier = 1.0).<br>"
                             + "RMD overage above this goes to Roth/MM, not spent.</html>";
                     case 3  -> "<html><b>Pro PoS withdrawal -- max sustainable portfolio draw</b><br>"
@@ -2061,6 +2080,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                             + "It is the benefit the later claimant WOULD have received had<br>"
                             + "they claimed on the earlier date, grossed up to cover the extra<br>"
                             + "tax an IRA withdrawal carries versus Social Security.<br><br>"
+                            + "<b>Partial years are prorated by month.</b> If the later claim<br>"
+                            + "starts mid-year, that year bridges only the months before it --<br>"
+                            + "so the first and last bridge years are often smaller than the<br>"
+                            + "full years between them. That is correct, not a rounding error.<br><br>"
                             + "It is already INCLUDED in Actual wd -- this column just shows<br>"
                             + "how much of that draw is bridge. Because spending is held<br>"
                             + "constant, the cost of delaying appears as a lower portfolio<br>"
@@ -5226,6 +5249,12 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         int refY  = manDelays ? inp.womanSSStartYear  : inp.manSSStartYear;
         int refM  = manDelays ? inp.womanSSStartMonth : inp.manSSStartMonth;
         int ownY  = manDelays ? inp.manSSStartYear    : inp.womanSSStartYear;
+        int ownM  = manDelays ? inp.manSSStartMonth   : inp.womanSSStartMonth;
+        // v6: the gap is measured in MONTHS. Working in whole calendar years
+        // missed every partial year -- an eight-month same-year delay produced no
+        // bridge at all, and the final year of a longer delay was left bare.
+        int gapStartMo = refY * 12 + refM;      // inclusive
+        int gapEndMo   = ownY * 12 + ownM;      // exclusive: own benefit starts here
 
         // Counterfactual annual benefit had the delayer claimed at the reference.
         double cfMonthly = manDelays
@@ -5238,7 +5267,11 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
 
         for (int y = 0; y < inp.horizon; y++) {
             int calYear = inp.baseYear + y;
-            if (calYear < refY || calYear >= ownY) continue;   // outside the gap
+            // Months of THIS calendar year that fall inside the gap, 0-12.
+            int yrStartMo = calYear * 12 + 1, yrEndMo = calYear * 12 + 13;
+            int covered = Math.min(yrEndMo, gapEndMo) - Math.max(yrStartMo, gapStartMo);
+            if (covered <= 0) continue;                       // outside the gap
+            double yearFrac = Math.min(12, covered) / 12.0;   // 1.0 for a full year
 
             double inflFactor = Math.pow(1 + inp.inflation, y);
             TaxEngine.FilingStatus fs = filingFor(inp, calYear);
@@ -5246,7 +5279,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             // The benefit being replaced: COLA-grown from the reference year, and
             // subject to the same haircut the real benefit would have taken.
             double grown = cfAnnual * Math.pow(1 + inp.ssCola, Math.max(0, calYear - refY))
-                    * ssHaircutFactor(inp, calYear);
+                    * ssHaircutFactor(inp, calYear)
+                    * yearFrac;   // v6: prorate partial first/last years
 
             // Tax the forgone SS would have carried, stacked on the OTHER
             // spouse's benefit, versus tax on an equal IRA distribution.
@@ -5276,6 +5310,12 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
     // fan conversion helpers, the display loop, the GK loop and the survivor
     // floor -- rather than being bolted on in six places.
     static double ssHaircutFactor(SimInputs inp, int calYear) {
+        // v6: the start year must be 0 (never) or a real calendar year. A small
+        // number like "6" is a typo caught mid-entry, and taken literally EVERY
+        // projected year is >= 6, which silently haircut the whole projection --
+        // a wrong answer that looks entirely plausible. Fail toward "never" so a
+        // typo yields the unmodified plan rather than a quietly damaged one.
+        if (inp.ssHaircutStartYear > 0 && inp.ssHaircutStartYear <= 2000) return 1.0;
         if (inp.ssHaircutStartYear <= 0 || inp.ssHaircutPct <= 0) return 1.0;
         return (calYear >= inp.ssHaircutStartYear)
                 ? Math.max(0.0, 1.0 - inp.ssHaircutPct) : 1.0;
