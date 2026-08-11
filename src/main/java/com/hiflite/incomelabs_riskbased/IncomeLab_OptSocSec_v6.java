@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v6.java
-// Last modified: Monday, August 10, 2026 at 10:56 AM MST (UTC-7)
+// Last modified: Monday, August 10, 2026 at 09:13 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -187,6 +187,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
     private JCheckBox  chkSSColaTracksInfl;  // v6: SS rides simulated inflation
     private JSpinner   spColaShortfall;      // v6: annual COLA haircut
     private JSpinner   spSeqOffset;          // v6: shift the sequence N years in
+    private JSpinner   spSSHaircutPct;       // v6: scheduled benefit cut %
+    private JSpinner   spSSHaircutYear;      // v6: year the cut begins
+    private JCheckBox  chkBridgeSS;          // v6: bridge a delayed benefit from the portfolio
     private JComboBox<String> cmbOptSort;    // v6: what the SS Optimizer ranks by
     private JLabel     lblOptObjective;      // v6: banner naming the active objective
     private JLabel     lblColaWarn;          // v6: guard note on historical sequences
@@ -675,6 +678,51 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 + "FRA = 67 for those born 1960 or later.</html>");
         spWomanSSStartYear = spinI(2027,  2020, 2040, 1, "#");
         spWomanSSStartMonth= spinI(12,    1,    12,   1, "#");
+        chkBridgeSS = new JCheckBox("Bridge delayed SS from portfolio");
+        chkBridgeSS.setSelected(false);
+        chkBridgeSS.setToolTipText("<html><b>Bridge delayed SS from portfolio (v6)</b><br>"
+                + "When one of you claims later than the other, withdraw EXTRA from<br>"
+                + "the portfolio to replace the benefit not yet being received.<br><br>"
+                + "<b>Why:</b> without it, delaying shows up as reduced spending, which<br>"
+                + "conflates two separate decisions -- when to claim, and how much to<br>"
+                + "live on. With it, spending is held constant and the entire cost of<br>"
+                + "delaying appears as a lower portfolio balance, which is the one<br>"
+                + "number worth comparing across claiming scenarios.<br><br>"
+                + "<b>Reference date</b> = the EARLIER of the two claim dates. The later<br>"
+                + "claimant is bridged at the benefit they WOULD have received<br>"
+                + "claiming then -- the smaller early amount, not their delayed one.<br><br>"
+                + "<b>Grossed up for tax.</b> Social Security is at most 85%% taxable; a<br>"
+                + "Traditional withdrawal is 100%% ordinary income. The bridge covers<br>"
+                + "its own extra tax so Surplus/gap lands where the no-delay run puts<br>"
+                + "it, and that extra tax becomes additional portfolio drawdown --<br>"
+                + "a real cost of delaying, not a rounding artifact.<br><br>"
+                + "The draw is applied in the PoS solver too, so the probability of<br>"
+                + "success reflects it. Off = no bridge, spending simply falls.</html>");
+
+        spSSHaircutPct = spinD(0.0, 0.0, 50.0, 1.0, "0.0#");
+        spSSHaircutPct.setToolTipText("<html><b>SS benefit haircut %% (v6) -- a STRESS input</b><br>"
+                + "Applies an across-the-board reduction to BOTH benefits from the<br>"
+                + "start year onward. <b>0 = disabled</b> (default), which reproduces<br>"
+                + "every earlier scenario exactly.<br><br>"
+                + "<b>Why it exists:</b> under CURRENT LAW, when the OASI trust fund<br>"
+                + "depletes, benefits are automatically reduced to what incoming<br>"
+                + "payroll tax can cover -- no legislation required. CBO's 2026<br>"
+                + "projection puts depletion at <b>2032</b>, with payroll tax covering<br>"
+                + "about 72%% of scheduled benefits -- roughly a <b>28%% cut</b>.<br><br>"
+                + "<b>This is not a forecast.</b> Congress has never allowed a scheduled<br>"
+                + "cut to take effect, and any fix would likely protect people already<br>"
+                + "claiming. Use it to see how much of your plan leans on Social<br>"
+                + "Security, not to predict policy.<br><br>"
+                + "It bites hardest on a DELAYED claiming strategy, because more of<br>"
+                + "your income is Social Security.</html>");
+
+        spSSHaircutYear = spinI(0, 0, 2100, 1, "0");
+        spSSHaircutYear.setToolTipText("<html><b>Haircut start year (v6)</b><br>"
+                + "First calendar year the reduction applies. <b>0 = never</b> (default).<br>"
+                + "Set 2032 to model the CBO-projected depletion date.<br><br>"
+                + "The cut is permanent from that year on -- it does not taper or<br>"
+                + "recover, which is what current law actually specifies.</html>");
+
         spSSCola           = spinD(2.4,   0.0,  5.0,  0.1, "0.0#");
         lblSSBenefitNote   = new JLabel(" ");
         lblSSBenefitNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
@@ -694,6 +742,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 "Spouse SS start year",             spWomanSSStartYear,
                 "Spouse SS start month",            spWomanSSStartMonth,
                 "SS COLA (%/yr)",                  spSSCola,
+                "Bridge delayed SS (v6)",          chkBridgeSS,
+                "SS haircut % (v6, stress)",       spSSHaircutPct,
+                "Haircut start year (0=never)",    spSSHaircutYear,
                 null,                              lblSSBenefitNote,
         }));
         inner.add(Box.createVerticalStrut(4));
@@ -1476,7 +1527,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 "Portfolio Chg",                                            // 22
                 "IRMAA", "Roth Conv", "Conv Tax",                          // 23 24 25 (v3)
                 "Trad Bal", "Roth Bal", "Money Mkt",                       // 26 27 28 (v6)
-                "Spend mult"                                              // 29 (v6)
+                "Spend mult", "SS bridge"                                 // 29 30 (v6)
         };
         tblProModel = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -1558,19 +1609,41 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                         double d = showRealDollars ? er.inflFactor : 1.0;
                         String wdStr     = CURRENCY.format((long)(er.wdActual  / d));
                         String posWdStr  = CURRENCY.format((long)(er.withdrawal / d));
+                        // v6: three phases now, not two. Naming the wrong tier --
+                        // or claiming a 1.0 multiplier during slow-go -- made the
+                        // tooltip contradict the Actual wd figure beside it.
                         if (er.goGoActive) {
                             return String.format(
-                                    "<html><b>Actual wd -- go-go years active</b><br>"
+                                    "<html><b>Actual wd -- GO-GO years active</b><br>"
                                             + "&nbsp;&nbsp;Pro PoS withdrawal: %s<br>"
                                             + "&nbsp;&nbsp;x go-go multiplier:&nbsp;&nbsp;%.3f<br>"
                                             + "&nbsp;&nbsp;= Actual wd:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br><br>"
-                                            + "Go-go multiplier increases spending during your<br>"
-                                            + "active early-retirement travel years.</html>",
-                                    posWdStr, er.goGoMult, wdStr);
+                                            + "The first tier of the spending curve -- elevated for<br>"
+                                            + "your active early-retirement travel years.<br>"
+                                            + "Slow-go follows for %d year(s), then no-go at 1.000.</html>",
+                                    posWdStr, er.goGoMult, wdStr, lastResults.inp.slowGoDuration);
+                        } else if (er.slowGoActive) {
+                            return String.format(
+                                    "<html><b>Actual wd -- SLOW-GO years active</b><br>"
+                                            + "&nbsp;&nbsp;Pro PoS withdrawal: %s<br>"
+                                            + "&nbsp;&nbsp;x slow-go multiplier: %.3f<br>"
+                                            + "&nbsp;&nbsp;= Actual wd:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%s<br><br>"
+                                            + "The MIDDLE tier of the spending curve. Go-go ended<br>"
+                                            + "after %d year(s); this tier runs %d year(s) before<br>"
+                                            + "spending drops to no-go at 1.000.<br><br>"
+                                            + "This is the tier that converts late-life unspent<br>"
+                                            + "Surplus into actual living rather than letting it<br>"
+                                            + "accumulate unspent.</html>",
+                                    posWdStr, er.goGoMult, wdStr,
+                                    lastResults.inp.goGoDuration, lastResults.inp.slowGoDuration);
                         } else {
-                            return "<html><b>Actual wd</b><br>"
-                                    + "Go-go years have ended -- multiplier = 1.0.<br>"
-                                    + "Actual wd = Pro PoS withdrawal.</html>";
+                            return String.format(
+                                    "<html><b>Actual wd -- NO-GO years</b><br>"
+                                            + "Both elevated tiers have ended -- multiplier = 1.000.<br>"
+                                            + "Actual wd = Pro PoS withdrawal (%s).<br><br>"
+                                            + "Go-go ran %d year(s), slow-go %d year(s).</html>",
+                                    posWdStr, lastResults.inp.goGoDuration,
+                                    lastResults.inp.slowGoDuration);
                         }
                     }
                     case 17 -> {
@@ -1809,7 +1882,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 90,                         // 22
                 80, 90, 90,                 // 23-25 (v3 IRMAA, Roth Conv, Conv Tax)
                 100, 100, 100,               // 26-28 (v6 Trad Bal, Roth Bal, Money Mkt)
-                85                           // 29 (v6 Spend mult)
+                85, 95                       // 29 30 (v6 Spend mult, SS bridge)
         };
         for (int i = 0; i < cw.length && i < tblPro.getColumnCount(); i++)
             tblPro.getColumnModel().getColumn(i).setPreferredWidth(cw[i]);
@@ -1833,7 +1906,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 int col = tblPro.convertColumnIndexToModel(columnAtPoint(e.getPoint()));
                 return switch (col) {
                     case 4  -> "<html><b>Actual wd -- spending withdrawal</b><br>"
-                            + "= Pro PoS withdrawal x go-go multiplier (if applicable).<br>"
+                            + "= Pro PoS withdrawal x the spending multiplier for that<br>"
+                            + "year -- go-go, slow-go, or 1.000 in the no-go years.<br>"
+                            + "Hover any cell to see which tier applies and the arithmetic.<br>"
                             + "This is the amount spent and deducted from the portfolio each year.<br>"
                             + "During go-go years: Actual wd = Pro PoS wd x go-go multiplier.<br>"
                             + "After go-go years: Actual wd = Pro PoS wd (multiplier = 1.0).<br>"
@@ -1980,6 +2055,28 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                             + "conversions, so it falls over time -- which is what makes future<br>"
                             + "RMDs and the widow-year tax shrink as conversions accumulate.<br>"
                             + "Drives the RMD columns via the User/Spouse Traditional share.</html>";
+                    case 30 -> "<html><b>SS bridge (v6) -- extra draw replacing a delayed benefit</b><br>"
+                            + "Shown only when <i>Bridge delayed SS from portfolio</i> is on and<br>"
+                            + "one of you claims later than the other.<br><br>"
+                            + "It is the benefit the later claimant WOULD have received had<br>"
+                            + "they claimed on the earlier date, grossed up to cover the extra<br>"
+                            + "tax an IRA withdrawal carries versus Social Security.<br><br>"
+                            + "It is already INCLUDED in Actual wd -- this column just shows<br>"
+                            + "how much of that draw is bridge. Because spending is held<br>"
+                            + "constant, the cost of delaying appears as a lower portfolio<br>"
+                            + "balance rather than as a squeezed Surplus/gap.<br><br>"
+                            + "The draw is applied in the PoS solver as well, so probability<br>"
+                            + "of success reflects the true cost.</html>";
+                    case 29 -> "<html><b>Spend mult (v6) -- which spending tier this year is in</b><br>"
+                            + "The multiplier applied to the base withdrawal:<br>"
+                            + "&nbsp;&nbsp;<b>go-go</b> -- first tier, elevated for active travel years<br>"
+                            + "&nbsp;&nbsp;<b>slow-go</b> -- middle tier, moderately elevated<br>"
+                            + "&nbsp;&nbsp;<b>1.000</b> -- no-go, base spending<br><br>"
+                            + "Row shading matches: strong green for go-go, pale green for<br>"
+                            + "slow-go, plain for no-go.<br><br>"
+                            + "This is applied inside the PoS solver as well as the display,<br>"
+                            + "so the probability of success reflects the elevated spending --<br>"
+                            + "it is not a cosmetic uplift.</html>";
                     case 28 -> "<html><b>Money Mkt (v6) -- taxable / money market bucket</b><br>"
                             + "Non-qualified savings: whatever the starting portfolio exceeds<br>"
                             + "the Traditional + Roth accounts, PLUS any <b>RMD overage</b> --<br>"
@@ -3609,6 +3706,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         props.setProperty("man.pia",                String.valueOf(iv(spManPIA)));
         props.setProperty("woman.pia",              String.valueOf(iv(spWomanPIA)));
         props.setProperty("ss.cola",                String.valueOf(dv(spSSCola)));
+        props.setProperty("ss.bridgeDelayed",       String.valueOf(
+                chkBridgeSS != null && chkBridgeSS.isSelected()));
+        props.setProperty("ss.haircutPct",          String.valueOf(dv(spSSHaircutPct)));
+        props.setProperty("ss.haircutStartYear",    String.valueOf(iv(spSSHaircutYear)));
         props.setProperty("man.ssStartYear",        String.valueOf(iv(spManSSStartYear)));
         props.setProperty("man.ssStartMonth",       String.valueOf(iv(spManSSStartMonth)));
         props.setProperty("woman.ssStartYear",      String.valueOf(iv(spWomanSSStartYear)));
@@ -3725,6 +3826,13 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         setSpinnerI(spManPIA,             props, "man.pia",                warnings);
         setSpinnerI(spWomanPIA,           props, "woman.pia",              warnings);
         setSpinnerD(spSSCola,             props, "ss.cola",                warnings);
+        if (chkBridgeSS != null)
+            chkBridgeSS.setSelected(Boolean.parseBoolean(
+                    props.getProperty("ss.bridgeDelayed", "false")));
+        if (props.getProperty("ss.haircutPct") != null)
+            setSpinnerD(spSSHaircutPct, props, "ss.haircutPct", warnings);
+        if (props.getProperty("ss.haircutStartYear") != null)
+            setSpinnerI(spSSHaircutYear, props, "ss.haircutStartYear", warnings);
         setSpinnerI(spManSSStartYear,     props, "man.ssStartYear",        warnings);
         setSpinnerI(spManSSStartMonth,    props, "man.ssStartMonth",       warnings);
         setSpinnerI(spWomanSSStartYear,   props, "woman.ssStartYear",      warnings);
@@ -4109,6 +4217,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         i.womanSSStartYear   = iv(spWomanSSStartYear);
         i.womanSSStartMonth  = iv(spWomanSSStartMonth);
         i.ssCola             = dv(spSSCola) / 100.0;
+        i.bridgeDelayedSS    = (chkBridgeSS != null) && chkBridgeSS.isSelected();   // v6
+        i.ssHaircutPct       = (spSSHaircutPct != null) ? dv(spSSHaircutPct) / 100.0 : 0.0;   // v6
+        i.ssHaircutStartYear = (spSSHaircutYear != null) ? iv(spSSHaircutYear) : 0;           // v6
         i.manPIA             = iv(spManPIA);
         i.womanPIA           = iv(spWomanPIA);
         i.manSSMonthly       = calcSSMonthlyBenefit(i.manPIA, i.manBirthYear, i.manBirthMonth,
@@ -4243,6 +4354,9 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         double[][] fpTrad = new double[fanPaths][inp.horizon + 1];
         double[][] fpRoth = new double[fanPaths][inp.horizon + 1];
         double[][] fpConv = new double[fanPaths][inp.horizon];   // v6: per-path gross conversion
+        // v6: one bridge schedule shared by the fan paths, the solver and the
+        // display, so the extra drawdown is identical in all three.
+        double[] ssBridge = buildSsBridgeSchedule(inp);
         double[][] fpMM   = new double[fanPaths][inp.horizon + 1];  // v6: Money Market (taxable)
 
         for (int p = 0; p < fanPaths; p++) {
@@ -4292,7 +4406,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 if (drawing && b > 0) {
                     wd = solveWithdrawalPro((int) b, calYear, inp.horizon - y,
                             inp, p * 1000L + y * 37 + seed,
-                            Math.max(20, solvePaths / 8), Math.min(binIters, 10), goGoRem);
+                            Math.max(20, solvePaths / 8), Math.min(binIters, 10), goGoRem,
+                            java.util.Arrays.copyOfRange(ssBridge, y, ssBridge.length));
                 }
                 double mult   = spendMultFor(inp, y, startY);   // v6
                 int wdActual  = drawing ? (int)(wd * mult) : 0;
@@ -4334,7 +4449,10 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
 
                 // --- spending: Traditional FIRST (RMD floors the Traditional
                 //     draw), then taxable, then Roth last. ---
-                double tradDraw = Math.max(rmd, Math.min(wdActual, Math.max(0, trad)));
+                // v6: the SS bridge is spent on top of the normal draw, so the
+                // portfolio carries the full cost of delaying.
+                double wdWithBridge = wdActual + ssBridge[y];
+                double tradDraw = Math.max(rmd, Math.min(wdWithBridge, Math.max(0, trad)));
                 trad = Math.max(0, trad - tradDraw);
                 // v6: a forced RMD larger than this year's spending does NOT
                 // vanish -- the overage lands in the Money Market / taxable
@@ -4342,8 +4460,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 // for conversion and a Roth contribution needs earned income.)
                 // Gross is correct here because income tax on the full RMD is
                 // already carried in the Tax (est) column and Total spend.
-                taxable += Math.max(0, tradDraw - wdActual);
-                double need = Math.max(0, wdActual - tradDraw);
+                taxable += Math.max(0, tradDraw - wdWithBridge);
+                double need = Math.max(0, wdWithBridge - tradDraw);
                 double taxDraw = Math.min(need, Math.max(0, taxable));
                 taxable = Math.max(0, taxable - taxDraw);
                 need -= taxDraw;
@@ -4373,7 +4491,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
 
         // == Step 3: Year-1 withdrawal =====================================
         int yr1Wd = solveWithdrawalPro(inp.portfolio, inp.baseYear, inp.horizon,
-                inp, 999L + seed, solvePaths, binIters, inp.goGoDuration);
+                inp, 999L + seed, solvePaths, binIters, inp.goGoDuration, ssBridge);
         res.yr1Withdrawal = yr1Wd;
 
         // == Step 4: Median-path display ===================================
@@ -4453,7 +4571,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             int goGoRem = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
             int wd = drawing && medBal > 0
                     ? solveWithdrawalPro(medBal, calYear, inp.horizon - y,
-                    inp, 999L + y * 37 + seed, solvePaths, binIters, goGoRem)
+                    inp, 999L + y * 37 + seed, solvePaths, binIters, goGoRem,
+                    java.util.Arrays.copyOfRange(ssBridge, y, ssBridge.length))
                     : 0;
 
             // Share-split, survivor-aware RMD. The User/Spouse split is for the
@@ -4470,6 +4589,12 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             double startPror = (drawing && calYear == inp.withdrawStartYear)
                     ? (13.0 - inp.withdrawStartMonth) / 12.0 : 1.0;
             int wdActual   = drawing ? (int)(wd * goGoMult * startPror) : 0;
+            // v6: the SS bridge rides on top of the solved draw. It is added to
+            // Actual wd and to Total income, so Surplus/gap lands where the
+            // no-delay run would put it and the entire cost of delaying shows
+            // up as a lower portfolio balance instead of reduced spending.
+            int bridgeThisYear = drawing ? (int) ssBridge[y] : 0;
+            wdActual += bridgeThisYear;
             int rmdOverage = drawing ? Math.max(0, (int) combRmd - wdActual) : 0;
 
             // True 50th-percentile inflation factor and next-year balance,
@@ -4675,6 +4800,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
             row.conversion    = convThisYear;
             row.convTax       = convTaxThisYear;
             row.convNetToRoth = convNetToRoth;
+            row.ssBridge      = bridgeThisYear;  // v6
             row.baseRate      = rowBaseRate;     // v6
             row.yr1Rate       = rowYr1Rate;      // v6
             row.rateVsYr1     = rowRateVsYr1;    // v6
@@ -4731,7 +4857,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
      */
     private int solveWithdrawalPro(int balance, int fromYear, int horizon,
                                    SimInputs inp, long seed,
-                                   int solvePaths, int binIters, int goGoYearsRemaining) {
+                                   int solvePaths, int binIters, int goGoYearsRemaining,
+                                   double[] bridgeFromHere) {
         // NOTE (v2): `fromYear` is intentionally unused. This solver is
         // deliberately calendar-agnostic -- by design it sizes the MAXIMUM
         // sustainable PORTFOLIO draw at the target PoS, independent of which
@@ -4744,7 +4871,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         for (int i = 0; i < binIters; i++) {
             double mid = (lo + hi) / 2.0;
             double rate = survivalRatePro(balance, horizon, mid,
-                    inp, seed + i * 31L, solvePaths, goGoYearsRemaining);
+                    inp, seed + i * 31L, solvePaths, goGoYearsRemaining, bridgeFromHere);
             if (rate > inp.targetPoS) lo = mid; else hi = mid;
         }
         long added   = (long) binIters * solvePaths;
@@ -4769,7 +4896,8 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
      * by the outer binary search in {@link #solveWithdrawalPro}.
      */
     private double survivalRatePro(int balance, int horizon, double firstYrWd,
-                                   SimInputs inp, long seed, int solvePaths, int goGoYearsRemaining) {
+                                   SimInputs inp, long seed, int solvePaths, int goGoYearsRemaining,
+                                   double[] bridgeFromHere) {
         int survived = 0;
         for (int i = 0; i < solvePaths; i++) {
             SeededRng rng = new SeededRng(seed * 1000L + i * 7 + 3);
@@ -4781,9 +4909,23 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                 double ret   = ri2[0];
                 double infl  = ri2[1];
                 if (y > 0) cumInflFactor *= (1 + infl);  // chain per-year draws (matches GK convention)
+                // v6 FIX: the solver had never been given the slow-go tier, so PoS
+                // was computed against go-go-then-flat spending while the display
+                // and fan paths used three tiers. It reported a spending level as
+                // safe that had not actually been tested.
+                // goGoYearsRemaining counts go-go years left from THIS point, so
+                // slow-go occupies the window immediately after it.
                 int goGoRem = Math.max(0, goGoYearsRemaining - y);
-                double mult = (goGoRem > 0) ? inp.goGoMultiplier : 1.0;
-                double spend = (b > 0) ? firstYrWd * mult * cumInflFactor : 0;
+                double mult;
+                if (goGoRem > 0)                                        mult = inp.goGoMultiplier;
+                else if (y < goGoYearsRemaining + inp.slowGoDuration)    mult = inp.slowGoMultiplier;
+                else                                                     mult = 1.0;
+                // v6: the SS bridge is an extra draw the portfolio must fund, so
+                // PoS reflects the true cost of delaying rather than only the
+                // display showing a lower balance.
+                double bridgeY = (bridgeFromHere != null && y < bridgeFromHere.length)
+                        ? bridgeFromHere[y] : 0.0;
+                double spend = (b > 0) ? firstYrWd * mult * cumInflFactor + bridgeY : 0;
                 b = b * (1 + ret) - spend;
                 if (b <= 0) break;
             }
@@ -4882,6 +5024,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
                     r.rothBal > 0 ? CURRENCY.format((long)(r.rothBal / d)) : "--",          // 27 Roth Bal (v6)
                     r.mmBal > 0 ? CURRENCY.format((long)(r.mmBal / d)) : "--",              // 28 Money Mkt (v6)
                     String.format("%.3fx", r.goGoMult),                                     // 29 Spend mult (v6)
+                    r.ssBridge > 0 ? CURRENCY.format((long)(r.ssBridge / d)) : "--",        // 30 SS bridge (v6)
             });
         }
 
@@ -5054,13 +5197,98 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         return Math.pow(1 + inp.ssCola, yearsSinceStart);
     }
 
+    // v6: per-year SS BRIDGE schedule, in nominal dollars, index = sim year.
+    //
+    // Reference date = the EARLIER of the two claim dates. Whoever claims later
+    // is bridged from that date until their own start, at the benefit they WOULD
+    // have received claiming at the reference date (the smaller early-claim
+    // amount, not their eventual delayed one).
+    //
+    // The raw benefit is then GROSSED UP, because replacing Social Security with
+    // a Traditional withdrawal is not tax-neutral: SS is at most 85% taxable via
+    // the provisional-income formula, an IRA distribution is 100% ordinary
+    // income. Without the gross-up the bridged run would show less spendable
+    // income than the no-delay run and the comparison would be unfair to
+    // delaying. Three fixed-point passes converge well inside a dollar.
+    //
+    // The gross-up uses a deterministic tax estimate rather than each fan path's
+    // own tax position, so one schedule serves the display, the fan paths and the
+    // PoS solver alike -- they cannot drift apart and the portfolio reconciles.
+    private double[] buildSsBridgeSchedule(SimInputs inp) {
+        double[] bridge = new double[inp.horizon];
+        if (!inp.bridgeDelayedSS) return bridge;
+
+        int manStart   = inp.manSSStartYear   * 12 + inp.manSSStartMonth;
+        int womanStart = inp.womanSSStartYear * 12 + inp.womanSSStartMonth;
+        if (manStart == womanStart) return bridge;   // nobody is delaying
+
+        boolean manDelays = manStart > womanStart;
+        int refY  = manDelays ? inp.womanSSStartYear  : inp.manSSStartYear;
+        int refM  = manDelays ? inp.womanSSStartMonth : inp.manSSStartMonth;
+        int ownY  = manDelays ? inp.manSSStartYear    : inp.womanSSStartYear;
+
+        // Counterfactual annual benefit had the delayer claimed at the reference.
+        double cfMonthly = manDelays
+                ? calcSSMonthlyBenefit(inp.manPIA,   inp.manBirthYear,   inp.manBirthMonth,   refY, refM)
+                : calcSSMonthlyBenefit(inp.womanPIA, inp.womanBirthYear, inp.womanBirthMonth, refY, refM);
+        double cfAnnual = cfMonthly * 12.0;
+        if (cfAnnual <= 0) return bridge;
+
+        TaxEngine.StateTaxProfile stProfile = TaxEngine.stateProfile(inp.stateCode);
+
+        for (int y = 0; y < inp.horizon; y++) {
+            int calYear = inp.baseYear + y;
+            if (calYear < refY || calYear >= ownY) continue;   // outside the gap
+
+            double inflFactor = Math.pow(1 + inp.inflation, y);
+            TaxEngine.FilingStatus fs = filingFor(inp, calYear);
+
+            // The benefit being replaced: COLA-grown from the reference year, and
+            // subject to the same haircut the real benefit would have taken.
+            double grown = cfAnnual * Math.pow(1 + inp.ssCola, Math.max(0, calYear - refY))
+                    * ssHaircutFactor(inp, calYear);
+
+            // Tax the forgone SS would have carried, stacked on the OTHER
+            // spouse's benefit, versus tax on an equal IRA distribution.
+            double otherSS = manDelays ? womanSSThisYear(inp, y) : manSSThisYear(inp, y);
+            double taxSSwith    = TaxEngine.taxableSocialSecurity(otherSS + grown, 0, inflFactor, fs);
+            double taxSSwithout = TaxEngine.taxableSocialSecurity(otherSS,         0, inflFactor, fs);
+            double ssTaxableDelta = Math.max(0, taxSSwith - taxSSwithout);
+            double[] ssTax = TaxEngine.conversionTax(taxSSwithout, ssTaxableDelta,
+                    inflFactor, fs, stProfile, calYear, 0);
+            double netTarget = grown - ssTax[0];      // what the SS would net
+
+            double b = grown;
+            for (int pass = 0; pass < 3; pass++) {
+                double[] bt = TaxEngine.conversionTax(taxSSwithout, b,
+                        inflFactor, fs, stProfile, calYear, 0);
+                double net = b - bt[0];
+                if (net <= 1) break;
+                b = b * (netTarget / net);
+            }
+            bridge[y] = Math.max(0, b);
+        }
+        return bridge;
+    }
+
+    // v6: across-the-board benefit reduction from a given year onward. Applied at
+    // this single choke point so EVERY consumer inherits it -- survivor wrappers,
+    // fan conversion helpers, the display loop, the GK loop and the survivor
+    // floor -- rather than being bolted on in six places.
+    static double ssHaircutFactor(SimInputs inp, int calYear) {
+        if (inp.ssHaircutStartYear <= 0 || inp.ssHaircutPct <= 0) return 1.0;
+        return (calYear >= inp.ssHaircutStartYear)
+                ? Math.max(0.0, 1.0 - inp.ssHaircutPct) : 1.0;
+    }
+
     private double manSSThisYear(SimInputs inp, int y, double inflNow, double inflAtStart) {
         int calYear = inp.baseYear + y;
         if (calYear < inp.manSSStartYear) return 0;
+        double cut = ssHaircutFactor(inp, calYear);   // v6
         if (calYear == inp.manSSStartYear)
-            return inp.manSSAmount * (13.0 - inp.manSSStartMonth) / 12.0;
+            return inp.manSSAmount * (13.0 - inp.manSSStartMonth) / 12.0 * cut;
         return inp.manSSAmount
-                * ssGrowth(inp, calYear - inp.manSSStartYear, inflNow, inflAtStart);
+                * ssGrowth(inp, calYear - inp.manSSStartYear, inflNow, inflAtStart) * cut;
     }
     private double manSSThisYear(SimInputs inp, int y) {   // fixed-COLA convenience
         return manSSThisYear(inp, y, 0, 0);
@@ -5069,10 +5297,11 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
     private double womanSSThisYear(SimInputs inp, int y, double inflNow, double inflAtStart) {
         int calYear = inp.baseYear + y;
         if (calYear < inp.womanSSStartYear) return 0;
+        double cut = ssHaircutFactor(inp, calYear);   // v6
         if (calYear == inp.womanSSStartYear)
-            return inp.womanSSAmount * (13.0 - inp.womanSSStartMonth) / 12.0;
+            return inp.womanSSAmount * (13.0 - inp.womanSSStartMonth) / 12.0 * cut;
         return inp.womanSSAmount
-                * ssGrowth(inp, calYear - inp.womanSSStartYear, inflNow, inflAtStart);
+                * ssGrowth(inp, calYear - inp.womanSSStartYear, inflNow, inflAtStart) * cut;
     }
     private double womanSSThisYear(SimInputs inp, int y) {
         return womanSSThisYear(inp, y, 0, 0);
@@ -6783,6 +7012,17 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         // go-go multiplier may still be running. Years before the offset use
         // ordinary random draws.
         int seqOffset = 0;   // v6
+        // v6: scheduled-benefit-cut stress. Current law calls for an automatic
+        // across-the-board reduction when the OASI trust fund depletes; CBO 2026
+        // projects 2032 at roughly 28%. Congress has never allowed a scheduled
+        // cut to take effect, so treat this as a STRESS input, not a forecast.
+        // 0 / 0 = disabled, which reproduces every earlier scenario exactly.
+        double ssHaircutPct = 0.0; int ssHaircutStartYear = 0;   // v6
+        // v6: when one spouse delays, withdraw extra from the portfolio to
+        // replace the benefit they are NOT yet receiving, so spending is held
+        // constant and the entire cost of delaying lands on the portfolio
+        // balance instead of being absorbed as reduced spending. Off by default.
+        boolean bridgeDelayedSS = false;   // v6
         double survivorSpendCut = 0.20;   // v6
         static final double SURVIVOR_MEDICAL_FACTOR = 0.5;   // v6, mechanical
         double goGoMultiplier; int goGoDuration;
@@ -6808,6 +7048,7 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         int  convTax, convNetToRoth;   // v3: conversion tax + net landing in Roth
         // v6: the actual figures behind the Wd % guardrail colour, so the cell
         // tooltip can show WHY a row is green or red rather than just that it is.
+        int  ssBridge;   // v6: extra draw replacing a delayed benefit
         double baseRate, yr1Rate, rateVsYr1;
         int  tradBal, rothBal;         // v6: median Traditional / Roth bucket balances
         int  mmBal;                    // v6: median Money Market (taxable) bucket
