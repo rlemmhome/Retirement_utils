@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v6.java
-// Last modified: Sunday, August 09, 2026 at 08:33 PM MST (UTC-7)
+// Last modified: Monday, August 10, 2026 at 10:56 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -11,6 +11,8 @@ import javax.swing.table.DefaultTableModel;
 import javax.swing.table.JTableHeader;
 import javax.swing.table.TableColumn;
 import java.awt.*;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 import java.awt.geom.Line2D;
@@ -1273,14 +1275,44 @@ public class IncomeLab_OptSocSec_v6 extends JFrame {
         btnRun.setAlignmentX(LEFT_ALIGNMENT);
         btnRun.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
         btnRun.addActionListener(e -> runSimulation());
-        inner.add(Box.createVerticalStrut(8));
-        inner.add(btnRun);
 
         JScrollPane scroll = new JScrollPane(inner,
                 JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
                 JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         scroll.setBorder(null);
         outer.add(scroll, BorderLayout.CENTER);
+
+        // v6: Run lives in a PINNED footer instead of at the bottom of the
+        // scrolling content. Previously it was the last child of `inner`, so
+        // reaching it meant scrolling past every card -- and then scrolling back
+        // up to find the field you had just changed. Now it never moves.
+        JPanel runBar = new JPanel(new BorderLayout());
+        runBar.setBackground(new Color(245, 245, 242));
+        runBar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(210, 210, 205)),
+                BorderFactory.createEmptyBorder(6, 6, 6, 6)));
+        btnRun.setMaximumSize(null);   // BorderLayout stretches it; no Box cap needed
+        runBar.add(btnRun, BorderLayout.CENTER);
+        outer.add(runBar, BorderLayout.SOUTH);
+
+        // v6: run from the keyboard so a spinner edit can be tested without
+        // moving the mouse or looking away from the field. Registered on the
+        // whole window, so it works whichever control has focus.
+        KeyStroke f5     = KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0);
+        KeyStroke ctrlR  = KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.CTRL_DOWN_MASK);
+        JRootPane rp = getRootPane();
+        if (rp != null) {
+            InputMap im = rp.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+            im.put(f5, "runSim"); im.put(ctrlR, "runSim");
+            rp.getActionMap().put("runSim", new AbstractAction() {
+                @Override public void actionPerformed(java.awt.event.ActionEvent e) {
+                    if (btnRun.isEnabled()) runSimulation();
+                }
+            });
+        }
+        btnRun.setToolTipText("<html><b>Run Simulation</b>  (F5 or Ctrl+R)<br>"
+                + "Pinned here so it stays reachable no matter where you are<br>"
+                + "scrolled in the inputs above.</html>");
         return outer;
     }
 
