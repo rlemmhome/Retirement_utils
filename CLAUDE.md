@@ -6,13 +6,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A personal Java/Swing project of retirement-planning desktop apps, built via IntelliJ IDEA (not Maven, despite the `pom.xml` — see Build & run) (Monte Carlo withdrawal simulators, Guyton-Klinger guardrails, Social Security optimization, Roth conversion planning). There is no shared framework across the codebase — each package is a largely self-contained, single- or few-file Swing application.
 
-## Build & run
+## Build & Verify
 
-There is a `pom.xml` (Java 25 via `maven.compiler.source`/`target`, single dependency `commons-lang3`), but **Maven is not actually used** — `mvn` isn't installed, and the user doesn't build this way. The real workflow is IntelliJ IDEA: **Build > Rebuild Project**, then **Build > Build Artifacts** (see `.idea/artifacts/IncomeLab_OptSocSec_v8_jar.xml`) to produce the jar. `target/maven-status` and `target/maven-archiver` are stale leftovers from an old Maven-based setup — ignore them, don't treat their presence as evidence Maven is in use.
+**Do NOT use Maven.** `mvn` is not installed on this machine and this project
+does not use it. The `target/` directory with `maven-status` / `maven-archiver`
+folders is stale scaffolding left behind by IntelliJ — ignore it, do not treat
+its presence as a Maven build, and do not run `mvn`.
 
-From a shell, verify compilation with `javac` directly (see below) rather than reaching for `mvn`.
+**Toolchain:** Java 21 (JDK 21), IntelliJ IDEA, plain `javac`. No external
+dependencies except an unused `commons-lang3` reference. No test suite.
 
-There is no `src/test` directory and no test suite.
+### How Bob builds (authoritative, in IntelliJ)
+1. File > Reload All from Disk
+2. Build > Rebuild Project
+3. Build > Build Artifacts > (artifact) > Rebuild
+
+**JAR artifact gotcha:** after any class rename, the artifact's **Main-Class**
+field is hidden in the IntelliJ artifact dialog until you click the `.jar` node
+in the Output Layout pane. It must then be updated by hand to point at the
+current main class (e.g. `com.hiflite.incomelabs_riskbased.IncomeLab_OptSocSec_v8`).
+If the built JAR launches the wrong/old class, this is almost always the cause.
+
+### How to verify a change compiles (headless, agent may run this)
+Compile with `javac` into a scratch output dir and confirm the class count.
+```bash
+# from the project root; adjust the version number to the active file
+mkdir -p src8/com/hiflite/incomelabs_riskbased out8
+cp IncomeLab_OptSocSec_v8.java src8/com/hiflite/incomelabs_riskbased/
+javac -d out8 src8/com/hiflite/incomelabs_riskbased/IncomeLab_OptSocSec_v8.java
+ls out8/com/hiflite/incomelabs_riskbased/ | wc -l   # expect 35 when clean
+```
+A clean build of the current v8 produces **35 classes** and no errors. A changed
+class count is a red flag worth investigating.
+
+### Run
+```bash
+java -cp out8 com.hiflite.incomelabs_riskbased.IncomeLab_OptSocSec_v8
+```
+The window title bar shows `... v8 (<BUILD_STAMP>)`. Use it to confirm you are
+running the freshly built class and not a stale one — a wrong/old timestamp in
+the title bar means an outdated binary is running.
+
+### Package / class conventions
+- Package: `com.hiflite.incomelabs_riskbased`
+- Active file: `IncomeLab_OptSocSec_v8.java` (single-file Swing app; always edit
+  the highest version). Older `v#` files and the `*guardrails*` / `montecarlo*`
+  files are independent exploratory alternates — NOT part of the main app.
+- On every source edit, keep the top-of-file `// Last modified:` line and the
+  `BUILD_STAMP` constant in sync with the real date/time.
 
 ### The active application
 
