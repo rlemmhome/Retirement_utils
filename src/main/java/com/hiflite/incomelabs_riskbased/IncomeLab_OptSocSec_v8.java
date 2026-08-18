@@ -1707,7 +1707,7 @@ public class IncomeLab_OptSocSec_v8 extends JFrame {
                                 CURRENCY.format((long)(er.annuity / d)));
                     }
                     case 5 -> {
-                        // v6: Wd % cell -- explain the colour AND show the actual
+                        // v6: Wd % cell -- explain the color AND show the actual
                         // figures that tripped (or did not trip) the guardrail.
                         double up  = (spProPosUpperGuardrail != null) ? dv(spProPosUpperGuardrail) : 20.0;
                         double dn  = (spProPosLowerGuardrail != null) ? dv(spProPosLowerGuardrail) : 20.0;
@@ -2075,7 +2075,7 @@ public class IncomeLab_OptSocSec_v8 extends JFrame {
         // MODEL. Model index 6 is unchanged, so every tooltip case, width entry
         // and row-builder position keeps its number -- no renumbering, and the
         // value stays available if it is ever wanted back. The signal it carried
-        // now lives as colour on the Wd % number instead.
+        // now lives as color on the Wd % number instead.
         try {
             javax.swing.table.TableColumn driftCol =
                     tblPro.getColumnModel().getColumn(6);
@@ -2322,7 +2322,7 @@ public class IncomeLab_OptSocSec_v8 extends JFrame {
                 // v6 FIX: 'col' arrives as a VIEW index, but every test below is
                 // written against MODEL indices. Once the Rate drift column was
                 // hidden the two diverged by one for every column past it, which
-                // silently shifted all colouring -- Portfolio Chg and Surplus/gap
+                // silently shifted all coloring -- Portfolio Chg and Surplus/gap
                 // stopped going red and the RMD highlighting moved one column right.
                 col = t.convertColumnIndexToModel(col);
                 if (!sel && lastResults != null && row < lastResults.medianRows.size()) {
@@ -2340,7 +2340,7 @@ public class IncomeLab_OptSocSec_v8 extends JFrame {
                     } else if ((col == 3 || col == 4) && slowGo) {
                         c.setBackground(SLOWGO_WD_BG); c.setForeground(new Color(0, 80, 60));
                     } else if (col == 5) {
-                        // v6: the guardrail signal now lives as COLOUR on the Wd %
+                        // v6: the guardrail signal now lives as COLOR on the Wd %
                         // number itself, instead of a separate always-on column.
                         // Deep green = rate well above yr1 (capacity to spend more);
                         // red = well below (consider trimming).
@@ -3420,10 +3420,10 @@ public class IncomeLab_OptSocSec_v8 extends JFrame {
                 // Sort by totalIncomeYr1 desc (most total income in first drawing year)
                 // Primary: maximize total income across all go-go years
                 // Secondary: maximize projected final balance (legacy)
-                // v6: the objective is selectable. Go-Go Guar (default) maximises
+                // v6: the objective is selectable. Go-Go Guar (default) maximizes
                 // mortality-weighted guaranteed income during the go-go window,
-                // which structurally penalises delay -- a delayed benefit pays
-                // nothing in that window. Survivor Floor instead maximises the
+                // which structurally penalizes delay -- a delayed benefit pays
+                // nothing in that window. Survivor Floor instead maximizes the
                 // income the surviving spouse keeps for life, which is the reason
                 // to delay the HIGHER earner. They give different answers on
                 // purpose; that difference IS the trade-off.
@@ -3689,11 +3689,11 @@ public class IncomeLab_OptSocSec_v8 extends JFrame {
     private static final String SCENARIO_VERSION = "1";
 
     /**
-     * Enable/disable (grey out) the tax-engine inputs based on the two toggles.
+     * Enable/disable (gray out) the tax-engine inputs based on the two toggles.
      * Computed-tax OFF: the whole tax engine is bypassed (legacy flat escalator),
-     *   so grey out conversion mode, all conversion inputs, and IRMAA growth; and
+     *   so gray out conversion mode, all conversion inputs, and IRMAA growth; and
      *   ENABLE the legacy Base tax + Tax inflation (they now drive the flat path).
-     * Computed-tax ON: grey out Base tax + Tax inflation (unused); enable the
+     * Computed-tax ON: gray out Base tax + Tax inflation (unused); enable the
      *   engine controls; within them, Fill mode enables buffer/cap and greys the
      *   flat conversion, while Flat mode does the reverse.
      * Living expenses / Medical / Go-go are always enabled (tax-method-independent).
@@ -3934,7 +3934,7 @@ public class IncomeLab_OptSocSec_v8 extends JFrame {
         if (spCustomExclCap != null)     spCustomExclCap.setEnabled(capLive);
     }
 
-    // v6: grey the year-of-death and share fields when no death event is set,
+    // v6: gray the year-of-death and share fields when no death event is set,
     // and only when the computed tax engine is on (the death event is a tax /
     // RMD feature). The share field stays live even without a death event,
     // because the his/her split drives both-living RMD math too.
@@ -5169,7 +5169,7 @@ public class IncomeLab_OptSocSec_v8 extends JFrame {
             // ---- v3 TAX ENGINE (Pro PoS median path) --------------------
             // Taxable ordinary income (non-SS): the forced RMD if any, else the
             // discretionary Traditional draw. Pre-75 the draw is 100% Traditional
-            // (Roth/MM surplus is funnelled AFTER spend, not drawn for spend);
+            // (Roth/MM surplus is funneled AFTER spend, not drawn for spend);
             // post-75 the RMD dominates and floors ordinary income. Annuity is
             // ordinary (held inside an IRA). See the Assumptions & Methods tab.
             double tax; int convThisYear = 0;
@@ -7673,7 +7673,7 @@ public class IncomeLab_OptSocSec_v8 extends JFrame {
         // v3 tax engine detail
         int  irmaa, conversion, magi, taxableSS, ordinaryTax, fedTax, stateTax;
         int  convTax, convNetToRoth;   // v3: conversion tax + net landing in Roth
-        // v6: the actual figures behind the Wd % guardrail colour, so the cell
+        // v6: the actual figures behind the Wd % guardrail color, so the cell
         // tooltip can show WHY a row is green or red rather than just that it is.
         int  ssBridge;   // v6: extra draw replacing a delayed benefit
         double baseRate, yr1Rate, rateVsYr1;
