@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Wednesday, August 19, 2026 at 02:11 PM MST (UTC-7)
+// Last modified: Wednesday, August 19, 2026 at 04:25 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Wednesday, August 19, 2026 at 02:11 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Wednesday, August 19, 2026 at 04:25 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -290,6 +290,17 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     private JLabel            lblActualPoS, lblMedianFinal, lblYr10Wd, lblInitRate;
     private JTable            tblPro;
     private DefaultTableModel tblProModel;
+    // v9: Pro PoS column picker state. Model-column indices the user has hidden,
+    // and indices marked non-hideable (protected). Model index 6 (Rate drift) is
+    // permanently hidden by the engine and is never offered in the picker. The
+    // picker, apply helper, and per-scenario save/load all key on MODEL indices,
+    // matching the tooltip switches (which use convertColumnIndexToModel), so the
+    // numbering never shifts when columns are shown or hidden.
+    private final java.util.Set<Integer> proHiddenCols    = new java.util.TreeSet<>();
+    private final java.util.Set<Integer> proProtectedCols =
+            new java.util.TreeSet<>(java.util.Arrays.asList(0, 1)); // User Age, Cal yr
+    private static final int PRO_RATE_DRIFT_COL = 6;   // engine-hidden, never in picker
+    private String[] proColNames;                      // model-index -> header text
     private ProChartPanel     chartPanel;
     private JComboBox<String> cmbChartType;
     private JTextArea         txaSummary;
@@ -1681,7 +1692,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     }
 
     // == Pro PoS Table =====================================================
-    private JScrollPane buildTablePanel() {
+    private JComponent buildTablePanel() {
         String[] cols = {
                 "User Age", "Cal yr", "Portfolio bal (50th%)",         // 0 1 2
                 "Pro PoS withdrawal", "Actual wd", "Wd %",              // 3 4 5
@@ -1696,6 +1707,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 "Trad Bal", "Roth Bal", "Money Mkt (total)",               // 27 28 29 (v6)
                 "Spend mult", "SS bridge"                                 // 30 31 (v6)
         };
+        proColNames = cols.clone();   // v9: model-index -> header text for the picker
         tblProModel = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
@@ -2122,16 +2134,11 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         for (int i = 0; i < cw.length && i < tblPro.getColumnCount(); i++)
             tblPro.getColumnModel().getColumn(i).setPreferredWidth(cw[i]);
 
-        // v6: hide the Rate drift column from the VIEW while leaving it in the
-        // MODEL. Model index 6 is unchanged, so every tooltip case, width entry
-        // and row-builder position keeps its number -- no renumbering, and the
-        // value stays available if it is ever wanted back. The signal it carried
-        // now lives as colour on the Wd % number instead.
-        try {
-            javax.swing.table.TableColumn driftCol =
-                    tblPro.getColumnModel().getColumn(6);
-            tblPro.getColumnModel().removeColumn(driftCol);
-        } catch (Exception ignore) { }
+        // v9: the Rate drift column (model index 6) is hidden by
+        // applyProColumnVisibility(), called once the panel is assembled, along
+        // with any user-chosen hidden columns. The value stays in the MODEL so
+        // every tooltip case, width entry and row-builder position keeps its
+        // number. The signal it carried lives as colour on the Wd % number.
 
         // Header tooltips -- override getToolTipText directly for reliable per-column display
         JTableHeader hdr = new JTableHeader(tblPro.getColumnModel()) {
@@ -2437,7 +2444,168 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
 
         JScrollPane scroll = new JScrollPane(tblPro);
         scroll.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        return scroll;
+
+        // v9: toolbar above the table holding the column picker button.
+        javax.swing.JButton btnCols = new javax.swing.JButton("Columns\u2026");
+        btnCols.setToolTipText("Choose which Pro PoS columns to show. "
+                + "Protected columns can't be hidden. Saved into the scenario file.");
+        btnCols.addActionListener(e -> showProColumnPicker());
+        JPanel bar = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 2));
+        bar.add(btnCols);
+
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.add(bar,    BorderLayout.NORTH);
+        wrap.add(scroll, BorderLayout.CENTER);
+
+        // v9: apply the initial visibility (this also performs the engine-hidden
+        // Rate drift removal, replacing the old manual removeColumn call).
+        applyProColumnVisibility();
+        return wrap;
+    }
+
+    // == v9: Pro PoS column picker ========================================
+    // Rebuild the table's VIEW from the model so that exactly the non-hidden,
+    // non-engine-hidden columns are shown, in model order. We remove every
+    // current view column, then add back the ones we want. Because the tooltip
+    // switches key on the MODEL index (via convertColumnIndexToModel), hiding a
+    // column never breaks any tooltip. The engine-hidden Rate drift column (model
+    // index 6) is always excluded regardless of picker state. Data is untouched --
+    // this is view-only; the engine still computes every column.
+    private void applyProColumnVisibility() {
+        if (tblPro == null) return;
+        javax.swing.table.TableColumnModel cm = tblPro.getColumnModel();
+
+        // Preserve any per-column preferred widths the user or code has set, keyed
+        // by model index, so re-adding a column does not reset its width.
+        java.util.Map<Integer,Integer> widthByModel = new java.util.HashMap<>();
+        for (int v = 0; v < cm.getColumnCount(); v++) {
+            javax.swing.table.TableColumn tc = cm.getColumn(v);
+            Object id = tc.getIdentifier();
+            int mi = (id instanceof Integer) ? (Integer) id
+                    : tblPro.convertColumnIndexToModel(v);
+            widthByModel.put(mi, tc.getWidth());
+        }
+
+        // Remove all current view columns.
+        while (cm.getColumnCount() > 0) cm.removeColumn(cm.getColumn(0));
+
+        // Add back, in model order, every column that is not engine-hidden and not
+        // user-hidden. Stamp each TableColumn's identifier with its model index so
+        // width preservation and future rebuilds stay correct.
+        int modelCount = tblProModel.getColumnCount();
+        for (int mi = 0; mi < modelCount; mi++) {
+            if (mi == PRO_RATE_DRIFT_COL) continue;      // engine-hidden, always
+            if (proHiddenCols.contains(mi)) continue;    // user-hidden
+            javax.swing.table.TableColumn tc = new javax.swing.table.TableColumn(mi);
+            tc.setIdentifier(Integer.valueOf(mi));
+            tc.setHeaderValue(tblProModel.getColumnName(mi));
+            Integer w = widthByModel.get(mi);
+            if (w != null && w > 0) tc.setPreferredWidth(w);
+            cm.addColumn(tc);
+        }
+        tblPro.getTableHeader().repaint();
+        tblPro.revalidate();
+        tblPro.repaint();
+    }
+
+    // Modal picker: a flat checklist of every column (except the engine-hidden
+    // Rate drift). Each row has a "Show" checkbox and a "Protect" (non-hideable)
+    // checkbox. Protecting a column disables and forces-on its Show box so it
+    // cannot be hidden. Reset restores all-shown. OK applies and is picked up by
+    // the next save into the .ilscen file.
+    private void showProColumnPicker() {
+        if (tblProModel == null) return;
+        int n = tblProModel.getColumnCount();
+
+        final javax.swing.JCheckBox[] showBox    = new javax.swing.JCheckBox[n];
+        final javax.swing.JCheckBox[] protectBox = new javax.swing.JCheckBox[n];
+
+        JPanel grid = new JPanel(new java.awt.GridBagLayout());
+        grid.setBackground(Color.WHITE);
+        java.awt.GridBagConstraints g = new java.awt.GridBagConstraints();
+        g.anchor = java.awt.GridBagConstraints.WEST;
+        g.insets = new java.awt.Insets(2, 8, 2, 8);
+
+        // Header row.
+        g.gridy = 0;
+        g.gridx = 0; grid.add(boldLabel("Column"), g);
+        g.gridx = 1; grid.add(boldLabel("Show"), g);
+        g.gridx = 2; grid.add(boldLabel("Protect"), g);
+
+        int row = 1;
+        for (int mi = 0; mi < n; mi++) {
+            if (mi == PRO_RATE_DRIFT_COL) continue;   // never offered
+            final int idx = mi;
+
+            javax.swing.JCheckBox show = new javax.swing.JCheckBox();
+            show.setBackground(Color.WHITE);
+            show.setSelected(!proHiddenCols.contains(idx));
+
+            javax.swing.JCheckBox prot = new javax.swing.JCheckBox();
+            prot.setBackground(Color.WHITE);
+            prot.setSelected(proProtectedCols.contains(idx));
+
+            // A protected column cannot be hidden: force Show on and disable it.
+            if (prot.isSelected()) { show.setSelected(true); show.setEnabled(false); }
+            prot.addActionListener(e -> {
+                if (prot.isSelected()) { show.setSelected(true); show.setEnabled(false); }
+                else show.setEnabled(true);
+            });
+
+            showBox[idx]    = show;
+            protectBox[idx] = prot;
+
+            g.gridy = row++;
+            g.gridx = 0; grid.add(new JLabel(proColNames[idx]), g);
+            g.gridx = 1; grid.add(show, g);
+            g.gridx = 2; grid.add(prot, g);
+        }
+
+        JScrollPane sp = new JScrollPane(grid);
+        sp.setPreferredSize(new Dimension(360, 460));
+        sp.getVerticalScrollBar().setUnitIncrement(18);
+
+        javax.swing.JButton reset = new javax.swing.JButton("Reset (show all)");
+        reset.addActionListener(e -> {
+            for (int mi = 0; mi < n; mi++) {
+                if (showBox[mi] == null) continue;
+                showBox[mi].setSelected(true);
+                // leave Protect flags as-is; reset is about visibility, not protection
+            }
+        });
+
+        JPanel wrap = new JPanel(new BorderLayout(0, 8));
+        wrap.add(new JLabel("<html><b>Choose which Pro PoS columns to show.</b><br>"
+                + "Protected columns cannot be hidden. This selection is saved into<br>"
+                + "the scenario (.ilscen) file.</html>"), BorderLayout.NORTH);
+        wrap.add(sp, BorderLayout.CENTER);
+        JPanel south = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
+        south.add(reset);
+        wrap.add(south, BorderLayout.SOUTH);
+
+        int res = javax.swing.JOptionPane.showConfirmDialog(
+                this, wrap, "Pro PoS columns",
+                javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                javax.swing.JOptionPane.PLAIN_MESSAGE);
+        if (res != javax.swing.JOptionPane.OK_OPTION) return;
+
+        // Commit picker state to the model-index sets.
+        proHiddenCols.clear();
+        proProtectedCols.clear();
+        for (int mi = 0; mi < n; mi++) {
+            if (showBox[mi] == null) continue;             // skipped (Rate drift)
+            if (protectBox[mi].isSelected()) proProtectedCols.add(mi);
+            if (!showBox[mi].isSelected())   proHiddenCols.add(mi);
+        }
+        // A protected column can never be hidden, even if some other state tried to.
+        proHiddenCols.removeAll(proProtectedCols);
+        applyProColumnVisibility();
+    }
+
+    private JLabel boldLabel(String s) {
+        JLabel l = new JLabel(s);
+        l.setFont(l.getFont().deriveFont(Font.BOLD));
+        return l;
     }
 
     // == Chart panel ======================================================
@@ -4282,6 +4450,10 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         props.setProperty("mc.fanPaths",            String.valueOf(iv(spMcFanPaths)));
         props.setProperty("opt.scenario",           String.valueOf(
                 cmbScenario != null ? cmbScenario.getSelectedIndex() : 0));
+        // v9: per-scenario Pro PoS column view (model indices, CSV). Absent keys on
+        // load mean "show all" (pre-v9 behavior), so old files are unaffected.
+        props.setProperty("view.proHiddenCols",    csvOfInts(proHiddenCols));
+        props.setProperty("view.proProtectedCols", csvOfInts(proProtectedCols));
         try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
             props.store(fos, "IncomePoS_OptSocSec_v2 scenario -- " + desc);
             addRecentFile(file.getAbsolutePath());
@@ -4507,6 +4679,19 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         updateAgeLabels();
         updateAccountTotal();
         updateSSBenefitNote();
+        // v9: restore the per-scenario Pro PoS column view. Missing keys -> show
+        // all (old files). Protected always wins over hidden. User Age + Cal yr
+        // default protected if the file predates the protected key.
+        if (props.getProperty("view.proHiddenCols") != null
+                || props.getProperty("view.proProtectedCols") != null) {
+            proProtectedCols.clear();
+            proProtectedCols.addAll(intsOfCsv(props.getProperty("view.proProtectedCols", "0,1")));
+            proHiddenCols.clear();
+            proHiddenCols.addAll(intsOfCsv(props.getProperty("view.proHiddenCols", "")));
+            proHiddenCols.remove(PRO_RATE_DRIFT_COL);      // never user-managed
+            proHiddenCols.removeAll(proProtectedCols);     // protected can't be hidden
+            applyProColumnVisibility();
+        }
         refreshTaxEngineEnabled();  // greying may change if loaded toggles differ
         refreshStateFieldsEnabled();  // v5: apply loaded state selection greying
         refreshDeathFieldsEnabled();  // v6: apply loaded death-event greying
@@ -4517,6 +4702,23 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         String warnMsg = warnings.isEmpty() ? "" : "  [Warnings: " + String.join(", ", warnings) + "]";
         if (progressBar != null)
             progressBar.setString("Loaded: " + file.getName() + " -- " + desc + warnMsg);
+    }
+
+    // v9: small CSV <-> Set<Integer> helpers for the per-scenario column view.
+    private static String csvOfInts(java.util.Set<Integer> s) {
+        StringBuilder sb = new StringBuilder();
+        for (Integer i : s) { if (sb.length() > 0) sb.append(','); sb.append(i); }
+        return sb.toString();
+    }
+    private static java.util.List<Integer> intsOfCsv(String csv) {
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        if (csv == null) return out;
+        for (String p : csv.split(",")) {
+            p = p.trim();
+            if (p.isEmpty()) continue;
+            try { out.add(Integer.valueOf(p)); } catch (NumberFormatException ignore) { }
+        }
+        return out;
     }
 
     private void setSpinnerI(JSpinner sp, java.util.Properties props,
@@ -7964,22 +8166,38 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         body.setOpaque(false);
         body.setAlignmentX(LEFT_ALIGNMENT);
 
-        // Header row: a clickable arrow button (▾/▸) + an INERT title label.
-        // Only the arrow toggles -- the title itself does nothing on click.
+        // Header row: a triangle (▾/▸) + the section title. v9: the ENTIRE header
+        // -- triangle, title, and the space across to the right edge -- is the
+        // click target that toggles the section, not just the triangle. The arrow
+        // and title are passive display; the shared listener lives on the header
+        // panel so a click anywhere along the row collapses or expands.
         JPanel header = new JPanel();
         header.setLayout(new BoxLayout(header, BoxLayout.X_AXIS));
         header.setOpaque(false);
         header.setAlignmentX(LEFT_ALIGNMENT);
         header.setBorder(BorderFactory.createEmptyBorder(0,0,6,0));
         header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
+        header.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        header.setToolTipText("Collapse / expand this section");
 
         final JLabel arrow = new JLabel(startExpanded ? "\u25be" : "\u25b8"); // ▾ / ▸
         arrow.setFont(new Font("SansSerif",Font.BOLD,12));
         arrow.setForeground(new Color(110,105,95));
         arrow.setBorder(BorderFactory.createEmptyBorder(0,0,0,6));
-        arrow.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-        arrow.setToolTipText("Collapse / expand this section");
-        arrow.addMouseListener(new java.awt.event.MouseAdapter() {
+
+        JLabel titleLbl = new JLabel(title.toUpperCase());
+        titleLbl.setFont(new Font("SansSerif",Font.BOLD,12));
+        titleLbl.setForeground(new Color(110,105,95));
+
+        header.add(arrow);
+        header.add(titleLbl);
+        header.add(Box.createHorizontalGlue());
+
+        // Shared toggle: Swing does NOT bubble a child's mouse event up to its
+        // parent, so a click landing directly on the triangle or the title label
+        // would otherwise be swallowed. Attach the same listener to the header AND
+        // both labels so a press anywhere on the row toggles the section.
+        java.awt.event.MouseAdapter toggle = new java.awt.event.MouseAdapter() {
             @Override public void mousePressed(java.awt.event.MouseEvent e) {
                 boolean nowExpanded = !body.isVisible();
                 body.setVisible(nowExpanded);
@@ -7989,15 +8207,14 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 card.revalidate();
                 card.repaint();
             }
-        });
+        };
+        header.addMouseListener(toggle);
+        arrow.addMouseListener(toggle);
+        titleLbl.addMouseListener(toggle);
+        // Hand cursor on the labels too, so the affordance is consistent across the row.
+        arrow.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        titleLbl.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
 
-        JLabel titleLbl = new JLabel(title.toUpperCase());
-        titleLbl.setFont(new Font("SansSerif",Font.BOLD,12));
-        titleLbl.setForeground(new Color(110,105,95));
-
-        header.add(arrow);
-        header.add(titleLbl);
-        header.add(Box.createHorizontalGlue());
         card.add(header);
 
         for (int i = 0; i < items.length; i += 2) {
