@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Monday, August 17, 2026 at 10:01 PM MST (UTC-7)
+// Last modified: Wednesday, August 19, 2026 at 08:59 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Monday, August 17, 2026 at 10:01 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Wednesday, August 19, 2026 at 08:59 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -2274,7 +2274,13 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                             + "is drawn down by spending (Traditional-FIRST) and by Roth<br>"
                             + "conversions, so it falls over time -- which is what makes future<br>"
                             + "RMDs and the widow-year tax shrink as conversions accumulate.<br>"
-                            + "Drives the RMD columns via the User/Spouse Traditional share.</html>";
+                            + "Drives the RMD columns via the User/Spouse Traditional share.<br><br>"
+                            + "<b>This is a re-baselined median projection, not your decision<br>"
+                            + "input</b> -- you re-run quarterly with live balances, so a future<br>"
+                            + "year's figure is never something you act on. For the act-now<br>"
+                            + "decision use the current-year <b>Roth Conv</b> column, sized against<br>"
+                            + "the IRMAA cliff (2-yr MAGI lookback, both-spouse surcharge).<br>"
+                            + "See Assumptions &amp; Methods section 6a.</html>";
                     case 31 -> "<html><b>SS bridge (v9) -- extra draw replacing SS not yet received</b><br>"
                             + "Nonzero when the <i>SS bridge mode</i> is not \"No bridge\".<br><br>"
                             + "<b>From simulation start (both):</b> from the withdrawal-start year,<br>"
@@ -2324,7 +2330,18 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                             + "Grows by market return and by the NET of each Roth conversion<br>"
                             + "(gross minus conversion tax); drawn only after Traditional is<br>"
                             + "exhausted. Has no RMD and passes whole to the survivor, so it is<br>"
-                            + "the tax-free reserve that blunts the widow-year bracket jump.</html>";
+                            + "the tax-free reserve that blunts the widow-year bracket jump.<br><br>"
+                            + "<b>Why the year-over-year jump can exceed the Roth Conv line:</b><br>"
+                            + "this cell is an independently re-medianed share of the median<br>"
+                            + "portfolio (median balance x median Roth fraction), not a single<br>"
+                            + "traced account, so its delta folds in the rising Roth SHARE of<br>"
+                            + "the whole portfolio as conversions accumulate -- it will not<br>"
+                            + "reconcile against Roth Conv by simple addition, and is not meant to.<br><br>"
+                            + "<b>This is a re-baselined median projection, not your decision<br>"
+                            + "input</b> -- you re-run quarterly with live balances. For the act-now<br>"
+                            + "decision use the current-year <b>Roth Conv</b> column, sized against<br>"
+                            + "the IRMAA cliff (2-yr MAGI lookback, both-spouse surcharge).<br>"
+                            + "See Assumptions &amp; Methods section 6a.</html>";
                     default -> null;
                 };
             }
@@ -2710,13 +2727,17 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "a missing cost.</p>"
                 + "<p>The IRMAA <b>surcharge</b> is computed as a real dollar cost (not merely flagged) and "
                 + "included in the Tax column, with its own IRMAA column. It is assessed on MAGI from <b>2 years "
-                + "prior</b> (the statutory lookback). 2026 base tiers (per couple/year), inflation-indexed:</p>"
+                + "prior</b> (the statutory lookback). 2026 base tiers, inflation-indexed. The dollar figures below "
+                + "are <b>per couple</b> &mdash; each spouse on Medicare owes the surcharge, so a married couple with "
+                + "both enrolled pays <b>twice</b> the per-person amount, and that is what the tool charges (the MFJ "
+                + "surcharge table is the per-person schedule &times; 2):</p>"
                 + "<ul>"
                 + "<li>Tier 0: MAGI &le; $218,000 &rarr; $0</li>"
-                + "<li>Tier 1: $218,001 &ndash; $273,000 &rarr; $1,188</li>"
-                + "<li>Tier 2: $273,001 &ndash; $346,000 &rarr; $3,024</li>"
-                + "<li>Tier 3: $346,001 &ndash; $750,000 &rarr; $4,836</li>"
-                + "<li>Tier 4: &gt; $750,000 &rarr; $5,508</li>"
+                + "<li>Tier 1: $218,001 &ndash; $274,000 &rarr; $2,297 &nbsp;<span style='color:#777;'>($1,148/person &times; 2)</span></li>"
+                + "<li>Tier 2: $274,001 &ndash; $342,000 &rarr; $5,770 &nbsp;<span style='color:#777;'>($2,885/person &times; 2)</span></li>"
+                + "<li>Tier 3: $342,001 &ndash; $410,000 &rarr; $9,240 &nbsp;<span style='color:#777;'>($4,620/person &times; 2)</span></li>"
+                + "<li>Tier 4: $410,001 &ndash; $750,000 &rarr; $12,710 &nbsp;<span style='color:#777;'>($6,355/person &times; 2)</span></li>"
+                + "<li>Tier 5: &gt; $750,000 &rarr; $13,872 &nbsp;<span style='color:#777;'>($6,936/person &times; 2)</span></li>"
                 + "</ul>"
                 + "<p>IRMAA is a cliff: one dollar over a threshold triggers the full tier jump &mdash; which is "
                 + "why the conversion fill leaves a buffer (section 7).</p>"
@@ -2736,6 +2757,46 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "<p>The surcharge AMOUNT always tracks general inflation regardless of mode (Medicare costs rise "
                 + "with prices); the toggle affects only the income THRESHOLDS. An all-dashes IRMAA column means "
                 + "your MAGI stays under the (mode-dependent) thresholds every year.</p>"
+
+                + "<h3 style='color:#2a5d34;'>6a. Which numbers to act on &mdash; the live column vs. the projected balances</h3>"
+                + "<div style='background:#eef5ec; border-left:4px solid #2a5d34; padding:8px 12px; margin:6px 0 10px 0;'>"
+                + "<p style='margin:0; font-weight:bold; color:#1f4a29;'>The balance columns are a re-baselined "
+                + "projection, not the plan's decision input. The current-year Roth Conv column is the number you "
+                + "act on.</p></div>"
+                + "<p><b>Why the future balances are not the point.</b> Every dollar balance to the right of the "
+                + "table &mdash; Portfolio, Trad Bal, Roth Bal, Money Mkt &mdash; is a percentile snapshot of a "
+                + "stochastic fan (each cell is the independent median of <i>that</i> quantity across paths), so "
+                + "the columns do not tie out arithmetically row-to-row and are not meant to. The intended workflow "
+                + "is to re-run this tool every quarter (or at least yearly) with your <i>current, actual</i> "
+                + "account balances typed in fresh. That re-baselining is what keeps the plan honest, so a balance "
+                + "the tool projects for some year a decade out is never something you act on &mdash; by the time "
+                + "that year arrives you will have re-run with real numbers many times over.</p>"
+                + "<p><b>What you DO act on: the current-year Roth Conv column.</b> That figure answers the one "
+                + "question the tool exists to answer for the here-and-now: <i>how much can I convert to Roth this "
+                + "year without punching through the IRMAA cliff?</i> In fill-to-target mode it is sized to bring "
+                + "your MAGI up to &mdash; but not past &mdash; the lower of your chosen IRMAA tier ceiling (minus "
+                + "your buffer) and your chosen bracket edge. Because the IRMAA cliff is a true cliff (one dollar "
+                + "over triggers the full tier), the fill leaves the buffer you set and stops there.</p>"
+                + "<p><b>The two-year lookback is built in.</b> IRMAA bills on MAGI from <b>two years prior</b>, so "
+                + "the conversion you do this year sets a Medicare premium two years out. Concretely for a couple "
+                + "reaching Medicare together, the conversion sized in a given year is scored against the IRMAA "
+                + "threshold of the year whose premium it will drive &mdash; a 2027 conversion is what sets 2029 "
+                + "premiums. The engine carries a MAGI history and reads the year&minus;2 value for every IRMAA "
+                + "assessment, so the column already respects the lookback; you do not need to shift years by hand.</p>"
+                + "<p><b>Both spouses' surcharges are counted.</b> Once both of you are enrolled in Medicare, a tier "
+                + "breach costs the surcharge <b>twice</b> &mdash; once per person. The tool uses the per-couple "
+                + "(per-person &times; 2) MFJ schedule in section 6, so the cost it shows for crossing a cliff is "
+                + "the full household cost, not a single person's. That is deliberately why the cliff is worth "
+                + "protecting so carefully in the conversion sizing.</p>"
+                + "<p><b>One conservative caveat in transition years.</b> The tool assumes both spouses are enrolled "
+                + "in Medicare in every year it charges the couple surcharge. In a year when only one of you has "
+                + "actually reached Medicare (for the household here, calendar 2027, before the younger spouse's "
+                + "Part B begins), the true IRMAA owed for that single-enrollee year is only one person's share. "
+                + "The tool may therefore show that one transition year's IRMAA as larger than it will really be. "
+                + "This errs on the safe side &mdash; an overstated cliff cost makes the fill slightly more "
+                + "cautious, so trusting the column never causes an over-conversion into a cliff; at worst it "
+                + "leaves a little conversion headroom unused in that one year. Given that busting a cliff is far "
+                + "worse than under-filling, that is the right direction to be wrong.</p>"
 
                 + "<h3 style='color:#2a5d34;'>7. Spending, medical costs, and Roth conversions</h3>"
                 + "<p><b>Medical spending (the Medical column)</b> is a single lump input covering all health-care "
