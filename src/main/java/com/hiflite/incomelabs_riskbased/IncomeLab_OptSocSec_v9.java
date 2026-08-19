@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Wednesday, August 19, 2026 at 08:59 AM MST (UTC-7)
+// Last modified: Wednesday, August 19, 2026 at 02:11 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Wednesday, August 19, 2026 at 08:59 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Wednesday, August 19, 2026 at 02:11 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -388,6 +388,32 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         setLocationRelativeTo(null);
         setVisible(true);
         SwingUtilities.invokeLater(this::updateSSBenefitNote);
+
+        // v9 Option C: show the branded splash centered on THIS frame, once the
+        // frame's bounds are final. Maximization is applied by the OS
+        // asynchronously, so we must not read getBounds() immediately -- the
+        // pre-maximized rectangle would mis-center the splash. We place the splash
+        // from a WindowStateListener that fires when the frame reaches
+        // MAXIMIZED_BOTH, with a guarded deferred EDT fallback in case the maximize
+        // already happened (or the WM never fires the event). A one-shot flag makes
+        // the two paths safe against showing the splash twice.
+        final boolean[] splashShown = { false };
+        final Runnable trigger = () -> {
+            if (splashShown[0]) return;
+            splashShown[0] = true;
+            showSplashScreen(this);
+        };
+        addWindowStateListener(new java.awt.event.WindowAdapter() {
+            @Override public void windowStateChanged(java.awt.event.WindowEvent e) {
+                if ((e.getNewState() & JFrame.MAXIMIZED_BOTH) == JFrame.MAXIMIZED_BOTH) {
+                    trigger.run();
+                }
+            }
+        });
+        // Fallback: if the frame is already maximized by the time we get here (the
+        // state event can fire before the listener is attached), or the WM does not
+        // emit the event, place the splash on a later EDT cycle once bounds settle.
+        SwingUtilities.invokeLater(() -> SwingUtilities.invokeLater(trigger));
     }
 
     // ========================================================================
@@ -8352,7 +8378,100 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                     UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
                 }
             } catch (Exception ignored) {}
+            // v9: Option C splash. The frame is built, shown, and maximized FIRST;
+            // once its bounds settle the frame calls showSplashScreen(this) so the
+            // splash can be centered on the frame's ACTUAL rectangle -- which puts
+            // it on whatever monitor the app opened on, with no cross-monitor jump.
+            // Consequence by design: the app is briefly visible before the splash
+            // appears over its center. The trigger lives in the constructor.
             new IncomeLab_OptSocSec_v9();
         });
+    }
+
+    // v9 Option C: a chromeless 5-second branded splash (JWindow -- no title bar,
+    // no buttons), centered on the OWNER FRAME's actual rectangle so it lands on
+    // whatever monitor the app opened on. The frame calls this after its bounds
+    // settle. Dismisses at 5s, or immediately on any click or key press; a
+    // one-shot guard makes an early click near the 5s mark safe.
+    private static void showSplashScreen(JFrame owner) {
+        final javax.swing.JWindow splash = new javax.swing.JWindow(owner);
+
+        // Subtle background tint + a thin border so the chromeless window reads as
+        // intentional against whatever is on the desktop behind it.
+        JPanel content = new JPanel(new java.awt.GridBagLayout());
+        content.setBackground(new Color(244, 247, 243));   // subtle warm-neutral tint
+        content.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(120, 140, 120), 1),   // thin border
+                BorderFactory.createEmptyBorder(40, 64, 40, 64)));
+
+        JLabel title = new JLabel("Personal Retirement Spending Tool");
+        title.setFont(new Font("SansSerif", Font.BOLD, 23));
+        title.setForeground(new Color(30, 60, 40));
+        title.setHorizontalAlignment(SwingConstants.CENTER);
+
+        JLabel copyright = new JLabel("Copyright 2026 Robert Lemm");
+        copyright.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        copyright.setForeground(new Color(90, 100, 90));
+        copyright.setHorizontalAlignment(SwingConstants.CENTER);
+
+        // Title, then two lines of vertical gap, then the smaller copyright line.
+        java.awt.GridBagConstraints gc = new java.awt.GridBagConstraints();
+        gc.gridx = 0; gc.gridy = 0; gc.anchor = java.awt.GridBagConstraints.CENTER;
+        content.add(title, gc);
+        gc.gridy = 1; gc.insets = new java.awt.Insets(
+                2 * copyright.getFontMetrics(copyright.getFont()).getHeight(), 0, 0, 0);
+        content.add(copyright, gc);
+
+        splash.setContentPane(content);
+        splash.pack();
+        // Center on the OWNER FRAME's realized rectangle -- this carries the
+        // monitor origin offset, so the splash lands centered on the app on
+        // whatever monitor it opened on. Fall back to primary-screen center only if
+        // the owner has no sensible bounds yet.
+        java.awt.Rectangle fb = owner.getBounds();
+        if (fb != null && fb.width > 0 && fb.height > 0) {
+            int cx = fb.x + fb.width  / 2;
+            int cy = fb.y + fb.height / 2;
+            splash.setLocation(cx - splash.getWidth() / 2, cy - splash.getHeight() / 2);
+        } else {
+            splash.setLocationRelativeTo(null);
+        }
+        splash.setAlwaysOnTop(true);          // stay above the frame it is centered on
+
+        // One-shot dismissal, guarded so timer-and-click can't both dispose.
+        final boolean[] dismissed = { false };
+        final Runnable dismiss = () -> {
+            if (dismissed[0]) return;
+            dismissed[0] = true;
+            splash.setVisible(false);
+            splash.dispose();
+        };
+
+        // Auto-close at 5 seconds.
+        javax.swing.Timer timer = new javax.swing.Timer(5000, e -> dismiss.run());
+        timer.setRepeats(false);
+
+        // Early dismiss on any click or key press anywhere on the splash.
+        splash.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mousePressed(java.awt.event.MouseEvent e) {
+                timer.stop(); dismiss.run();
+            }
+        });
+        content.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mousePressed(java.awt.event.MouseEvent e) {
+                timer.stop(); dismiss.run();
+            }
+        });
+        // Key handling: the JWindow can be focusable so a key press dismisses too.
+        splash.setFocusableWindowState(true);
+        splash.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override public void keyPressed(java.awt.event.KeyEvent e) {
+                timer.stop(); dismiss.run();
+            }
+        });
+
+        splash.setVisible(true);
+        splash.requestFocus();
+        timer.start();
     }
 }
