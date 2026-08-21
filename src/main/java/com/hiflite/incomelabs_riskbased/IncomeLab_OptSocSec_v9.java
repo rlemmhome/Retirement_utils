@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Wednesday, August 19, 2026 at 04:25 PM MST (UTC-7)
+// Last modified: Thursday, August 20, 2026 at 11:25 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Wednesday, August 19, 2026 at 04:25 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Thursday, August 20, 2026 at 11:25 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -312,6 +312,15 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     private boolean    showRealDollars = false;
     // Cache for SS Optimizer results -- repopulated when real/nominal toggle fires
     private java.util.List<SsOptResult> lastOptResults = null;
+    private int lastOptInfeasMode = 0;   // v9: remembered for toggle refresh
+    // v9: Option-2 optimizer inputs. Travel-headroom floors and stay-green buffer
+    // (SS Optimizer tab ONLY -- they feed the feasibility test, never the Pro
+    // engine's spending). Grid/fidelity controls for the two-stage scan, and the
+    // infeasible-set fallback selector.
+    private JSpinner spOptGoGoFloor, spOptSlowGoFloor, spOptGreenBuffer;
+    private JSpinner spOptScanPaths, spOptScanFan, spOptVerifyTopN;
+    private JComboBox<String> cmbOptGrid;        // year / half-year granularity
+    private JComboBox<String> cmbOptInfeasible;  // fallback when nothing is feasible
     private int lastOptManBY, lastOptManBM, lastOptWomanBY, lastOptWomanBM;
     private int lastOptManPIA, lastOptWomanPIA;
     private boolean optResultsStale = false;  // true if inputs changed after optimizer ran
@@ -1599,7 +1608,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
             // Also refresh optimizer table if results are cached
             if (lastOptResults != null) populateOptTable(lastOptResults,
                     lastOptManBY, lastOptManBM, lastOptWomanBY, lastOptWomanBM,
-                    lastOptManPIA, lastOptWomanPIA);
+                    lastOptManPIA, lastOptWomanPIA, lastOptInfeasMode);
         });
 
         JPanel aNorth = new JPanel(new BorderLayout()); aNorth.setOpaque(false);
@@ -3175,31 +3184,18 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 BorderFactory.createLineBorder(new Color(150, 190, 240), 1),
                 BorderFactory.createEmptyBorder(6, 10, 6, 10)));
 
-        cmbOptSort = new JComboBox<>(new String[]{
-                "Go-Go Guar (guaranteed income during go-go years)",
-                "Survivor Floor (income the survivor keeps for life)",
-                "Combined SS at full claim" });
-        cmbOptSort.setToolTipText("<html><b>What the optimizer ranks by (v6)</b><br>"
-                + "<b>Go-Go Guar</b> -- mortality-weighted guaranteed income accumulated<br>"
-                + "across the go-go years. Structurally <b>favours claiming early</b>: a<br>"
-                + "delayed benefit pays nothing during that window, so delay always<br>"
-                + "scores badly here however valuable it is later.<br><br>"
-                + "<b>Survivor Floor</b> -- the annual benefit the surviving spouse keeps<br>"
-                + "after the first death, which is the LARGER of the two claimed<br>"
-                + "benefits. <b>Favours delaying the higher earner</b>, permanently raising<br>"
-                + "the survivor's income for life.<br><br>"
-                + "<b>Combined SS at full claim</b> -- total household benefit once both<br>"
-                + "have claimed, ignoring when it starts.<br><br"
-                + "These give DIFFERENT answers on purpose. Go-Go Guar optimises the<br>"
-                + "travel decade; Survivor Floor optimises the survivor's protection.<br>"
-                + "That difference is the trade-off -- the optimizer cannot decide it<br>"
-                + "for you, because it has no death event and no spending-shape<br>"
-                + "preference.</html>");
+        // v9 Option 2: ranking is now FIXED -- feasibility first (green + travel
+        // floors + PoS), then survivor floor among the feasible set. The old
+        // "rank by" dropdown is retired; cmbOptSort is kept as a hidden field to
+        // avoid touching the several places that still reference it, but it is not
+        // added to the panel.
+        cmbOptSort = new JComboBox<>(new String[]{ "Feasibility then survivor floor" });
 
-        lblOptObjective = new JLabel(" ");
-        lblOptObjective.setFont(new Font("SansSerif", Font.BOLD, 12));
+        lblOptObjective = new JLabel(
+                "  Objective: keep every year green + fund go-go/slow-go travel + hold PoS,"
+                        + " then maximize JoAnn's survivor floor.");
+        lblOptObjective.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblOptObjective.setForeground(new Color(150, 60, 0));
-        cmbOptSort.addActionListener(e -> refreshOptObjective());
 
         chkOptimize = new JCheckBox("Optimize SS start dates (scan all combinations)", false);
         chkOptimize.setFont(new Font("SansSerif", Font.BOLD, 14));
@@ -3210,14 +3206,12 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "When unchecked, click Run Simulation on the Pro PoS / GK tabs as usual.</html>");
 
         JLabel modeNote = new JLabel(
-                "  Unchecked = use manual SS dates from input panel  |  "
-                        + "Checked = scan all User x Spouse claiming-age combinations");
+                "  Each combination is scored by the real Pro engine (reduced-fidelity"
+                        + " scan, then full re-verify of the top few).");
         modeNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
         modeNote.setForeground(new Color(80, 80, 80));
 
         modeRow.add(chkOptimize);
-        modeRow.add(new JLabel("   Rank by:"));
-        modeRow.add(cmbOptSort);
         modeRow.add(lblOptObjective);
         modeRow.add(modeNote);
 
@@ -3270,12 +3264,74 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         ctrlRow.add(btnCancelOpt);
         ctrlRow.add(lblOptStatus);
 
+        // == v9 Option-2 objective controls: travel floors, buffer, grid, fidelity,
+        //    infeasible fallback. All feed the feasibility test on THIS tab only.
+        spOptGoGoFloor   = spinI(25000, 0, 200000, 1000, "#,###");
+        spOptGoGoFloor.setToolTipText("<html><b>Go-go travel floor ($/yr, real)</b><br>"
+                + "Minimum surplus/gap required in each go-go year for a claiming<br>"
+                + "combination to be 'feasible'. This is your active-travel budget<br>"
+                + "that must be affordable from discretionary headroom, not just on<br>"
+                + "paper. SS Optimizer only -- does not affect Pro PoS spending.</html>");
+        spOptSlowGoFloor = spinI(15000, 0, 200000, 1000, "#,###");
+        spOptSlowGoFloor.setToolTipText("<html><b>Slow-go travel floor ($/yr, real)</b><br>"
+                + "Minimum surplus/gap required in each slow-go year. Your closer-to-<br>"
+                + "home travel budget. SS Optimizer only.</html>");
+        spOptGreenBuffer = spinI(0, 0, 100000, 500, "#,###");
+        spOptGreenBuffer.setToolTipText("<html><b>Stay-green buffer ($/yr, real)</b><br>"
+                + "Minimum surplus/gap required in EVERY year (including non-travel<br>"
+                + "years). 0 means 'never go red'. Raise it for a safety cushion.<br>"
+                + "SS Optimizer only.</html>");
+
+        cmbOptGrid = new JComboBox<>(new String[]{ "Year grid", "Half-year grid" });
+        cmbOptGrid.setToolTipText("<html><b>Scan granularity</b><br>"
+                + "Claim dates are scanned at this resolution in the coarse pass.<br>"
+                + "Year grid is fastest; half-year doubles the combinations. The<br>"
+                + "top results are then re-verified at full fidelity.</html>");
+
+        spOptScanPaths = spinI(200, 50, 1000, 50, "#,###");
+        spOptScanPaths.setToolTipText("<html><b>Scan solve paths (reduced fidelity)</b><br>"
+                + "Monte Carlo paths per combination during the fast ranking scan.<br>"
+                + "Lower = faster, noisier ranking. The winners are re-verified at<br>"
+                + "your full Pro-tab path count, so the final numbers are precise.</html>");
+        spOptScanFan   = spinI(100, 20, 500, 20, "#,###");
+        spOptScanFan.setToolTipText("<html><b>Scan fan paths (reduced fidelity)</b><br>"
+                + "Fan paths per combination during the scan. Same trade-off as<br>"
+                + "solve paths -- fast ranking now, full re-verify later.</html>");
+        spOptVerifyTopN= spinI(5, 1, 25, 1, "#");
+        spOptVerifyTopN.setToolTipText("<html><b>Re-verify top N</b><br>"
+                + "After the coarse scan ranks the combinations, the best N are<br>"
+                + "re-run at your full Pro-tab fidelity so their PoS, surplus and<br>"
+                + "survivor-floor numbers are exact.</html>");
+
+        cmbOptInfeasible = new JComboBox<>(new String[]{
+                "Show trade-off frontier", "Show closest (min shortfall)", "Relax travel floor" });
+        cmbOptInfeasible.setToolTipText("<html><b>When no combination meets all floors</b><br>"
+                + "<b>Show trade-off frontier</b> -- rank by survivor floor anyway and show<br>"
+                + "each option's travel headroom, so you can see the trade you must<br>"
+                + "make (e.g. claim JoAnn a year earlier to regain go-go headroom).<br>"
+                + "<b>Show closest</b> -- rank by the smallest worst-floor miss.<br>"
+                + "<b>Relax travel floor</b> -- drop the go-go/slow-go floors to whatever<br>"
+                + "the best feasible combination can support, and report that level.</html>");
+
+        JPanel objRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        objRow.setBackground(new Color(245, 245, 242));
+        objRow.add(new JLabel("Go-go floor $:"));    objRow.add(spOptGoGoFloor);
+        objRow.add(new JLabel("Slow-go floor $:"));  objRow.add(spOptSlowGoFloor);
+        objRow.add(new JLabel("Green buffer $:"));   objRow.add(spOptGreenBuffer);
+        objRow.add(new JLabel("   Grid:"));          objRow.add(cmbOptGrid);
+        objRow.add(new JLabel("Scan paths:"));       objRow.add(spOptScanPaths);
+        objRow.add(new JLabel("fan:"));              objRow.add(spOptScanFan);
+        objRow.add(new JLabel("Verify top:"));       objRow.add(spOptVerifyTopN);
+        objRow.add(new JLabel("   If infeasible:")); objRow.add(cmbOptInfeasible);
+
         // == Results table ==================================================
+        // v9 Option 2: columns show the real Pro-engine metrics for each claim
+        // combination, so the trade-off is visible rather than collapsed to one pick.
         String[] optCols = {
-                "Rank", "User SS Start", "User Age", "User Mo. ($)",
-                "Spouse SS Start",  "Spouse Age",  "Spouse Mo. ($)",
-                "Combined SS/yr", "Total Inc Yr1", "Port Wd Yr1",
-                "Init Rate %", "Go-Go Guar", "Survivor Floor", "Proj Final Bal"
+                "Rank", "User SS Start", "Spouse SS Start",
+                "PoS %", "Feasible", "Min surplus",
+                "Go-go headroom", "Slow-go headroom", "Survivor Floor",
+                "SS at full claim", "Verified"
         };
         tblOptModel = new javax.swing.table.DefaultTableModel(optCols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -3289,27 +3345,32 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         tblOpt.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         tblOpt.setSelectionBackground(new Color(190, 220, 255));
 
-        int[] optWidths = {40, 90, 60, 90, 90, 60, 90, 105, 105, 105, 75, 110, 115};
+        int[] optWidths = {40, 110, 110, 60, 70, 100, 110, 110, 110, 110, 70};
         for (int i = 0; i < optWidths.length && i < tblOpt.getColumnCount(); i++)
             tblOpt.getColumnModel().getColumn(i).setPreferredWidth(optWidths[i]);
 
-        // Row coloring: gold top1, silver top2, bronze top3
+        // Row coloring: gold/silver/bronze for the top 3; infeasible rows tinted.
         javax.swing.table.DefaultTableCellRenderer optRend = new javax.swing.table.DefaultTableCellRenderer() {
             final Color GOLD   = new Color(255, 245, 150);
             final Color SILVER = new Color(232, 232, 232);
             final Color BRONZE = new Color(245, 225, 200);
+            final Color INFEAS = new Color(250, 232, 232);   // faint red for not-feasible
             @Override public java.awt.Component getTableCellRendererComponent(
                     JTable t, Object v, boolean sel, boolean foc, int row, int col) {
                 java.awt.Component c = super.getTableCellRendererComponent(t,v,sel,foc,row,col);
                 if (!sel) {
                     Object ro = tblOptModel.getValueAt(row, 0);
                     int rank = ro instanceof Integer ? (Integer)ro : 9999;
+                    Object fo = tblOptModel.getValueAt(row, 4);   // Feasible column
+                    boolean feas = "Yes".equals(fo);
                     if      (rank == 1) c.setBackground(GOLD);
                     else if (rank == 2) c.setBackground(SILVER);
                     else if (rank == 3) c.setBackground(BRONZE);
+                    else if (!feas)     c.setBackground(INFEAS);
                     else                c.setBackground(row%2==0 ? Color.WHITE : new Color(248,248,245));
                     c.setForeground(Color.BLACK);
                 }
+                // Left-align the two date columns (1,2); right-align the rest.
                 ((JLabel)c).setHorizontalAlignment((col==1||col==4)?LEFT:RIGHT);
                 return c;
             }
@@ -3334,11 +3395,17 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         clickHint.setFont(new Font("SansSerif", Font.ITALIC, 12));
         clickHint.setForeground(new Color(0, 80, 150));
 
-        JPanel north = new JPanel(new BorderLayout(0, 4));
+        JPanel north = new JPanel();
+        north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
         north.setBackground(new Color(245, 245, 242));
-        north.add(modeRow, BorderLayout.NORTH);
-        north.add(ctrlRow, BorderLayout.CENTER);
-        north.add(clickHint, BorderLayout.SOUTH);
+        modeRow.setAlignmentX(LEFT_ALIGNMENT);
+        ctrlRow.setAlignmentX(LEFT_ALIGNMENT);
+        objRow.setAlignmentX(LEFT_ALIGNMENT);
+        clickHint.setAlignmentX(LEFT_ALIGNMENT);
+        north.add(modeRow);
+        north.add(ctrlRow);
+        north.add(objRow);
+        north.add(clickHint);
 
         p.add(north,                   BorderLayout.NORTH);
         p.add(new JScrollPane(tblOpt), BorderLayout.CENTER);
@@ -3624,116 +3691,98 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         tblOptModel.setRowCount(0);
         lblOptStatus.setText("Building candidate grid...");
 
-        // Snapshot inputs
-        final int manBY    = iv(spManBirthYear),   manBM    = iv(spManBirthMonth);
-        final int womanBY  = iv(spWomanBirthYear), womanBM  = iv(spWomanBirthMonth);
-        final int manPIA   = iv(spManPIA),          womanPIA = iv(spWomanPIA);
-        final double ssCola= dv(spSSCola) / 100.0;
-        final int annuity  = (chkUseAnnuity != null && chkUseAnnuity.isSelected()) ? iv(spAnnuity) : 0;
-        final int annSY    = iv(spAnnuityStartYear), annSM = iv(spAnnuityStartMonth);
-        final int baseYear = iv(spSimStartYear);
-        final int wdYear   = iv(spWithdrawStartYear), wdMonth = iv(spWithdrawStartMonth);
-        final int horizon  = iv(spHorizon);
-        final int portfolio= iv(spPortfolio);
-        final double ret   = dv(spNomReturn) / 100.0;
-        final double infl  = dv(spInflation) / 100.0;
-        final double living= iv(spLivingExp);
-        final double med   = iv(spMedical);
-        final double medI  = dv(spMedInflation) / 100.0;
-        final double baseTax = iv(spBaseTax);
-        final double taxI  = dv(spTaxInflation) / 100.0;
-        final double goGo  = dv(spGoGo);
-        final int goGoDur  = iv(spGoGoDuration);
-        // v4: filing status (single -> one-person scan) and life expectancies
-        // (for the mortality survival ramp).
+        // v9 Option 2: the optimizer now SCORES EACH CLAIM COMBINATION BY RUNNING
+        // THE REAL PRO ENGINE (simulatePro) read-only. Two stages:
+        //   1) coarse scan on a YEAR (or half-year) grid at REDUCED fidelity --
+        //      fast, noisy ranking;
+        //   2) RE-VERIFY the top N at the user's FULL Pro-tab fidelity so the
+        //      reported numbers are exact.
+        // Feasibility = stays green every year (>= green buffer), meets the go-go
+        // and slow-go travel floors, and holds the PoS target. Among feasible
+        // combos we rank by SURVIVOR FLOOR. If none is feasible, the chosen
+        // fallback decides what to show. NONE of this touches the Pro engine's
+        // own inputs or table -- it clones the current inputs per combination.
+        final SimInputs baseInp = readInputs();
+        final int manBY    = baseInp.manBirthYear,   manBM    = baseInp.manBirthMonth;
+        final int womanBY  = baseInp.womanBirthYear, womanBM  = baseInp.womanBirthMonth;
+        final int manPIA   = baseInp.manPIA,          womanPIA = baseInp.womanPIA;
         final boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
-        final int manLE   = iv(spManPlanAge);
-        final int womanLE = iv(spWomanPlanAge);
+
+        // Objective inputs (this tab only).
+        final int goGoFloor   = iv(spOptGoGoFloor);
+        final int slowGoFloor = iv(spOptSlowGoFloor);
+        final int greenBuf    = iv(spOptGreenBuffer);
+        final int posTarget   = iv(spTargetPoS);
+        final int gridStepMo  = (cmbOptGrid != null && cmbOptGrid.getSelectedIndex() == 1) ? 6 : 12;
+        final int scanPaths   = iv(spOptScanPaths);
+        final int scanFan     = iv(spOptScanFan);
+        final int verifyTopN  = iv(spOptVerifyTopN);
+        final int fullPaths   = iv(spMcSolvePaths);
+        final int fullFan     = iv(spMcFanPaths);
+        final int binIters    = iv(spBinaryIters);
+        final int infeasMode  = (cmbOptInfeasible != null) ? cmbOptInfeasible.getSelectedIndex() : 0;
 
         SwingWorker<Void, String> worker = new SwingWorker<>() {
             @Override protected Void doInBackground() {
-                publish("Scanning SS combinations...");
-
-                // Build month ranges: today to age 70
                 java.time.LocalDate today = java.time.LocalDate.now();
                 int sy = today.getYear(), sm = today.getMonthValue();
 
-                java.util.List<int[]> bobMonths = buildSsRange(manBY, manBM, sy, sm);
+                // Coarse candidate months on the chosen grid step.
+                java.util.List<int[]> bobMonths = buildSsRangeStep(manBY, manBM, sy, sm, gridStepMo);
                 java.util.List<int[]> joMonths;
-                if (single) {
-                    // v4: SINGLE filing -> the spouse does not claim. Scan only
-                    // the primary/User person's claim months. A single sentinel
-                    // {0,0} means "no spouse claim"; scoreCombination yields $0
-                    // spouse SS for calYear >= 0 only when PIA is also zeroed, so
-                    // we also pass womanPIA as 0 below in single mode.
-                    joMonths = new java.util.ArrayList<>();
-                    joMonths.add(new int[]{0, 0});
-                } else {
-                    joMonths = buildSsRange(womanBY, womanBM, sy, sm);
-                }
+                if (single) { joMonths = new java.util.ArrayList<>(); joMonths.add(new int[]{0,0}); }
+                else joMonths = buildSsRangeStep(womanBY, womanBM, sy, sm, gridStepMo);
 
                 int total = bobMonths.size() * joMonths.size();
-                publish(String.format("Scanning %,d combinations...", total));
+                publish(String.format("Stage 1: scanning %,d combinations at reduced fidelity...", total));
 
                 java.util.List<SsOptResult> results = new java.util.ArrayList<>();
                 int done = 0;
+                long t0 = System.currentTimeMillis();
                 for (int[] bob : bobMonths) {
                     for (int[] jo : joMonths) {
                         if (optCancelRequested) break;
-                        SsOptResult r = scoreCombination(
-                                bob[0], bob[1], jo[0], jo[1],
-                                manBY, manBM, womanBY, womanBM,
-                                manPIA, single ? 0 : womanPIA, ssCola,
-                                annuity, annSY, annSM,
-                                baseYear, wdYear, wdMonth, horizon,
-                                portfolio, ret, infl, living, med, medI,
-                                baseTax, taxI, goGo, goGoDur,
-                                manLE, womanLE, single);
+                        SsOptResult r = scoreCombinationPro(
+                                baseInp, bob[0], bob[1], jo[0], jo[1], single,
+                                goGoFloor, slowGoFloor, greenBuf, posTarget,
+                                scanPaths, scanFan, binIters, /*verified=*/false);
                         results.add(r);
                         done++;
-                        if (done % 200 == 0) {
-                            final int d = done, t = total;
-                            publish(String.format("Scanned %,d / %,d  (%.1f%%)",
-                                    d, t, d * 100.0 / t));
+                        if (done % 2 == 0 || done == total) {
+                            long el = System.currentTimeMillis() - t0;
+                            double per = el / (double) done;
+                            long etaMs = (long)(per * (total - done));
+                            publish(String.format("Stage 1: %,d / %,d  (%.0f%%)  ~%ds left",
+                                    done, total, done*100.0/total, etaMs/1000));
                         }
                     }
                     if (optCancelRequested) break;
                 }
 
-                // Sort by totalIncomeYr1 desc (most total income in first drawing year)
-                // Primary: maximize total income across all go-go years
-                // Secondary: maximize projected final balance (legacy)
-                // v6: the objective is selectable. Go-Go Guar (default) maximises
-                // mortality-weighted guaranteed income during the go-go window,
-                // which structurally penalises delay -- a delayed benefit pays
-                // nothing in that window. Survivor Floor instead maximises the
-                // income the surviving spouse keeps for life, which is the reason
-                // to delay the HIGHER earner. They give different answers on
-                // purpose; that difference IS the trade-off.
-                final int sortMode = (cmbOptSort != null) ? cmbOptSort.getSelectedIndex() : 0;
-                results.sort((a, b) -> {
-                    int cmp;
-                    switch (sortMode) {
-                        case 1 -> {   // Survivor Floor
-                            cmp = Double.compare(b.survivorFloor, a.survivorFloor);
-                            if (cmp == 0) cmp = Double.compare(b.goGoTotalIncome, a.goGoTotalIncome);
-                        }
-                        case 2 -> {   // Combined SS at full claim
-                            cmp = Double.compare(b.combinedAnnual, a.combinedAnnual);
-                            if (cmp == 0) cmp = Double.compare(b.goGoTotalIncome, a.goGoTotalIncome);
-                        }
-                        default -> {  // Go-Go Guar
-                            cmp = Double.compare(b.goGoTotalIncome, a.goGoTotalIncome);
-                            if (cmp == 0) cmp = Double.compare(b.projFinalBal, a.projFinalBal);
-                        }
-                    }
-                    return cmp;
-                });
+                // Rank the coarse results by the objective, honoring feasibility.
+                rankOptResults(results, infeasMode);
 
-                // Publish to table
+                // Stage 2: re-verify the top N at full fidelity.
+                if (!optCancelRequested) {
+                    int n = Math.min(verifyTopN, results.size());
+                    for (int i = 0; i < n; i++) {
+                        if (optCancelRequested) break;
+                        publish(String.format("Stage 2: re-verifying %d / %d at full fidelity...", i+1, n));
+                        SsOptResult r = results.get(i);
+                        SsOptResult v = scoreCombinationPro(
+                                baseInp, r.bobYear, r.bobMonth, r.joYear, r.joMonth, single,
+                                goGoFloor, slowGoFloor, greenBuf, posTarget,
+                                fullPaths, fullFan, binIters, /*verified=*/true);
+                        results.set(i, v);
+                    }
+                    // Re-rank after verification (full-fidelity numbers may reorder the top).
+                    rankOptResults(results, infeasMode);
+                }
+
                 final java.util.List<SsOptResult> finalResults = results;
-                SwingUtilities.invokeLater(() -> populateOptTable(finalResults,
-                        manBY, manBM, womanBY, womanBM, manPIA, womanPIA));
+                final int fMode = infeasMode;
+                SwingUtilities.invokeLater(() ->
+                        populateOptTable(finalResults, manBY, manBM, womanBY, womanBM, manPIA, womanPIA, fMode));
                 return null;
             }
             @Override protected void process(java.util.List<String> msgs) {
@@ -3742,14 +3791,129 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
             @Override protected void done() {
                 btnRunOpt.setEnabled(true);
                 btnCancelOpt.setEnabled(false);
-                if (!optCancelRequested)
-                    lblOptStatus.setText("Scan complete. Click any row to apply and run IL.");
-                else
+                if (optCancelRequested)
                     lblOptStatus.setText("Cancelled. Partial results shown.");
             }
         };
         worker.execute();
     }
+
+    // v9: candidate claim months from (startY,startM) to age 70, stepping by
+    // stepMo months (12 = yearly grid, 6 = half-year). Always includes the age-70
+    // endpoint so the maximal-delay option is scored.
+    private java.util.List<int[]> buildSsRangeStep(int birthYear, int birthMonth,
+                                                   int startYear, int startMonth, int stepMo) {
+        java.util.List<int[]> result = new java.util.ArrayList<>();
+        int endY = birthYear + 70, endM = birthMonth;
+        int y = startYear, m = startMonth;
+        int endTot = endY * 12 + endM;
+        while (y * 12 + m <= endTot) {
+            result.add(new int[]{y, m});
+            int nt = y * 12 + m + stepMo;
+            y = (nt - 1) / 12; m = ((nt - 1) % 12) + 1;
+        }
+        // Ensure the exact age-70 endpoint is present.
+        int[] last = result.get(result.size()-1);
+        if (last[0]*12+last[1] < endTot) result.add(new int[]{endY, endM});
+        return result;
+    }
+
+    // v9 Option 2: score ONE claim combination by running the real Pro engine.
+    // Clones the base inputs, sets this combination's SS start dates, runs
+    // simulatePro at the given fidelity, and reads back PoS + per-year surplus to
+    // test feasibility against the travel/green floors. Read-only w.r.t. the Pro
+    // engine and its table.
+    private SsOptResult scoreCombinationPro(
+            SimInputs base, int bobY, int bobM, int joY, int joM, boolean single,
+            int goGoFloor, int slowGoFloor, int greenBuf, int posTarget,
+            int solvePaths, int fanPaths, int binIters, boolean verified) {
+
+        SsOptResult r = new SsOptResult();
+        r.bobYear = bobY; r.bobMonth = bobM; r.joYear = joY; r.joMonth = joM;
+        r.verified = verified;
+
+        // Clone inputs and set this combination's claim dates.
+        SimInputs inp = base.copy();
+        inp.manSSStartYear = bobY; inp.manSSStartMonth = bobM;
+        if (single) { inp.womanPIA = 0; }
+        else { inp.womanSSStartYear = joY; inp.womanSSStartMonth = joM; }
+
+        // Monthly benefits at these claim dates (for display + survivor floor).
+        r.bobMonthly = calcSSMonthlyBenefit(inp.manPIA, inp.manBirthYear, inp.manBirthMonth, bobY, bobM);
+        r.joMonthly  = single ? 0
+                : calcSSMonthlyBenefit(inp.womanPIA, inp.womanBirthYear, inp.womanBirthMonth, joY, joM);
+        r.combinedAnnual = (r.bobMonthly + r.joMonthly) * 12.0;
+        r.survivorFloor  = Math.max(r.bobMonthly, r.joMonthly) * 12.0;
+
+        ProResults pr;
+        try {
+            pr = simulatePro(inp, 987654321L, solvePaths, fanPaths, binIters);
+        } catch (Exception ex) {
+            r.feasible = false; r.shortfall = Integer.MAX_VALUE; return r;
+        }
+        r.actualPoS = pr.actualPoS * 100.0;   // engine stores a 0..1 fraction; keep as percent here
+
+        // Read per-year surplus in REAL dollars, classify each year by its go-go
+        // multiplier, and track the worst surplus overall / in go-go / in slow-go.
+        double goGoMultVal   = base.goGoMultiplier;      // e.g. 1.5
+        double slowGoMultVal = base.slowGoMultiplier;    // e.g. 1.3
+        int minAll = Integer.MAX_VALUE, minGo = Integer.MAX_VALUE, minSlow = Integer.MAX_VALUE;
+        boolean sawGo = false, sawSlow = false;
+        if (pr.medianRows != null) {
+            for (EnhRow row : pr.medianRows) {
+                double inflF = (row.inflFactor > 0) ? row.inflFactor : 1.0;
+                int surplusReal = (int) Math.round(row.surplus / inflF);
+                if (surplusReal < minAll) minAll = surplusReal;
+                if (approxEq(row.goGoMult, goGoMultVal)) {
+                    sawGo = true; if (surplusReal < minGo) minGo = surplusReal;
+                } else if (approxEq(row.goGoMult, slowGoMultVal)) {
+                    sawSlow = true; if (surplusReal < minSlow) minSlow = surplusReal;
+                }
+            }
+        }
+        r.minSurplus       = (minAll  == Integer.MAX_VALUE) ? 0 : minAll;
+        r.minGoGoSurplus   = sawGo   ? minGo   : Integer.MAX_VALUE;   // no go-go years -> not binding
+        r.minSlowGoSurplus = sawSlow ? minSlow : Integer.MAX_VALUE;   // no slow-go years -> not binding
+
+        // Feasibility test + worst shortfall (how far the worst floor is missed).
+        int shortfall = 0;
+        boolean feas = true;
+        if (r.minSurplus < greenBuf)      { feas = false; shortfall = Math.max(shortfall, greenBuf - r.minSurplus); }
+        if (sawGo && r.minGoGoSurplus < goGoFloor)     { feas = false; shortfall = Math.max(shortfall, goGoFloor - r.minGoGoSurplus); }
+        if (sawSlow && r.minSlowGoSurplus < slowGoFloor){ feas = false; shortfall = Math.max(shortfall, slowGoFloor - r.minSlowGoSurplus); }
+        if (r.actualPoS < posTarget)      { feas = false; shortfall = Math.max(shortfall, 1); }  // PoS miss flagged
+        r.feasible = feas; r.shortfall = shortfall;
+        return r;
+    }
+
+    private static boolean approxEq(double a, double b) { return Math.abs(a - b) < 1e-6; }
+
+    // v9 Option 2: rank optimizer results. Feasible combinations always sort ahead
+    // of infeasible ones and, among feasible, by SURVIVOR FLOOR (descending) --
+    // the objective. Among infeasible, the fallback decides: frontier still sorts
+    // by survivor floor (so you see the trade), 'closest' sorts by smallest
+    // shortfall, 'relax' behaves like frontier (the table shows achieved headroom).
+    private void rankOptResults(java.util.List<SsOptResult> results, int infeasMode) {
+        results.sort((a, b) -> {
+            if (a.feasible != b.feasible) return a.feasible ? -1 : 1;   // feasible first
+            if (a.feasible) {
+                int c = Double.compare(b.survivorFloor, a.survivorFloor);
+                if (c == 0) c = Integer.compare(b.minSurplus, a.minSurplus);
+                return c;
+            }
+            // both infeasible
+            if (infeasMode == 1) {   // Show closest: least shortfall first
+                int c = Integer.compare(a.shortfall, b.shortfall);
+                if (c == 0) c = Double.compare(b.survivorFloor, a.survivorFloor);
+                return c;
+            }
+            // frontier / relax: survivor floor, then least shortfall
+            int c = Double.compare(b.survivorFloor, a.survivorFloor);
+            if (c == 0) c = Integer.compare(a.shortfall, b.shortfall);
+            return c;
+        });
+    }
+
 
     private java.util.List<int[]> buildSsRange(int birthYear, int birthMonth,
                                                int startYear, int startMonth) {
@@ -3782,162 +3946,60 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         return surv;
     }
 
-    /** Deterministic year-by-year scoring (React logic ported to Java) */
-    private SsOptResult scoreCombination(
-            int bobY, int bobM, int joY, int joM,
-            int manBY, int manBM, int womanBY, int womanBM,
-            int manPIA, int womanPIA, double ssCola,
-            int annuity, int annSY, int annSM,
-            int baseYear, int wdYear, int wdMonth, int horizon,
-            int portfolio, double ret, double infl,
-            double living, double med, double medI,
-            double baseTax, double taxI,
-            double goGo, int goGoDur,
-            int manLE, int womanLE, boolean single) {
-
-        double bobMonthly   = calcSSMonthlyBenefit(manPIA,   manBY, manBM, bobY, bobM);
-        // In single mode the spouse does not claim (PIA passed as 0 -> $0).
-        double joMonthly    = single ? 0
-                : calcSSMonthlyBenefit(womanPIA, womanBY, womanBM, joY, joM);
-        double bobAnnual    = bobMonthly * 12;
-        double joAnnual     = joMonthly  * 12;
-
-        double bal      = portfolio;
-        double inflAcc  = 1.0;  // starts at 1.0 for year 0, compounds each year
-        double totalIncYr1  = 0;
-        double portWdYr1    = 0;
-        double goGoTotal    = 0;
-        double inflAccYr1   = 1.0;
-        int startY = wdYear - baseYear;
-
-        for (int y = 0; y < horizon; y++) {
-            int calYear  = baseYear + y;
-            boolean draw = calYear >= wdYear;
-            if (y > 0) inflAcc *= (1 + infl);  // compound from year 1 onward, not year 0
-
-            // SS income with COLA
-            double manSS = 0, womanSS = 0;
-            if (calYear >= bobY) {
-                double years = calYear - bobY;
-                manSS = (calYear == bobY)
-                        ? bobAnnual * (13.0 - bobM) / 12.0
-                        : bobAnnual * Math.pow(1 + ssCola, years);
-            }
-            if (calYear >= joY) {
-                double years = calYear - joY;
-                womanSS = (calYear == joY)
-                        ? joAnnual * (13.0 - joM) / 12.0
-                        : joAnnual * Math.pow(1 + ssCola, years);
-            }
-            // Annuity
-            double ann = 0;
-            if (calYear >= annSY) {
-                ann = (calYear == annSY) ? annuity * (13.0 - annSM) / 12.0 : annuity;
-            }
-            double guaranteed = manSS + womanSS + ann;
-
-            // Spending
-            int goGoRem = Math.max(0, goGoDur - Math.max(0, y - startY));
-            // v6 NOTE: the SS Optimizer scorer intentionally uses go-go ONLY. Its
-            // objective is guaranteed income across the go-go window; folding in
-            // slow-go would silently change what the Go-Go Guar column means.
-            double goGoMult = (goGoRem > 0) ? goGo : 1.0;
-            double spendLiving = draw ? living * inflAcc * goGoMult : 0;
-            double spendMed    = draw ? med * Math.pow(1 + medI, y) : 0;
-            double spendTax    = draw ? baseTax * Math.pow(1 + taxI, y) : 0;
-            double totalSpend  = spendLiving + spendMed + spendTax;
-
-            // Portfolio draw: cover the gap
-            double portDraw = draw ? Math.max(0, totalSpend - guaranteed) : 0;
-            double totalInc = guaranteed + portDraw;
-
-            if (draw && y == startY) {
-                // Store nominal; display converts to real when needed
-                totalIncYr1 = guaranteed + portDraw;
-                portWdYr1   = portDraw;
-                inflAccYr1  = inflAcc;
-            }
-            // v4: MORTALITY-WEIGHTED go-go objective.
-            // Weight each person's SS by their survival probability in this year
-            // using a linear ramp: 1.0 at the withdrawal-start age, 0.5 at that
-            // person's life expectancy (LE is the median -> ~50% survive to it),
-            // tapering to 0 symmetrically beyond LE (LE + (LE - startAge)). The
-            // annuity is a contractual stream, not a life, so it is not weighted.
-            // This makes the optimizer favor claiming strategies that place
-            // guaranteed income into years the couple is more likely to be alive
-            // to enjoy -- generally rewarding earlier claiming.
-            int bobAge   = calYear - manBY;
-            int womanAge = calYear - womanBY;
-            int bobStartAge   = wdYear - manBY;
-            int womanStartAge = wdYear - womanBY;
-            double manSurv   = survivalRamp(bobAge,   bobStartAge,   manLE);
-            double womanSurv = single ? 0.0 : survivalRamp(womanAge, womanStartAge, womanLE);
-            double weightedGuaranteed = manSS * manSurv + womanSS * womanSurv + ann;
-
-            // Sum SURVIVAL-WEIGHTED GUARANTEED income (SS + annuity) across go-go
-            // years. This is the primary score: more (likely-to-be-enjoyed)
-            // guaranteed income during go-go = less portfolio draw when it counts.
-            if (draw && goGoRem > 0) goGoTotal += weightedGuaranteed;  // nominal; display converts
-
-            bal = Math.max(0, bal * (1 + ret) - portDraw);
-        }
-
-        SsOptResult r = new SsOptResult();
-        r.bobYear = bobY; r.bobMonth = bobM;
-        r.joYear  = joY;  r.joMonth  = joM;
-        r.bobMonthly    = bobMonthly;
-        r.joMonthly     = joMonthly;
-        r.combinedAnnual= bobAnnual + joAnnual;
-        // v6: survivor keeps the LARGER of the two benefits.
-        r.survivorFloor = Math.max(r.bobMonthly, r.joMonthly) * 12.0;
-        r.totalIncomeYr1= totalIncYr1;
-        r.portWdYr1     = portWdYr1;
-        r.projFinalBal  = bal;                 // nominal; display converts to real if needed
-        r.inflAccFinal  = inflAcc;             // to convert projFinalBal to real
-        r.goGoTotalIncome = goGoTotal;          // accumulated as real in the loop
-        return r;
-    }
 
     private void populateOptTable(java.util.List<SsOptResult> results,
                                   int manBY, int manBM, int womanBY, int womanBM,
-                                  int manPIA, int womanPIA) {
+                                  int manPIA, int womanPIA, int infeasMode) {
         // Cache for real/nominal toggle refresh
         lastOptResults  = results;
         lastOptManBY    = manBY;  lastOptManBM   = manBM;
         lastOptWomanBY  = womanBY; lastOptWomanBM = womanBM;
         lastOptManPIA   = manPIA;  lastOptWomanPIA = womanPIA;
+        lastOptInfeasMode = infeasMode;
 
         tblOptModel.setRowCount(0);
         optRowDates.clear();
-        int show = results.size();  // show all combinations
+
+        int feasibleCount = 0;
+        for (SsOptResult r : results) if (r.feasible) feasibleCount++;
+
+        int show = results.size();
         for (int rank = 0; rank < show; rank++) {
             SsOptResult r = results.get(rank);
-            boolean joClaims = (r.joYear > 0);  // v4: sentinel {0,0} = single mode, no spouse claim
-            int bobAgeM = (r.bobYear - manBY)*12   + (r.bobMonth - manBM);
-            int joAgeM  = joClaims ? (r.joYear - womanBY)*12 + (r.joMonth - womanBM) : 0;
-            int portfolio = iv(spPortfolio);
-            double initRate = portfolio > 0 ? r.portWdYr1 / portfolio * 100.0 : 0;
+            boolean joClaims = (r.joYear > 0);
+            String goHead   = (r.minGoGoSurplus   == Integer.MAX_VALUE) ? "--" : CURRENCY.format((long) r.minGoGoSurplus);
+            String slowHead = (r.minSlowGoSurplus == Integer.MAX_VALUE) ? "--" : CURRENCY.format((long) r.minSlowGoSurplus);
             tblOptModel.addRow(new Object[]{
                     rank + 1,
                     String.format("%02d/%d", r.bobMonth, r.bobYear),
-                    ssAgeStr(bobAgeM),
-                    CURRENCY.format((long) r.bobMonthly),
                     joClaims ? String.format("%02d/%d", r.joMonth, r.joYear) : "--",
-                    joClaims ? ssAgeStr(joAgeM) : "--",
-                    joClaims ? CURRENCY.format((long) r.joMonthly) : "--",
+                    String.format("%.1f%%", r.actualPoS),
+                    r.feasible ? "Yes" : "No",
+                    CURRENCY.format((long) r.minSurplus),
+                    goHead,
+                    slowHead,
+                    CURRENCY.format((long) r.survivorFloor),
                     CURRENCY.format((long) r.combinedAnnual),
-                    CURRENCY.format((long)(r.totalIncomeYr1 / (showRealDollars && r.inflAccYr1 > 0 ? r.inflAccYr1 : 1.0))),
-                    CURRENCY.format((long)(r.portWdYr1 / (showRealDollars && r.inflAccYr1 > 0 ? r.inflAccYr1 : 1.0))),
-                    String.format("%.2f%%", initRate),
-                    CURRENCY.format((long)(r.goGoTotalIncome / (showRealDollars && r.inflAccFinal > 0 ? r.inflAccFinal : 1.0))),
-                    CURRENCY.format((long) r.survivorFloor),   // v6: already an annual figure at claim
-                    CURRENCY.format((long)(r.projFinalBal / (showRealDollars && r.inflAccFinal > 0 ? r.inflAccFinal : 1.0))),
+                    r.verified ? "full" : "scan",
             });
             optRowDates.add(new int[]{r.bobYear, r.bobMonth, r.joYear, r.joMonth});
         }
-        lblOptStatus.setText(String.format(
-                "Showing all %,d combinations ranked. Click any row to apply and run IL.",
-                show));
+
+        String head;
+        if (feasibleCount > 0) {
+            head = String.format(
+                    "%,d of %,d combinations feasible (meet green + travel floors + PoS). "
+                            + "Ranked by survivor floor. Click a row to apply and run.",
+                    feasibleCount, show);
+        } else {
+            String modeName = (infeasMode == 1) ? "closest (least shortfall)"
+                    : (infeasMode == 2) ? "relaxed floors" : "trade-off frontier";
+            head = String.format(
+                    "No combination meets all floors. Showing %s. "
+                            + "Trade travel headroom against survivor floor; click a row to apply and run.",
+                    modeName);
+        }
+        lblOptStatus.setText(head);
     }
 
     private static String ssAgeStr(int totalMonths) {
@@ -3961,6 +4023,15 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         double survivorFloor;
         double inflAccYr1   = 1.0;   // inflation factor at withdrawal start year (default 1=nominal)
         double inflAccFinal = 1.0;   // inflation factor at end of horizon (default 1=nominal)
+        // v9 Option 2: metrics read back from a real Pro-engine run of this
+        // claim-date combination. All in today's real dollars where noted.
+        double actualPoS      = 0;    // Pro engine PoS for this combination, as a PERCENT (0..100)
+        int    minSurplus     = 0;    // worst-year surplus/gap across the horizon (real $)
+        int    minGoGoSurplus = 0;    // worst surplus among go-go years (real $)
+        int    minSlowGoSurplus = 0;  // worst surplus among slow-go years (real $)
+        boolean feasible      = false;// meets green + travel floors + PoS target
+        int    shortfall      = 0;    // if not feasible: worst floor miss (>=0 real $)
+        boolean verified      = false;// true = scored at full fidelity (re-verify pass)
     }
 
 
@@ -4223,16 +4294,11 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // because the his/her split drives both-living RMD math too.
     // v6: warn when a historical sequence is selected while SS is still on the
     // fixed COLA -- the combination that makes a survivable stress run look fatal.
-    // v6: name the active objective so nobody reads rank 1 as "the answer".
+    // v9 Option 2: the objective is now FIXED (feasibility then survivor floor)
+    // and its explanation is a static label, so this is a no-op kept only because
+    // it is still called once at init. Left in place to avoid touching that path.
     private void refreshOptObjective() {
-        if (lblOptObjective == null || cmbOptSort == null) return;
-        lblOptObjective.setText(switch (cmbOptSort.getSelectedIndex()) {
-            case 1 -> "Ranking by SURVIVOR FLOOR -- favours delaying the higher earner. "
-                    + "Does not consider the go-go spending window.";
-            case 2 -> "Ranking by COMBINED SS AT FULL CLAIM -- ignores when the income starts.";
-            default -> "Ranking by GO-GO GUAR -- favours claiming EARLY by construction. "
-                    + "Does not consider the survivor's income floor.";
-        });
+        // intentionally empty -- lblOptObjective is set once at construction.
     }
 
     private void refreshColaWarn() {
@@ -8097,6 +8163,20 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         double gkUpperGuardrail, gkLowerGuardrail;           // Guyton-Klinger active adjustments
         double gkPreRate;
         int scenarioIndex; // 0=Random, 1=Depression, 2=Stagflation, 3=DotCom, 4=GFC
+
+        // v9 Option 2: a shallow copy of every instance field, used by the SS
+        // Optimizer to run per-combination Pro simulations without disturbing the
+        // live inputs. Reflection keeps this correct even as fields are added --
+        // there is no field-by-field list to forget to update. All fields here are
+        // primitives or immutable String, so shallow copy is a true independent copy.
+        SimInputs copy() {
+            SimInputs c = new SimInputs();
+            for (java.lang.reflect.Field f : SimInputs.class.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                try { f.set(c, f.get(this)); } catch (IllegalAccessException ex) { /* fields are accessible */ }
+            }
+            return c;
+        }
     }
 
     static class EnhRow {
