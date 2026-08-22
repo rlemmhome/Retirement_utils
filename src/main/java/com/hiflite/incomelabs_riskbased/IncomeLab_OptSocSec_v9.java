@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Thursday, August 20, 2026 at 11:25 PM MST (UTC-7)
+// Last modified: Saturday, August 22, 2026 at 12:59 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Thursday, August 20, 2026 at 11:25 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, August 22, 2026 at 12:59 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -319,6 +319,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // infeasible-set fallback selector.
     private JSpinner spOptGoGoFloor, spOptSlowGoFloor, spOptGreenBuffer;
     private JSpinner spOptScanPaths, spOptScanFan, spOptVerifyTopN;
+    private JSpinner spOptTermGrace;             // v9: terminal-year grace window
     private JComboBox<String> cmbOptGrid;        // year / half-year granularity
     private JComboBox<String> cmbOptInfeasible;  // fallback when nothing is feasible
     private int lastOptManBY, lastOptManBM, lastOptWomanBY, lastOptWomanBM;
@@ -3282,6 +3283,24 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "years). 0 means 'never go red'. Raise it for a safety cushion.<br>"
                 + "SS Optimizer only.</html>");
 
+        spOptTermGrace = spinI(1, 0, 5, 1, "#");
+        spOptTermGrace.setToolTipText("<html><b>Terminal grace (years)</b><br>"
+                + "The Pro engine's withdrawal is sized to hold your probability-of-<br>"
+                + "success target, re-solved each year -- it is not a 'spend the<br>"
+                + "balance to zero' rule. In the final year or two of a long horizon,<br>"
+                + "that can leave the surplus slightly negative <i>even though the<br>"
+                + "portfolio still holds plenty to cover it</i> (e.g. surplus -$7K with<br>"
+                + "$225K still in the account). That is a harmless end-of-horizon<br>"
+                + "artifact, not a real shortfall -- in reality you would simply draw<br>"
+                + "the small gap from the remaining balance.<br><br>"
+                + "This tells the optimizer to tolerate a below-buffer surplus <b>only<br>"
+                + "in the last N years, and only when the portfolio balance can cover<br>"
+                + "the shortfall.</b> It prevents good claiming strategies from being<br>"
+                + "marked 'infeasible' purely because of that terminal dip (which is<br>"
+                + "why moving the horizon from 95 to 94 used to flip rows to<br>"
+                + "feasible). Set it to 0 to require every single year to stay green<br>"
+                + "with no exceptions. SS Optimizer only.</html>");
+
         cmbOptGrid = new JComboBox<>(new String[]{ "Year grid", "Half-year grid" });
         cmbOptGrid.setToolTipText("<html><b>Scan granularity</b><br>"
                 + "Claim dates are scanned at this resolution in the coarse pass.<br>"
@@ -3318,6 +3337,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         objRow.add(new JLabel("Go-go floor $:"));    objRow.add(spOptGoGoFloor);
         objRow.add(new JLabel("Slow-go floor $:"));  objRow.add(spOptSlowGoFloor);
         objRow.add(new JLabel("Green buffer $:"));   objRow.add(spOptGreenBuffer);
+        objRow.add(new JLabel("Term grace yr:"));    objRow.add(spOptTermGrace);
         objRow.add(new JLabel("   Grid:"));          objRow.add(cmbOptGrid);
         objRow.add(new JLabel("Scan paths:"));       objRow.add(spOptScanPaths);
         objRow.add(new JLabel("fan:"));              objRow.add(spOptScanFan);
@@ -3712,6 +3732,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         final int goGoFloor   = iv(spOptGoGoFloor);
         final int slowGoFloor = iv(spOptSlowGoFloor);
         final int greenBuf    = iv(spOptGreenBuffer);
+        final int termGrace   = iv(spOptTermGrace);   // v9: terminal-year grace window
         final int posTarget   = iv(spTargetPoS);
         final int gridStepMo  = (cmbOptGrid != null && cmbOptGrid.getSelectedIndex() == 1) ? 6 : 12;
         final int scanPaths   = iv(spOptScanPaths);
@@ -3744,7 +3765,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                         if (optCancelRequested) break;
                         SsOptResult r = scoreCombinationPro(
                                 baseInp, bob[0], bob[1], jo[0], jo[1], single,
-                                goGoFloor, slowGoFloor, greenBuf, posTarget,
+                                goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
                                 scanPaths, scanFan, binIters, /*verified=*/false);
                         results.add(r);
                         done++;
@@ -3771,7 +3792,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                         SsOptResult r = results.get(i);
                         SsOptResult v = scoreCombinationPro(
                                 baseInp, r.bobYear, r.bobMonth, r.joYear, r.joMonth, single,
-                                goGoFloor, slowGoFloor, greenBuf, posTarget,
+                                goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
                                 fullPaths, fullFan, binIters, /*verified=*/true);
                         results.set(i, v);
                     }
@@ -3825,7 +3846,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // engine and its table.
     private SsOptResult scoreCombinationPro(
             SimInputs base, int bobY, int bobM, int joY, int joM, boolean single,
-            int goGoFloor, int slowGoFloor, int greenBuf, int posTarget,
+            int goGoFloor, int slowGoFloor, int greenBuf, int termGrace, int posTarget,
             int solvePaths, int fanPaths, int binIters, boolean verified) {
 
         SsOptResult r = new SsOptResult();
@@ -3855,15 +3876,37 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
 
         // Read per-year surplus in REAL dollars, classify each year by its go-go
         // multiplier, and track the worst surplus overall / in go-go / in slow-go.
+        // v9 Option B: a below-buffer surplus is EXEMPT from the stay-green test
+        // if it falls within the final `termGrace` years AND that year's portfolio
+        // balance can cover the shortfall (literal coverage). This ignores the
+        // harmless end-of-horizon artifact where the PoS-solved draw leaves a small
+        // negative surplus with plenty still in the account. The go-go/slow-go
+        // travel floors are NOT graced -- those windows are early, not terminal.
         double goGoMultVal   = base.goGoMultiplier;      // e.g. 1.5
         double slowGoMultVal = base.slowGoMultiplier;    // e.g. 1.3
-        int minAll = Integer.MAX_VALUE, minGo = Integer.MAX_VALUE, minSlow = Integer.MAX_VALUE;
+        int minGo = Integer.MAX_VALUE, minSlow = Integer.MAX_VALUE;
         boolean sawGo = false, sawSlow = false;
+        // Worst NON-EXEMPT surplus for the stay-green test, and the raw worst
+        // surplus (for display) separately.
+        int minGreenTest = Integer.MAX_VALUE;   // drives feasibility
+        int minRawSurplus = Integer.MAX_VALUE;  // shown in the Min surplus column
         if (pr.medianRows != null) {
-            for (EnhRow row : pr.medianRows) {
+            int nRows = pr.medianRows.size();
+            for (int i = 0; i < nRows; i++) {
+                EnhRow row = pr.medianRows.get(i);
                 double inflF = (row.inflFactor > 0) ? row.inflFactor : 1.0;
                 int surplusReal = (int) Math.round(row.surplus / inflF);
-                if (surplusReal < minAll) minAll = surplusReal;
+                int balanceReal = (int) Math.round(row.balance / inflF);
+                if (surplusReal < minRawSurplus) minRawSurplus = surplusReal;
+
+                // Is this a graced terminal year whose dip the balance can cover?
+                boolean inTerminalWindow = (i >= nRows - termGrace);
+                int shortfallHere = greenBuf - surplusReal;         // >0 means below buffer
+                boolean covered = (shortfallHere <= 0) ||           // not below buffer, or
+                        (inTerminalWindow && balanceReal >= shortfallHere);  // covered terminal dip
+                // Only non-exempt years count toward the stay-green minimum.
+                if (!covered && surplusReal < minGreenTest) minGreenTest = surplusReal;
+
                 if (approxEq(row.goGoMult, goGoMultVal)) {
                     sawGo = true; if (surplusReal < minGo) minGo = surplusReal;
                 } else if (approxEq(row.goGoMult, slowGoMultVal)) {
@@ -3871,14 +3914,20 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 }
             }
         }
-        r.minSurplus       = (minAll  == Integer.MAX_VALUE) ? 0 : minAll;
+        // Min surplus SHOWN is the raw worst year (so the user still sees the dip).
+        r.minSurplus       = (minRawSurplus == Integer.MAX_VALUE) ? 0 : minRawSurplus;
         r.minGoGoSurplus   = sawGo   ? minGo   : Integer.MAX_VALUE;   // no go-go years -> not binding
         r.minSlowGoSurplus = sawSlow ? minSlow : Integer.MAX_VALUE;   // no slow-go years -> not binding
+        // The stay-green feasibility figure is the worst NON-EXEMPT year. If every
+        // below-buffer year was a covered terminal dip, this stays at MAX_VALUE and
+        // the green test passes.
+        int greenTestMin = (minGreenTest == Integer.MAX_VALUE) ? Integer.MAX_VALUE : minGreenTest;
 
         // Feasibility test + worst shortfall (how far the worst floor is missed).
         int shortfall = 0;
         boolean feas = true;
-        if (r.minSurplus < greenBuf)      { feas = false; shortfall = Math.max(shortfall, greenBuf - r.minSurplus); }
+        if (greenTestMin != Integer.MAX_VALUE && greenTestMin < greenBuf)
+        { feas = false; shortfall = Math.max(shortfall, greenBuf - greenTestMin); }
         if (sawGo && r.minGoGoSurplus < goGoFloor)     { feas = false; shortfall = Math.max(shortfall, goGoFloor - r.minGoGoSurplus); }
         if (sawSlow && r.minSlowGoSurplus < slowGoFloor){ feas = false; shortfall = Math.max(shortfall, slowGoFloor - r.minSlowGoSurplus); }
         if (r.actualPoS < posTarget)      { feas = false; shortfall = Math.max(shortfall, 1); }  // PoS miss flagged
@@ -4520,6 +4569,14 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         // load mean "show all" (pre-v9 behavior), so old files are unaffected.
         props.setProperty("view.proHiddenCols",    csvOfInts(proHiddenCols));
         props.setProperty("view.proProtectedCols", csvOfInts(proProtectedCols));
+        // v9: SS Optimizer objective inputs (this tab only). Persisted per-scenario
+        // so a saved plan reopens with the same feasibility criteria. Grid/fidelity
+        // are scan-tuning, not planning intent, so they stay session-only.
+        if (spOptGoGoFloor  != null) props.setProperty("opt.goGoFloor",   String.valueOf(iv(spOptGoGoFloor)));
+        if (spOptSlowGoFloor!= null) props.setProperty("opt.slowGoFloor", String.valueOf(iv(spOptSlowGoFloor)));
+        if (spOptGreenBuffer!= null) props.setProperty("opt.greenBuffer", String.valueOf(iv(spOptGreenBuffer)));
+        if (spOptTermGrace  != null) props.setProperty("opt.termGrace",   String.valueOf(iv(spOptTermGrace)));
+        if (cmbOptInfeasible!= null) props.setProperty("opt.infeasMode",  String.valueOf(cmbOptInfeasible.getSelectedIndex()));
         try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
             props.store(fos, "IncomePoS_OptSocSec_v2 scenario -- " + desc);
             addRecentFile(file.getAbsolutePath());
@@ -4758,6 +4815,17 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
             proHiddenCols.removeAll(proProtectedCols);     // protected can't be hidden
             applyProColumnVisibility();
         }
+        // v9: restore SS Optimizer objective inputs (missing keys keep defaults).
+        setSpinnerIfPresent(spOptGoGoFloor,   props, "opt.goGoFloor");
+        setSpinnerIfPresent(spOptSlowGoFloor, props, "opt.slowGoFloor");
+        setSpinnerIfPresent(spOptGreenBuffer, props, "opt.greenBuffer");
+        setSpinnerIfPresent(spOptTermGrace,   props, "opt.termGrace");
+        if (cmbOptInfeasible != null && props.getProperty("opt.infeasMode") != null) {
+            try {
+                int idx = Integer.parseInt(props.getProperty("opt.infeasMode").trim());
+                if (idx >= 0 && idx < cmbOptInfeasible.getItemCount()) cmbOptInfeasible.setSelectedIndex(idx);
+            } catch (NumberFormatException ignore) { }
+        }
         refreshTaxEngineEnabled();  // greying may change if loaded toggles differ
         refreshStateFieldsEnabled();  // v5: apply loaded state selection greying
         refreshDeathFieldsEnabled();  // v6: apply loaded death-event greying
@@ -4785,6 +4853,15 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
             try { out.add(Integer.valueOf(p)); } catch (NumberFormatException ignore) { }
         }
         return out;
+    }
+
+    // v9: set a spinner from a property only if the key is present and parses;
+    // otherwise leave the spinner at its current (default) value. Null-safe.
+    private void setSpinnerIfPresent(JSpinner sp, java.util.Properties props, String key) {
+        if (sp == null) return;
+        String v = props.getProperty(key);
+        if (v == null) return;
+        try { sp.setValue(Integer.parseInt(v.trim())); } catch (NumberFormatException ignore) { }
     }
 
     private void setSpinnerI(JSpinner sp, java.util.Properties props,
