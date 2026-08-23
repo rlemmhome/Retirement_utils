@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Saturday, August 22, 2026 at 12:59 PM MST (UTC-7)
+// Last modified: Sunday, August 23, 2026 at 12:24 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Saturday, August 22, 2026 at 12:59 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, August 23, 2026 at 12:24 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1606,10 +1606,10 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
             showRealDollars = tglDollars.isSelected();
             tglDollars.setText(showRealDollars ? "Showing: Today's $ (real)" : "Showing: Future $ (nominal)");
             if (lastResults != null) updateUI(lastResults);
-            // Also refresh optimizer table if results are cached
-            if (lastOptResults != null) populateOptTable(lastOptResults,
-                    lastOptManBY, lastOptManBM, lastOptWomanBY, lastOptWomanBM,
-                    lastOptManPIA, lastOptWomanPIA, lastOptInfeasMode);
+            // v9: the SS Optimizer's floors and columns are computed in the dollar
+            // mode active at scan time, so we do NOT re-render cached optimizer rows
+            // on toggle (that would relabel stale numbers). Flip the toggle, then
+            // re-run the optimizer to see it in the other mode.
         });
 
         JPanel aNorth = new JPanel(new BorderLayout()); aNorth.setOpaque(false);
@@ -3411,7 +3411,8 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
 
         JLabel clickHint = new JLabel(
                 "  Click any row to apply those SS start dates to the IL simulation and run automatically."
-                        + "  |  Optimizer money columns respond to the Real/Nominal toggle (top right).");
+                        + "  |  Floors & columns use the Real/Nominal mode active when you press Run"
+                        + " -- flip the toggle (top right) and re-run to switch.");
         clickHint.setFont(new Font("SansSerif", Font.ITALIC, 12));
         clickHint.setForeground(new Color(0, 80, 150));
 
@@ -3742,6 +3743,21 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         final int fullFan     = iv(spMcFanPaths);
         final int binIters    = iv(spBinaryIters);
         final int infeasMode  = (cmbOptInfeasible != null) ? cmbOptInfeasible.getSelectedIndex() : 0;
+        // v9: ONE seed for the whole scan so every combination faces the identical
+        // random future and the ranking is fair. Honor the "Re-randomize each run"
+        // checkbox exactly as the Pro tab does (line ~5115): a fresh System.nanoTime()
+        // when randomize is on, else the deterministic 0. Because randomize draws a
+        // new future each press, the optimizer's numbers are a valid self-consistent
+        // SAMPLE -- applying a winner and re-running with randomize ON gives another
+        // sample that will not match exactly; run the Pro tab with randomize OFF to
+        // reproduce an optimizer row precisely.
+        runSeedOffset = (chkRandomize != null && chkRandomize.isSelected())
+                ? System.nanoTime() : 0L;
+        final long optSeed    = runSeedOffset;
+        // v9: capture the display-dollar mode so the optimizer's floors and columns
+        // follow the Real/Nominal toggle -- floors are compared, and headroom/min
+        // surplus shown, in the SAME units the Pro table is currently showing.
+        final boolean optReal = showRealDollars;
 
         SwingWorker<Void, String> worker = new SwingWorker<>() {
             @Override protected Void doInBackground() {
@@ -3766,7 +3782,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                         SsOptResult r = scoreCombinationPro(
                                 baseInp, bob[0], bob[1], jo[0], jo[1], single,
                                 goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
-                                scanPaths, scanFan, binIters, /*verified=*/false);
+                                scanPaths, scanFan, binIters, optSeed, optReal, /*verified=*/false);
                         results.add(r);
                         done++;
                         if (done % 2 == 0 || done == total) {
@@ -3793,7 +3809,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                         SsOptResult v = scoreCombinationPro(
                                 baseInp, r.bobYear, r.bobMonth, r.joYear, r.joMonth, single,
                                 goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
-                                fullPaths, fullFan, binIters, /*verified=*/true);
+                                fullPaths, fullFan, binIters, optSeed, optReal, /*verified=*/true);
                         results.set(i, v);
                     }
                     // Re-rank after verification (full-fidelity numbers may reorder the top).
@@ -3847,7 +3863,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     private SsOptResult scoreCombinationPro(
             SimInputs base, int bobY, int bobM, int joY, int joM, boolean single,
             int goGoFloor, int slowGoFloor, int greenBuf, int termGrace, int posTarget,
-            int solvePaths, int fanPaths, int binIters, boolean verified) {
+            int solvePaths, int fanPaths, int binIters, long seed, boolean realDollars, boolean verified) {
 
         SsOptResult r = new SsOptResult();
         r.bobYear = bobY; r.bobMonth = bobM; r.joYear = joY; r.joMonth = joM;
@@ -3868,49 +3884,43 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
 
         ProResults pr;
         try {
-            pr = simulatePro(inp, 987654321L, solvePaths, fanPaths, binIters);
+            pr = simulatePro(inp, seed, solvePaths, fanPaths, binIters);
         } catch (Exception ex) {
             r.feasible = false; r.shortfall = Integer.MAX_VALUE; return r;
         }
         r.actualPoS = pr.actualPoS * 100.0;   // engine stores a 0..1 fraction; keep as percent here
 
-        // Read per-year surplus in REAL dollars, classify each year by its go-go
-        // multiplier, and track the worst surplus overall / in go-go / in slow-go.
-        // v9 Option B: a below-buffer surplus is EXEMPT from the stay-green test
-        // if it falls within the final `termGrace` years AND that year's portfolio
-        // balance can cover the shortfall (literal coverage). This ignores the
-        // harmless end-of-horizon artifact where the PoS-solved draw leaves a small
-        // negative surplus with plenty still in the account. The go-go/slow-go
-        // travel floors are NOT graced -- those windows are early, not terminal.
+        // Read per-year surplus in the SAME dollar mode the Pro table is showing.
+        // The Pro table uses d = showRealDollars ? inflFactor : 1.0 (line ~6047);
+        // we mirror that so the optimizer's floors and columns match what the user
+        // sees and sets. In nominal mode d=1.0 (raw surplus); in real mode we
+        // deflate by inflFactor. row.surplus is stored NOMINAL.
         double goGoMultVal   = base.goGoMultiplier;      // e.g. 1.5
         double slowGoMultVal = base.slowGoMultiplier;    // e.g. 1.3
         int minGo = Integer.MAX_VALUE, minSlow = Integer.MAX_VALUE;
         boolean sawGo = false, sawSlow = false;
-        // Worst NON-EXEMPT surplus for the stay-green test, and the raw worst
-        // surplus (for display) separately.
         int minGreenTest = Integer.MAX_VALUE;   // drives feasibility
         int minRawSurplus = Integer.MAX_VALUE;  // shown in the Min surplus column
         if (pr.medianRows != null) {
             int nRows = pr.medianRows.size();
             for (int i = 0; i < nRows; i++) {
                 EnhRow row = pr.medianRows.get(i);
-                double inflF = (row.inflFactor > 0) ? row.inflFactor : 1.0;
-                int surplusReal = (int) Math.round(row.surplus / inflF);
-                int balanceReal = (int) Math.round(row.balance / inflF);
-                if (surplusReal < minRawSurplus) minRawSurplus = surplusReal;
+                double d = (realDollars && row.inflFactor > 0) ? row.inflFactor : 1.0;
+                int surplusDisp = (int) Math.round(row.surplus / d);
+                int balanceDisp = (int) Math.round(row.balance / d);
+                if (surplusDisp < minRawSurplus) minRawSurplus = surplusDisp;
 
                 // Is this a graced terminal year whose dip the balance can cover?
                 boolean inTerminalWindow = (i >= nRows - termGrace);
-                int shortfallHere = greenBuf - surplusReal;         // >0 means below buffer
+                int shortfallHere = greenBuf - surplusDisp;         // >0 means below buffer
                 boolean covered = (shortfallHere <= 0) ||           // not below buffer, or
-                        (inTerminalWindow && balanceReal >= shortfallHere);  // covered terminal dip
-                // Only non-exempt years count toward the stay-green minimum.
-                if (!covered && surplusReal < minGreenTest) minGreenTest = surplusReal;
+                        (inTerminalWindow && balanceDisp >= shortfallHere);  // covered terminal dip
+                if (!covered && surplusDisp < minGreenTest) minGreenTest = surplusDisp;
 
                 if (approxEq(row.goGoMult, goGoMultVal)) {
-                    sawGo = true; if (surplusReal < minGo) minGo = surplusReal;
+                    sawGo = true; if (surplusDisp < minGo) minGo = surplusDisp;
                 } else if (approxEq(row.goGoMult, slowGoMultVal)) {
-                    sawSlow = true; if (surplusReal < minSlow) minSlow = surplusReal;
+                    sawSlow = true; if (surplusDisp < minSlow) minSlow = surplusDisp;
                 }
             }
         }
