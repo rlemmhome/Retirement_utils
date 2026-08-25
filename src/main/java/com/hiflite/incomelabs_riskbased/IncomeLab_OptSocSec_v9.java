@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Tuesday, August 25, 2026 at 01:14 PM MST (UTC-7)
+// Last modified: Tuesday, August 25, 2026 at 01:49 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Tuesday, August 25, 2026 at 01:14 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, August 25, 2026 at 01:49 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -2670,6 +2670,18 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         ep.setEditable(false);
         ep.setBackground(new Color(250, 253, 248));
         ep.setBorder(BorderFactory.createEmptyBorder(14, 18, 14, 18));
+        // v9: table of contents at the top links to section anchors, and each
+        // section ends with a back-to-top link back to the TOC. JEditorPane does
+        // not auto-scroll on anchor clicks; this listener catches ACTIVATED events
+        // and calls scrollToReference() to jump to the fragment.
+        ep.addHyperlinkListener(e -> {
+            if (e.getEventType() == javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) {
+                String desc = e.getDescription();
+                if (desc != null && desc.startsWith("#") && desc.length() > 1) {
+                    ep.scrollToReference(desc.substring(1));
+                }
+            }
+        });
 
         String html = ""
                 + "<html><body style='font-family:sans-serif; font-size:12px; color:#222;'>"
@@ -2687,7 +2699,27 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "tool is documented here. This tab is the canonical source the tax, IRMAA, and conversion "
                 + "tooltips point to.</i></p>"
 
-                + "<h3 style='color:#2a5d34;'>Three approaches to dynamic spending</h3>"
+                + "<div style='background:#f0f4ee; border:1px solid #c8d2c1; padding:8px 14px; margin:0 0 16px 0;'>"
+                + "<a name='toc'></a>"
+                + "<div style='font-weight:bold; color:#2a5d34; margin-bottom:6px;'>Contents</div>"
+                + "<ul style='margin:0 0 0 18px; padding:0;'>"
+                + "<li><a href='#intro' style='color:#264653; text-decoration:none;'>Three approaches to dynamic spending</a></li>"
+                + "<li><a href='#sec1' style='color:#264653; text-decoration:none;'>1. Core method &mdash; PoS as input, dollars as output</a></li>"
+                + "<li><a href='#sec2' style='color:#264653; text-decoration:none;'>2. Market assumptions (1961&ndash;2024 historical basis)</a></li>"
+                + "<li><a href='#sec3' style='color:#264653; text-decoration:none;'>3. Tax engine (v3) &mdash; federal + state + IRMAA</a></li>"
+                + "<li><a href='#sec3a' style='color:#264653; text-decoration:none;'>3a. Single mode &mdash; spouse fields disabled (v4)</a></li>"
+                + "<li><a href='#sec4' style='color:#264653; text-decoration:none;'>4. Standard deduction &mdash; what IS and is NOT modeled</a></li>"
+                + "<li><a href='#sec5' style='color:#264653; text-decoration:none;'>5. Social Security taxability &mdash; provisional-income formula</a></li>"
+                + "<li><a href='#sec6' style='color:#264653; text-decoration:none;'>6. IRMAA &mdash; Medicare surcharge, costed and visible</a></li>"
+                + "<li><a href='#sec6a' style='color:#264653; text-decoration:none;'>6a. Which numbers to act on &mdash; the live column vs. the projected balances</a></li>"
+                + "<li><a href='#sec7' style='color:#264653; text-decoration:none;'>7. Spending, medical costs, and Roth conversions</a></li>"
+                + "<li><a href='#sec7a' style='color:#264653; text-decoration:none;'>7a. Spending curve &mdash; go-go, slow-go, no-go</a></li>"
+                + "<li><a href='#sec8' style='color:#264653; text-decoration:none;'>8. Why PoS is the primary method &mdash; the withdrawal-rate flaw</a></li>"
+                + "<li><a href='#sec9' style='color:#264653; text-decoration:none;'>9. RMDs, additional v9 stress inputs, and deliberately omitted features</a></li>"
+                + "<li><a href='#sec10' style='color:#264653; text-decoration:none;'>10. Caveats</a></li>"
+                + "<li><a href='#sec11' style='color:#264653; text-decoration:none;'>11. SS Optimizer &mdash; objective, feasibility, and ranking</a></li>"
+                + "</ul></div>"
+                + "<h3 style='color:#2a5d34;'><a name='intro'></a>Three approaches to dynamic spending</h3>"
                 + "<p>This tool contains two spending engines, and it is worth understanding how each relates to "
                 + "the risk-based guardrail method used by commercial platforms such as Income Lab (IL).</p>"
 
@@ -2752,7 +2784,8 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "single household willing to keep its own inputs current, pulling on demand pins risk just as "
                 + "tightly as pushing on a schedule.</p>"
 
-                + "<h3 style='color:#2a5d34;'>1. Core method &mdash; PoS as input, dollars as output</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec1'></a>1. Core method &mdash; PoS as input, dollars as output</h3>"
                 + "<p>The Pro PoS engine is a two-level Monte Carlo withdrawal solver. Probability of Success (PoS) "
                 + "is the <b>input constraint</b>; the maximum sustainable dollar withdrawal is the <b>output</b>. "
                 + "The engine re-solves the sustainable draw each year against the observed 50th-percentile "
@@ -2760,7 +2793,8 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "The intended workflow is frequent re-running (the sustainable dollar figure moves with the "
                 + "current balance and other live inputs).</p>"
 
-                + "<h3 style='color:#2a5d34;'>2. Market assumptions (1961&ndash;2024 historical basis)</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec2'></a>2. Market assumptions (1961&ndash;2024 historical basis)</h3>"
                 + "<ul>"
                 + "<li>Expected NOMINAL return: 6.70% (user-editable). This is a forward-looking nominal "
                 + "estimate &mdash; before removing inflation, which the engine applies separately. The 6.70% "
@@ -2782,7 +2816,8 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "inflation/volatility; this is intentionally conservative (implied real return ~2.9%), not a "
                 + "matched forward-with-forward or historical-with-historical pair.</p>"
 
-                + "<h3 style='color:#2a5d34;'>3. Tax engine (v3) &mdash; federal + state + IRMAA</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec3'></a>3. Tax engine (v3) &mdash; federal + state + IRMAA</h3>"
                 + "<p>When 'Use computed tax engine' is ON, the Tax column is computed each year rather than "
                 + "escalated from a flat figure. All 2026 statutory dollar boundaries are <b>inflation-indexed "
                 + "forward</b> using the same cumulative inflation factor the median path carries &mdash; this "
@@ -2811,7 +2846,8 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "income but loses half the deduction and hits the brackets and IRMAA tiers at about half the "
                 + "income.</p>"
 
-                + "<h3 style='color:#2a5d34;'>3a. Single mode &mdash; spouse fields disabled (v4)</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec3a'></a>3a. Single mode &mdash; spouse fields disabled (v4)</h3>"
                 + "<p>Selecting <b>Single</b> filing status does more than switch the tax basis: every "
                 + "<b>Spouse</b> input on the People, Accounts, and Social Security cards is <b>disabled, "
                 + "grayed, and locked against editing</b>, and is <b>excluded from every calculation</b> "
@@ -2883,7 +2919,8 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "local income tax before relying on it.</p>"
                 + "<p>Source: IRS Rev. Proc. 2025-32 (tax year 2026).</p>"
 
-                + "<h3 style='color:#2a5d34;'>4. Standard deduction &mdash; what IS and is NOT modeled</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec4'></a>4. Standard deduction &mdash; what IS and is NOT modeled</h3>"
                 + "<p><b>Modeled (permanent provisions, inflation-indexed):</b></p>"
                 + "<ul>"
                 + "<li>Base MFJ standard deduction: $32,200 (2026)</li>"
@@ -2912,7 +2949,8 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "conversions) the bonus is already heavily phased out. <b>Verify with a tax professional before "
                 + "relying on this deduction.</b> It can be added later once eligibility timing is confirmed.</p>"
 
-                + "<h3 style='color:#2a5d34;'>5. Social Security taxability &mdash; provisional-income formula</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec5'></a>5. Social Security taxability &mdash; provisional-income formula</h3>"
                 + "<p>The taxable portion of gross Social Security is computed with the real provisional-income "
                 + "rule (not a flat 85%), so the tool is correct across income levels: provisional income = other "
                 + "ordinary income + 50% of gross SS. MFJ thresholds: below $32,000 none of SS is taxable; between "
@@ -2920,7 +2958,8 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "gross SS). These provisional thresholds are statutory and NOT inflation-indexed (fixed since "
                 + "1993), which realistically pulls more SS into the taxable base over time.</p>"
 
-                + "<h3 style='color:#2a5d34;'>6. IRMAA &mdash; Medicare surcharge, costed and visible</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec6'></a>6. IRMAA &mdash; Medicare surcharge, costed and visible</h3>"
                 + "<p><b>Important distinction:</b> the IRMAA column and the IRMAA piece of the Tax column contain "
                 + "ONLY the income-related <b>surcharge</b> &mdash; the extra amount added to Medicare Part B and "
                 + "Part D premiums when MAGI crosses the tier thresholds. They do NOT contain your <b>base</b> "
@@ -2962,7 +3001,8 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "with prices); the toggle affects only the income THRESHOLDS. An all-dashes IRMAA column means "
                 + "your MAGI stays under the (mode-dependent) thresholds every year.</p>"
 
-                + "<h3 style='color:#2a5d34;'>6a. Which numbers to act on &mdash; the live column vs. the projected balances</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec6a'></a>6a. Which numbers to act on &mdash; the live column vs. the projected balances</h3>"
                 + "<div style='background:#eef5ec; border-left:4px solid #2a5d34; padding:8px 12px; margin:6px 0 10px 0;'>"
                 + "<p style='margin:0; font-weight:bold; color:#1f4a29;'>The balance columns are a re-baselined "
                 + "projection, not the plan's decision input. The current-year Roth Conv column is the number you "
@@ -3002,7 +3042,8 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "leaves a little conversion headroom unused in that one year. Given that busting a cliff is far "
                 + "worse than under-filling, that is the right direction to be wrong.</p>"
 
-                + "<h3 style='color:#2a5d34;'>7. Spending, medical costs, and Roth conversions</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec7'></a>7. Spending, medical costs, and Roth conversions</h3>"
                 + "<p><b>Medical spending (the Medical column)</b> is a single lump input covering all health-care "
                 + "costs: medical premiums and out-of-pocket (deductible and copay, dentist / vision / hearing). "
                 + "This is where your <b>base Medicare premiums</b> belong &mdash; Part B (~$203/mo/person, 2026) "
@@ -3016,8 +3057,14 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "Traditional draw) + annuity), minus the MFJ + age-65 standard deduction, through the "
                 + "brackets + the selected state tax + IRMAA. Pre-75 the discretionary "
                 + "draw is treated as 100% Traditional; post-75 the RMD floors (and usually exceeds) the draw. "
-                + "The annuity is ordinary income (held inside an IRA). RMD overages are not decremented from "
-                + "the main portfolio; they are assumed reinvested at a return at least matching inflation.</p>"
+                + "The annuity is ordinary income (held inside an IRA). RMD overages &mdash; the amount the "
+                + "RMD forces out beyond what the household actually spends &mdash; are already-taxed dollars "
+                + "that accumulate into a separate <b>Money Market reserve</b> (its own column on the Pro table). "
+                + "The reserve grows with your inflation assumption each year, and is <b>excluded from the "
+                + "drawable Portfolio balance</b> in every solve, so it never props up sustainability numbers. "
+                + "A &quot;last-resort tap&quot; rule for when both Traditional and Roth run dry exists as a "
+                + "clean engine hook but is intentionally unused today &mdash; the reserve is a real safety "
+                + "pool the tool refuses to spend for you.</p>"
                 + "<p><b>Roth conversions are modeled as a SEPARATE Traditional distribution</b>, not folded "
                 + "into the living-expenses tax. Each conversion:</p>"
                 + "<ul>"
@@ -3057,7 +3104,45 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "trustee, non-taxable) into EDJ IRAs. The tool treats Traditional IRA and Traditional 401(k) "
                 + "identically for RMD, so this is a label change, not a math change.</i></p>"
 
-                + "<h3 style='color:#2a5d34;'>8. Why PoS is the primary method &mdash; the withdrawal-rate flaw</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec7a'></a>7a. Spending curve &mdash; go-go, slow-go, no-go</h3>"
+                + "<p>The tool models retirement spending as a <b>three-tier curve</b>, not a flat inflation-"
+                + "indexed schedule. Each year's Living-Expenses figure is your base spending multiplied by "
+                + "the multiplier active in that year:</p>"
+                + "<ul>"
+                + "<li><b>Go-go</b> years: base &times; the go-go multiplier (default 1.5x), for the go-go "
+                + "duration (default 10 years starting at withdrawal-start).</li>"
+                + "<li><b>Slow-go</b> years: base &times; the slow-go multiplier (default 1.3x), for the "
+                + "slow-go duration (default 7 years), immediately following the go-go window.</li>"
+                + "<li><b>No-go</b> years: base &times; 1.0, for every remaining year of the horizon.</li>"
+                + "</ul>"
+                + "<p>The three tiers together give retirement a <b>front-loaded shape</b> &mdash; high in "
+                + "the active-travel decade, moderated in the middle years, tapered late. This matches lived "
+                + "retirement: early dollars have far higher utility than late-life dollars, when travel "
+                + "stops, socializing narrows, and spending concentrates on housing, food, and medical. A "
+                + "flat or back-loaded curve is not the intent.</p>"
+                + "<p><b>Travel money lives in the multiplier.</b> The go-go bump is not a separate travel "
+                + "line item on top of ordinary spending; it <i>is</i> the travel-and-active-living uplift. "
+                + "A 1.5x multiplier on a $105K base moves living expenses to $157.5K &mdash; the extra "
+                + "$52.5K is your active-decade travel plus the general lift in going out, hobbies, and "
+                + "comfort. Slow-go's 1.3x works the same way, sized for closer-to-home travel and creeping "
+                + "medical. Because travel is <i>in</i> the multiplier, the SS Optimizer's go-go and slow-go "
+                + "floors (section 11) are not travel budgets &mdash; they are surplus cushions on top of "
+                + "the already-elevated spend. Setting them to your travel amount double-counts.</p>"
+                + "<p><b>Multipliers can go below 1.0.</b> A go-go multiplier of 0.9 or a slow-go of 0.0 is "
+                + "a legitimate design choice for a deliberate under-withdrawal window (for example, "
+                + "protecting a Roth conversion window from pushing MAGI into IRMAA). The engine does not "
+                + "force multipliers &ge; 1.0. If you set a slow-go multiplier to zero, the tool records a "
+                + "zero living-expenses figure for those years and the surplus in that window equals the "
+                + "guaranteed income &mdash; not an error, an intentional shape.</p>"
+                + "<p><b>Sub-1.0 windows imply outside cash.</b> If living expenses in a window fall below "
+                + "what the household actually consumes, the difference has to come from somewhere outside "
+                + "the portfolio model &mdash; taxable savings, a home equity draw, family gifts. The tool "
+                + "does not model those sources; it faithfully reports the surplus/gap the multiplier "
+                + "produces and leaves the funding source to you.</p>"
+
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec8'></a>8. Why PoS is the primary method &mdash; the withdrawal-rate flaw</h3>"
                 + "<p><b>Guyton-Klinger faithfulness.</b> The GK tab implements the 2006 Guyton-Klinger decision "
                 + "rules (Journal of Financial Planning, \"Decision Rules and Maximum Initial Withdrawal Rates\"). "
                 + "The core rules match the specification:</p>"
@@ -3110,28 +3195,80 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "generally, not merely for this application. The GK tab is retained for comparison and for the "
                 + "Stress Test's spending-adjustment story; the Pro PoS tab is the tool to plan by.</p>"
 
-                + "<h3 style='color:#2a5d34;'>9. RMDs and deliberately omitted features</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec9'></a>9. RMDs, additional v9 stress inputs, and deliberately omitted features</h3>"
                 + "<p><b>RMDs:</b> SECURE 2.0, begin at age 75 (born after 1960), computed from the IRS Uniform "
                 + "Lifetime Table on median Traditional-account balances.</p>"
-                + "<p><b>Deliberately omitted</b> (design decisions, not oversights):</p>"
+
+                + "<p><b>Death event (mid-projection).</b> A death-event input causes one spouse to die at a "
+                + "chosen age; from that year forward the survivor holds the combined portfolio (Traditional "
+                + "and Roth balances consolidated), the decedent's Social Security stream ends (survivor "
+                + "keeps the larger of the two benefits), and living expenses are reduced by the "
+                + "survivor-spend-cut percentage (default 20%). This is a Pro-engine mechanism that runs the "
+                + "surviving-spouse half of the horizon inline; it does <b>not</b> switch the tax basis to "
+                + "Single. For proper survivor tax modeling, use the Single filing status described in "
+                + "section 3a as a separate scenario.</p>"
+
+                + "<p><b>SS COLA shortfall.</b> The tool models the Social Security COLA as lagging general "
+                + "inflation slightly (default 0.2%/yr shortfall vs CPI, adjustable). This captures the "
+                + "well-documented under-indexing of the SSA's basket relative to the retiree spending "
+                + "basket, and produces a small but compounding real-benefit erosion over a 30-year "
+                + "horizon.</p>"
+
+                + "<p><b>SS benefit haircut (v6 stress input).</b> A haircut percentage and start year lets "
+                + "you stress-test a legislated cut &mdash; commonly used to model the 2033 Trust Fund "
+                + "depletion projection where scheduled benefits would fall to ~77% of promised. Set the "
+                + "percentage to 0 to disable. The haircut applies to both spouses' benefits from the "
+                + "chosen year onward and is layered on top of the COLA shortfall.</p>"
+
+                + "<p><b>SS bridge modes (v9).</b> The pre-claim &quot;bridge&quot; income schedule the "
+                + "engine uses in years before a spouse claims their benefit has three modes:</p>"
                 + "<ul>"
-                + "<li>Asset-allocation glide path &mdash; single return/volatility pair; a fixed slightly-"
-                + "pessimistic late-life volatility is the preferred conservative direction.</li>"
-                + "<li>Mortality weighting &mdash; the plan runs to a fixed planning age with certainty (no "
-                + "actuarial discounting), which keeps the tool conservatively pessimistic.</li>"
-                + "<li>The Guyton-Klinger tab retains the legacy flat tax escalator (the computed engine applies "
-                + "to the Pro PoS median path). GK is a separate dynamic-spending overlay; keeping its tax simple "
-                + "preserves it as a clean comparison baseline.</li>"
+                + "<li><b>From simulation start (default)</b> &mdash; each spouse is bridged independently "
+                + "from the withdrawal-start year up to that spouse's own claim date. Correct treatment of "
+                + "asymmetric claim strategies (e.g., User claims early, Spouse delays to 70).</li>"
+                + "<li><b>From first claim</b> &mdash; legacy v6 behavior. The bridge starts at whichever "
+                + "spouse claims first. Retained byte-identical for regression checks.</li>"
+                + "<li><b>None</b> &mdash; no bridge; the pre-claim years show whatever the portfolio can "
+                + "actually cover without a phantom SS income stream. Useful for stress cases.</li>"
                 + "</ul>"
 
-                + "<h3 style='color:#2a5d34;'>10. Caveats</h3>"
+                + "<p><b>Terminal-year artifact.</b> The Pro engine sizes withdrawals to hold your PoS "
+                + "target, re-solved each year &mdash; it is <b>not</b> a &quot;spend the balance to zero&quot; "
+                + "rule. In the final year of a long horizon, the PoS-driven draw can leave the surplus "
+                + "slightly negative <i>even though the portfolio still holds plenty to cover it</i>. This "
+                + "is a display artifact of a probability-of-success solver, not a real shortfall. The SS "
+                + "Optimizer's &quot;Term grace&quot; setting (section 11) accounts for this by exempting "
+                + "such covered terminal dips from the feasibility test; on the Pro tab, read a small "
+                + "final-year negative surplus with balance remaining as &quot;you have the money, you just "
+                + "wouldn't need to draw it under the PoS rule.&quot;</p>"
+
+                + "<p><b>Deliberately omitted</b> (design decisions, not oversights):</p>"
+                + "<ul>"
+                + "<li>Asset-allocation glide path &mdash; a single return/volatility pair is used across "
+                + "the horizon; a fixed slightly-pessimistic late-life volatility is the preferred "
+                + "conservative direction.</li>"
+                + "<li>Mortality discounting of the planning horizon &mdash; the plan runs to your entered "
+                + "planning age with certainty. Late-life dollars are not weighted by survival probability. "
+                + "This is separate from any per-spouse life-expectancy input, which only anchors default "
+                + "planning ages; the horizon itself is deterministic. The direction is conservative &mdash; "
+                + "planning for certainty at your planning age means the tool never assumes you die before "
+                + "then and stops worrying about you.</li>"
+                + "<li>The Guyton-Klinger tab retains the legacy flat tax escalator (the computed engine "
+                + "applies to the Pro PoS median path). GK is a separate dynamic-spending overlay; keeping "
+                + "its tax simple preserves it as a clean comparison baseline.</li>"
+                + "</ul>"
+
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec10'></a>10. Caveats</h3>"
                 + "<p>This tool is a self-directed planning aid, not tax or financial advice. Tax figures are "
                 + "estimates from statutory tables current as of tax year 2026 and inflation-projected forward; "
                 + "real future law will differ. The OBBBA senior bonus (section 4), the annuity decision point, "
                 + "and any threshold-sensitive conversion should be verified with a fee-only fiduciary and/or a "
                 + "tax professional.</p>"
 
-                + "<h3 style='color:#2a5d34;'>11. SS Optimizer &mdash; objective, feasibility, and ranking</h3>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec11'></a>11. SS Optimizer &mdash; objective, feasibility, and ranking</h3>"
                 + "<p>The SS Optimizer scans (User claim month) x (Spouse claim month) combinations and "
                 + "<b>scores each one by running the real Pro engine</b> read-only. There is no separate deterministic "
                 + "scorer -- every combination is a genuine Monte Carlo Pro simulation, so the taxes, bridge, RMDs, "
@@ -3216,6 +3353,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "grid. The <i>Use annuity</i> checkbox on the Portfolio panel is respected -- when the annuity is "
                 + "off, it contributes $0 to every combination.</p>"
 
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "</body></html>";
 
         ep.setText(html);
