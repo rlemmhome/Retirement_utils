@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Sunday, August 23, 2026 at 12:24 PM MST (UTC-7)
+// Last modified: Tuesday, August 25, 2026 at 10:25 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Sunday, August 23, 2026 at 12:24 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, August 25, 2026 at 10:25 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -3349,14 +3349,23 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         // combination, so the trade-off is visible rather than collapsed to one pick.
         String[] optCols = {
                 "Rank", "User SS Start", "Spouse SS Start",
-                "PoS %", "Feasible", "Min surplus",
+                "PoS %", "Feasibility min", "Min surplus",
                 "Go-go headroom", "Slow-go headroom", "Survivor Floor",
                 "SS at full claim", "Verified"
         };
         tblOptModel = new javax.swing.table.DefaultTableModel(optCols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
-        tblOpt = new JTable(tblOptModel);
+        tblOpt = new JTable(tblOptModel) {
+            @Override public String getToolTipText(java.awt.event.MouseEvent e) {
+                int vRow = rowAtPoint(e.getPoint());
+                int vCol = columnAtPoint(e.getPoint());
+                if (vRow >= 0 && vCol == 4 && vRow < optRowResults.size()) {
+                    return feasibilityTooltip(optRowResults.get(vRow));
+                }
+                return super.getToolTipText(e);
+            }
+        };
         tblOpt.setFont(new Font("SansSerif", Font.PLAIN, 13));
         tblOpt.setRowHeight(24);
         tblOpt.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
@@ -3365,25 +3374,31 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         tblOpt.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         tblOpt.setSelectionBackground(new Color(190, 220, 255));
 
-        int[] optWidths = {40, 110, 110, 60, 70, 100, 110, 110, 110, 110, 70};
+        int[] optWidths = {40, 110, 110, 60, 100, 100, 110, 110, 110, 110, 70};
         for (int i = 0; i < optWidths.length && i < tblOpt.getColumnCount(); i++)
             tblOpt.getColumnModel().getColumn(i).setPreferredWidth(optWidths[i]);
 
         // Row coloring: gold/silver/bronze for the top 3; infeasible rows tinted.
+        // The "Feasibility min" column (index 4) is additionally shaded green (pass)
+        // or red (fail) so the verdict reads at a glance without a Yes/No column.
         javax.swing.table.DefaultTableCellRenderer optRend = new javax.swing.table.DefaultTableCellRenderer() {
             final Color GOLD   = new Color(255, 245, 150);
             final Color SILVER = new Color(232, 232, 232);
             final Color BRONZE = new Color(245, 225, 200);
-            final Color INFEAS = new Color(250, 232, 232);   // faint red for not-feasible
+            final Color INFEAS = new Color(250, 232, 232);   // faint red row tint for not-feasible
+            final Color FEAS_GREEN = new Color(198, 239, 206); // pass cell (col 4)
+            final Color FEAS_RED   = new Color(255, 199, 199); // fail cell (col 4)
             @Override public java.awt.Component getTableCellRendererComponent(
                     JTable t, Object v, boolean sel, boolean foc, int row, int col) {
                 java.awt.Component c = super.getTableCellRendererComponent(t,v,sel,foc,row,col);
+                boolean feas = row < optRowResults.size() && optRowResults.get(row).feasible;
                 if (!sel) {
                     Object ro = tblOptModel.getValueAt(row, 0);
                     int rank = ro instanceof Integer ? (Integer)ro : 9999;
-                    Object fo = tblOptModel.getValueAt(row, 4);   // Feasible column
-                    boolean feas = "Yes".equals(fo);
-                    if      (rank == 1) c.setBackground(GOLD);
+                    if (col == 4) {
+                        // Feasibility-min cell: green if the plan passes, red if it fails.
+                        c.setBackground(feas ? FEAS_GREEN : FEAS_RED);
+                    } else if (rank == 1) c.setBackground(GOLD);
                     else if (rank == 2) c.setBackground(SILVER);
                     else if (rank == 3) c.setBackground(BRONZE);
                     else if (!feas)     c.setBackground(INFEAS);
@@ -3391,7 +3406,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                     c.setForeground(Color.BLACK);
                 }
                 // Left-align the two date columns (1,2); right-align the rest.
-                ((JLabel)c).setHorizontalAlignment((col==1||col==4)?LEFT:RIGHT);
+                ((JLabel)c).setHorizontalAlignment((col==1||col==2)?LEFT:RIGHT);
                 return c;
             }
         };
@@ -3900,7 +3915,11 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         int minGo = Integer.MAX_VALUE, minSlow = Integer.MAX_VALUE;
         boolean sawGo = false, sawSlow = false;
         int minGreenTest = Integer.MAX_VALUE;   // drives feasibility
+        int minGreenTestYear = 0;               // calendar year of that worst counted year
         int minRawSurplus = Integer.MAX_VALUE;  // shown in the Min surplus column
+        r.violations.clear();
+        r.gracedDips.clear();
+        r.dollarsReal = realDollars;
         if (pr.medianRows != null) {
             int nRows = pr.medianRows.size();
             for (int i = 0; i < nRows; i++) {
@@ -3908,6 +3927,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 double d = (realDollars && row.inflFactor > 0) ? row.inflFactor : 1.0;
                 int surplusDisp = (int) Math.round(row.surplus / d);
                 int balanceDisp = (int) Math.round(row.balance / d);
+                int calY        = row.calYear;
                 if (surplusDisp < minRawSurplus) minRawSurplus = surplusDisp;
 
                 // Is this a graced terminal year whose dip the balance can cover?
@@ -3915,12 +3935,23 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 int shortfallHere = greenBuf - surplusDisp;         // >0 means below buffer
                 boolean covered = (shortfallHere <= 0) ||           // not below buffer, or
                         (inTerminalWindow && balanceDisp >= shortfallHere);  // covered terminal dip
-                if (!covered && surplusDisp < minGreenTest) minGreenTest = surplusDisp;
+                if (!covered) {
+                    if (surplusDisp < minGreenTest) { minGreenTest = surplusDisp; minGreenTestYear = calY; }
+                    // Record the green-buffer violation for the tooltip.
+                    r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "green", greenBuf));
+                } else if (shortfallHere > 0 && inTerminalWindow) {
+                    // Below buffer but forgiven by terminal grace (balance covers it).
+                    r.gracedDips.add(new FloorMiss(calY, surplusDisp, balanceDisp, "green", greenBuf));
+                }
 
                 if (approxEq(row.goGoMult, goGoMultVal)) {
                     sawGo = true; if (surplusDisp < minGo) minGo = surplusDisp;
+                    if (surplusDisp < goGoFloor)
+                        r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "go-go", goGoFloor));
                 } else if (approxEq(row.goGoMult, slowGoMultVal)) {
                     sawSlow = true; if (surplusDisp < minSlow) minSlow = surplusDisp;
+                    if (surplusDisp < slowGoFloor)
+                        r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "slow-go", slowGoFloor));
                 }
             }
         }
@@ -3932,6 +3963,11 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         // below-buffer year was a covered terminal dip, this stays at MAX_VALUE and
         // the green test passes.
         int greenTestMin = (minGreenTest == Integer.MAX_VALUE) ? Integer.MAX_VALUE : minGreenTest;
+        // Feasibility-min shown in the color-coded column: the worst COUNTED year.
+        // If nothing was counted below buffer, fall back to the raw min (a positive
+        // number that the user can still read as "worst year").
+        r.feasMin     = (greenTestMin != Integer.MAX_VALUE) ? greenTestMin : r.minSurplus;
+        r.feasMinYear = (greenTestMin != Integer.MAX_VALUE) ? minGreenTestYear : 0;
 
         // Feasibility test + worst shortfall (how far the worst floor is missed).
         int shortfall = 0;
@@ -4006,6 +4042,52 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     }
 
 
+    // v9: HTML tooltip for a Feasibility-min cell. Lists every year that failed a
+    // floor (calendar year, surplus, balance, which floor + its level), notes any
+    // terminal dips that terminal-grace exempted, and on a passing row states that
+    // it passes. All dollars in the mode the scan was run in (real or nominal).
+    private String feasibilityTooltip(SsOptResult r) {
+        String unit = r.dollarsReal ? "today's $" : "future $";
+        StringBuilder sb = new StringBuilder("<html>");
+        if (r.feasible) {
+            sb.append("<b>Feasible</b> &mdash; meets green buffer, go-go and slow-go floors, and the PoS target.<br>");
+            sb.append("Worst counted year: <b>")
+                    .append(r.feasMinYear > 0 ? String.valueOf(r.feasMinYear) : "n/a")
+                    .append("</b> at ").append(CURRENCY.format((long) r.feasMin))
+                    .append(" surplus (").append(unit).append(").");
+        } else {
+            sb.append("<b>Not feasible</b> &mdash; the following year(s) miss a floor (").append(unit).append("):<br>");
+            if (r.violations.isEmpty() && r.actualPoS > 0) {
+                sb.append("PoS ").append(String.format("%.1f%%", r.actualPoS))
+                        .append(" is below the target.");
+            } else {
+                sb.append("<table cellpadding=2>");
+                sb.append("<tr><td><b>Year</b></td><td><b>Floor</b></td><td><b>Surplus</b></td>")
+                        .append("<td><b>Needs</b></td><td><b>Portfolio</b></td></tr>");
+                for (FloorMiss m : r.violations) {
+                    sb.append("<tr><td>").append(m.calYear).append("</td><td>")
+                            .append(m.floor).append("</td><td>")
+                            .append(CURRENCY.format((long) m.surplus)).append("</td><td>")
+                            .append(CURRENCY.format((long) m.floorLevel)).append("</td><td>")
+                            .append(CURRENCY.format((long) m.balance)).append("</td></tr>");
+                }
+                sb.append("</table>");
+            }
+        }
+        if (!r.gracedDips.isEmpty()) {
+            sb.append("<br><i>Terminal grace forgave a below-buffer dip (portfolio covers it) in: ");
+            for (int i = 0; i < r.gracedDips.size(); i++) {
+                FloorMiss m = r.gracedDips.get(i);
+                if (i > 0) sb.append(", ");
+                sb.append(m.calYear).append(" (").append(CURRENCY.format((long) m.surplus))
+                        .append(", bal ").append(CURRENCY.format((long) m.balance)).append(")");
+            }
+            sb.append(".</i>");
+        }
+        sb.append("</html>");
+        return sb.toString();
+    }
+
     private void populateOptTable(java.util.List<SsOptResult> results,
                                   int manBY, int manBM, int womanBY, int womanBM,
                                   int manPIA, int womanPIA, int infeasMode) {
@@ -4018,6 +4100,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
 
         tblOptModel.setRowCount(0);
         optRowDates.clear();
+        optRowResults.clear();
 
         int feasibleCount = 0;
         for (SsOptResult r : results) if (r.feasible) feasibleCount++;
@@ -4033,7 +4116,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                     String.format("%02d/%d", r.bobMonth, r.bobYear),
                     joClaims ? String.format("%02d/%d", r.joMonth, r.joYear) : "--",
                     String.format("%.1f%%", r.actualPoS),
-                    r.feasible ? "Yes" : "No",
+                    CURRENCY.format((long) r.feasMin),
                     CURRENCY.format((long) r.minSurplus),
                     goHead,
                     slowHead,
@@ -4042,6 +4125,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                     r.verified ? "full" : "scan",
             });
             optRowDates.add(new int[]{r.bobYear, r.bobMonth, r.joYear, r.joMonth});
+            optRowResults.add(r);
         }
 
         String head;
@@ -4068,6 +4152,10 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
 
     // Parallel list: maps optimizer table row index to SS date array [bobY,bobM,joY,joM]
     private final java.util.List<int[]> optRowDates = new java.util.ArrayList<>();
+    // v9: row-ordered results backing the SS Optimizer table, so the renderer can
+    // read feasibility for cell coloring and the header/cell tooltips can describe
+    // the exact floor violations for each row.
+    private final java.util.List<SsOptResult> optRowResults = new java.util.ArrayList<>();
 
     static class SsOptResult {
         int bobYear, bobMonth, joYear, joMonth;
@@ -4091,6 +4179,29 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         boolean feasible      = false;// meets green + travel floors + PoS target
         int    shortfall      = 0;    // if not feasible: worst floor miss (>=0 real $)
         boolean verified      = false;// true = scored at full fidelity (re-verify pass)
+        // v9 display: the feasibility-relevant minimum -- the worst year the green
+        // test actually counts, AFTER terminal-grace exemptions. This is the number
+        // the color-coded "Feasibility min" column shows (green=pass, red=fail).
+        int    feasMin        = 0;    // worst counted surplus (display $ at scan-time mode)
+        int    feasMinYear    = 0;    // calendar year of that worst counted year
+        boolean dollarsReal   = false;// which mode feasMin/violations were computed in
+        // Per-year floor violations for the tooltip. Each entry: calendar year, the
+        // surplus that year, the portfolio balance that year, and which floor it
+        // missed. Plus terminal dips that were EXEMPTED by grace (not failures).
+        java.util.List<FloorMiss> violations = new java.util.ArrayList<>();
+        java.util.List<FloorMiss> gracedDips = new java.util.ArrayList<>();
+    }
+
+    // v9: one floor miss (or graced dip) recorded for the SS Optimizer tooltip.
+    static class FloorMiss {
+        int calYear;       // calendar year (matches the Pro PoS "Cal yr" column)
+        int surplus;       // surplus/gap that year, in the scan-time dollar mode
+        int balance;       // portfolio balance that year, same mode
+        String floor;      // "green", "go-go", or "slow-go"
+        int floorLevel;    // the floor threshold it failed
+        FloorMiss(int y, int s, int b, String f, int lvl) {
+            calYear = y; surplus = s; balance = b; floor = f; floorLevel = lvl;
+        }
     }
 
 
