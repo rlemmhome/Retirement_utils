@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Tuesday, August 25, 2026 at 10:25 AM MST (UTC-7)
+// Last modified: Tuesday, August 25, 2026 at 01:14 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Tuesday, August 25, 2026 at 10:25 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, August 25, 2026 at 01:14 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -3131,30 +3131,90 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "and any threshold-sensitive conversion should be verified with a fee-only fiduciary and/or a "
                 + "tax professional.</p>"
 
-                + "<h3 style='color:#2a5d34;'>11. SS Optimizer &mdash; objective, mortality weighting, and modes</h3>"
-                + "<p>The SS Optimizer is a fast <b>deterministic pre-filter</b>, separate from the Monte Carlo "
-                + "PoS engine. It scans claiming-month combinations and scores each with a single point-estimate "
-                + "path (fixed return and inflation), then lets you click a row to apply those dates and run the "
-                + "full simulation. It intentionally does <b>not</b> compute the detailed tax engine (no computed "
-                + "federal/IRMAA/SS-taxability); it uses the flat 'Base tax' escalator. Its job is to rank "
-                + "claiming strategies for your desired spending shape, not to precompute taxes.</p>"
-                + "<p><b>Objective.</b> The optimizer maximizes <i>guaranteed</i> income (Social Security plus "
-                + "annuity) accumulated during the go-go years &mdash; more guaranteed income when you are "
-                + "spending most means less portfolio draw in those years. Projected final balance is only a "
-                + "tiebreaker (legacy is not a goal).</p>"
-                + "<p><b>Mortality weighting (v4).</b> Each person's Social Security in the objective is weighted "
-                + "by a survival probability that uses your <b>life-expectancy</b> inputs: a linear ramp of 1.0 "
-                + "at the withdrawal-start age, 0.5 at that person's life expectancy (the median age of death, so "
-                + "about half survive to it), tapering to 0 symmetrically beyond. The annuity is a contractual "
-                + "stream, not a life, so it is not weighted. Because near-term dollars are near-certain to be "
-                + "enjoyed while late-80s dollars are coin-flips, this generally <b>favors earlier claiming</b> "
-                + "&mdash; consistent with the analysis that rejected deferring to 70. Note this changes what the "
-                + "optimizer maximizes (survival-weighted, not certain), so rankings shift earlier; review the "
-                + "top rows against your own judgment.</p>"
-                + "<p><b>Filing status.</b> In <b>Single</b> mode the optimizer scans only the primary/User "
-                + "person's claim months (the spouse does not claim), and spouse Social Security is excluded. In "
-                + "MFJ it scans the full two-person grid. The <b>Use annuity</b> checkbox also applies: when the "
-                + "annuity is deactivated, it contributes $0 to the optimizer's guaranteed income.</p>"
+                + "<h3 style='color:#2a5d34;'>11. SS Optimizer &mdash; objective, feasibility, and ranking</h3>"
+                + "<p>The SS Optimizer scans (User claim month) x (Spouse claim month) combinations and "
+                + "<b>scores each one by running the real Pro engine</b> read-only. There is no separate deterministic "
+                + "scorer -- every combination is a genuine Monte Carlo Pro simulation, so the taxes, bridge, RMDs, "
+                + "conversions and everything else the Pro tab computes are all in play. The scan runs at reduced "
+                + "fidelity (the <i>Scan paths</i> / <i>fan</i> inputs) for fast ranking; the top rows are then "
+                + "<b>re-verified at your full Pro-tab fidelity</b> and marked <i>full</i>, so their numbers are precise.</p>"
+
+                + "<p><b>Objective &mdash; feasibility, then survivor floor.</b> A combination is <i>feasible</i> when "
+                + "it satisfies all of these:</p>"
+                + "<ul>"
+                + "<li><b>Stays green</b> every year at or above the <i>Green buffer</i> (subject to terminal grace, "
+                + "below).</li>"
+                + "<li><b>Go-go headroom</b> in every go-go year at or above the <i>Go-go floor</i>.</li>"
+                + "<li><b>Slow-go headroom</b> in every slow-go year at or above the <i>Slow-go floor</i>.</li>"
+                + "<li><b>PoS</b> holds at or above your <i>Target probability of success</i>.</li>"
+                + "</ul>"
+                + "<p>Among <b>feasible</b> combinations, the optimizer maximizes <b>JoAnn's (the spouse's) survivor "
+                + "floor</b> -- the annual benefit the surviving spouse would keep for life, which is the larger of "
+                + "the two claimed benefits. This directly rewards delaying the higher earner when the portfolio "
+                + "can carry it, and it replaces the old go-go-guaranteed-income proxy that was retired because it "
+                + "structurally forced early claiming.</p>"
+
+                + "<p><b>Travel floors are cushions, not travel budgets.</b> Your go-go and slow-go multipliers "
+                + "(e.g. 1.5x, 1.3x) already inflate spending during those years -- travel money lives in the "
+                + "elevated spend. The optimizer's go-go and slow-go floors are the <b>additional surplus</b> "
+                + "required <i>after</i> that elevated spend. Setting Go-go floor $25,000 does not mean $25K of "
+                + "travel; it means $25K of leftover surplus on top of the 1.5x-elevated spending. To require a "
+                + "meaningful cushion, keep them small (say, $0 to $5,000). Setting them to your intended travel "
+                + "amount will double-count it and reject nearly every strategy.</p>"
+
+                + "<p><b>Terminal grace.</b> The Pro-engine withdrawal is sized to hold your PoS target, not to "
+                + "spend the balance to zero. In the last year or two of a long horizon that can leave surplus "
+                + "slightly negative <i>even though the portfolio still holds plenty to cover it</i>. The <i>Term "
+                + "grace</i> setting tells the optimizer to forgive a below-buffer surplus in the final N years "
+                + "<b>only when the portfolio balance can cover the shortfall</b>. This prevents harmless end-of-"
+                + "horizon dips from marking otherwise-sound strategies infeasible.</p>"
+
+                + "<p><b>Real / Nominal.</b> The optimizer's floors and columns follow the top-right dollar toggle "
+                + "at the moment you press Run SS Optimizer. In <b>Real (today's $)</b> mode, floors are compared to "
+                + "surpluses deflated by inflation; in <b>Nominal (future $)</b> mode, to the raw surpluses. Flipping "
+                + "the toggle does <i>not</i> recompute the displayed results -- switch modes and re-run to see them "
+                + "in the other units.</p>"
+
+                + "<p><b>Randomization.</b> When the <i>Re-randomize each run</i> checkbox on the Portfolio panel is "
+                + "on, the optimizer captures one fresh seed per scan so every combination in that scan faces the "
+                + "identical random future (fair ranking), but two different scans -- or the optimizer vs a later "
+                + "Pro tab run -- draw different futures. To reproduce an optimizer row exactly, turn randomize "
+                + "OFF; both the optimizer and the confirming Pro tab run will use seed 0 and agree within scan-"
+                + "fidelity noise.</p>"
+
+                + "<p><b>Ranking rules &mdash; and why some infeasible orderings look surprising.</b> Feasible "
+                + "combinations always sort ahead of infeasible ones (Feasibility-min cell color tells you which). "
+                + "Among <b>feasible</b>, ranking is by survivor floor descending, tiebreaker raw min surplus.</p>"
+                + "<p>Among <b>infeasible</b>, the <i>If infeasible</i> dropdown decides:</p>"
+                + "<ul>"
+                + "<li><b>Show trade-off frontier</b> (default) &mdash; sorted by <b>survivor floor</b>. A badly-"
+                + "infeasible combination with a high survivor floor can rank <i>above</i> a barely-infeasible one "
+                + "with a lower survivor floor. Answers: <i>if I must accept infeasibility, what maximizes the "
+                + "survivor floor?</i></li>"
+                + "<li><b>Show closest (min shortfall)</b> &mdash; sorted by the <b>smallest worst-floor miss first</b>. "
+                + "Barely-infeasible strategies rank at the top. Answers: <i>which strategies come closest to "
+                + "passing?</i></li>"
+                + "<li><b>Relax travel floor</b> &mdash; sorts like frontier; useful when you want to see what "
+                + "headroom the best combinations actually deliver.</li>"
+                + "</ul>"
+                + "<p><b>Example of the frontier surprise.</b> Under frontier mode you can see a rank 5 row with "
+                + "Feasibility min -$4,826 sitting above a rank 53 row with Feasibility min +$6,051 -- the rank 5 "
+                + "misses several floors while rank 53 misses one small floor. The reason is not a bug: rank 5 has "
+                + "survivor floor $57,987 (spouse delayed to 12/2032) while rank 53 has survivor floor $45,203 "
+                + "(spouse claiming 08/2026). Frontier mode is optimizing survivor floor among infeasible, not "
+                + "closeness to feasibility. Switch the dropdown to <b>Show closest</b> to get the ranking that "
+                + "puts nearly-passing strategies at the top.</p>"
+
+                + "<p><b>Feasibility-min column and its tooltip.</b> The color-coded <i>Feasibility min</i> column "
+                + "shows the worst counted year (after terminal-grace exemption), green when feasible, red when "
+                + "not. Hover any cell for a per-row tooltip that lists every failing year (calendar year, floor "
+                + "type, surplus, needed level, portfolio balance), plus any terminal dips that grace forgave. "
+                + "This is the single most useful way to see <i>why</i> a strategy fails without leaving the tab.</p>"
+
+                + "<p><b>Filing status and annuity.</b> In Single mode the optimizer scans only the primary/User "
+                + "person's claim months; spouse Social Security is excluded. In MFJ it scans the full two-person "
+                + "grid. The <i>Use annuity</i> checkbox on the Portfolio panel is respected -- when the annuity is "
+                + "off, it contributes $0 to every combination.</p>"
 
                 + "</body></html>";
 
