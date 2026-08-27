@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Tuesday, August 25, 2026 at 01:49 PM MST (UTC-7)
+// Last modified: Thursday, August 27, 2026 at 01:13 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Tuesday, August 25, 2026 at 01:49 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Thursday, August 27, 2026 at 01:13 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -916,17 +916,18 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "Annual volatility of returns, from the 1961-2024 historical S&amp;P 500 series.<br>"
                 + "Volatility -- not average return -- is the dominant driver of sequence-of-<br>"
                 + "returns risk and thus the sustainable withdrawal. Default 10.79%.</html>");
-        spInflation       = spinD(3.79,  0.0, 15.0, 0.01, "0.00#");
-        spInflation.setToolTipText("<html><b>Mean inflation (%/yr)</b><br>"
-                + "The 3.79% default is the <b>historical</b> 1961-2024 average, paired with the<br>"
-                + "historical inflation volatility below. It includes the high-inflation 1970s-80s,<br>"
-                + "so it is <b>higher than current forward consensus</b>, which clusters around<br>"
-                + "2.5-3% (Fed 2% target, Treasury breakevens, Cleveland Fed model), with some<br>"
-                + "near-term upside risk (tariffs, deficits).<br><br>"
-                + "Keeping 3.79% is a deliberate conservative choice: pairing it with the low<br>"
-                + "forward 6.70% return stress-tests your plan against 'low returns AND high<br>"
-                + "inflation' at once. If you prefer to match current forward projections,<br>"
-                + "lower this to ~2.75-3%. Update at least annually.</html>");
+        spInflation       = spinD(3.0,   0.0, 15.0, 0.01, "0.00#");
+        spInflation.setToolTipText("<html><b>General spending Mean inflation (%/yr)</b><br>"
+                + "Applied to living expenses and Roth-conversion tax growth.<br>"
+                + "<b>Does not include medical inflation</b> &mdash; medical typically outpaces general<br>"
+                + "inflation (Medigap Plan G is age-rated, Part D drug cost creep, dental/vision/hearing),<br>"
+                + "so it has its own dedicated <b>Medical inflation</b> field in the Annual Spending section.<br><br>"
+                + "The 3.0% default sits inside current forward consensus (Fed 2% target, Treasury<br>"
+                + "breakevens, Cleveland Fed model cluster around 2.5-3%), with some near-term upside<br>"
+                + "risk (tariffs, deficits). The 1961-2024 historical average is 3.79% and includes<br>"
+                + "the high-inflation 1970s-80s; set the input higher (e.g. 3.79%) to plan against<br>"
+                + "that regime as a stress case, paired with the historical volatility below.<br>"
+                + "Update at least annually.</html>");
         spInflationStdDev = spinD(2.73,  0.0, 10.0, 0.01, "0.00#");
         spInflationStdDev.setToolTipText("<html><b>Inflation standard deviation (%/yr)</b><br>"
                 + "Year-to-year volatility of inflation, from the 1961-2024 historical CPI series.<br>"
@@ -935,7 +936,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         inner.add(card("Market Assumptions (1961-2024 Historical)", new Object[]{
                 "Expected nominal return (%)",  spNomReturn,
                 "Return std deviation (%)",     spStdDev,
-                "Mean inflation (%/yr)",        spInflation,
+                "General spending Mean inflation (%/yr)",        spInflation,
                 "Inflation std deviation (%)",  spInflationStdDev,
         }));
         inner.add(Box.createVerticalStrut(4));
@@ -2803,11 +2804,13 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "(inflation-adjusted) number here, or inflation would be removed twice.</li>"
                 + "<li>Return standard deviation: 10.79% (1961-2024). Volatility, not average return, dominates "
                 + "sequence-of-returns risk and the sustainable withdrawal.</li>"
-                + "<li>Mean inflation: 3.79% &mdash; the 1961-2024 historical average, which includes the "
-                + "high-inflation 1970s-80s and is therefore HIGHER than current forward consensus (~2.5-3%; Fed "
-                + "2% target, Treasury breakevens). Keeping 3.79% is a deliberate conservative choice that, paired "
-                + "with the low 6.70% forward return, stress-tests the plan against low-returns-and-high-inflation "
-                + "at once. Lower to ~2.75-3% to match forward projections. Inflation std dev: 2.73%.</li>"
+                + "<li><b>General spending mean inflation:</b> 3.0% default &mdash; sits inside current "
+                + "forward consensus (Fed 2% target, Treasury breakevens, Cleveland Fed model cluster ~2.5-3%). "
+                + "The 1961-2024 historical average is 3.79% and includes the high-inflation 1970s-80s; set the "
+                + "input higher (e.g. 3.79%) to plan against that regime as a stress case, paired with the "
+                + "historical volatility below. Applied to living expenses and Roth-conversion tax growth &mdash; "
+                + "medical inflation is a separate input in the Annual Spending section, since medical typically "
+                + "outpaces general inflation. Inflation std dev: 2.73%.</li>"
                 + "<li>Social Security COLA: 2.4%.</li>"
                 + "</ul>"
                 + "<p>Sources: Damodaran (NYU Stern) S&amp;P 500 total-return series; BLS CPI; SSA benefit "
