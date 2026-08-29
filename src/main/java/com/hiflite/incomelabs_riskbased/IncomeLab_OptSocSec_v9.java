@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Thursday, August 27, 2026 at 01:13 PM MST (UTC-7)
+// Last modified: Saturday, August 29, 2026 at 01:14 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Thursday, August 27, 2026 at 01:13 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, August 29, 2026 at 01:14 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -898,17 +898,21 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         inner.add(Box.createVerticalStrut(4));
 
         // == Market Assumptions ============================================
-        spNomReturn       = spinD(6.70, 0.0, 20.0, 0.01, "0.00#");
+        spNomReturn       = spinD(5.5,  0.0, 20.0, 0.01, "0.00#");
         spNomReturn.setToolTipText("<html><b>Expected NOMINAL return (%/yr)</b><br>"
                 + "A forward-looking <b>nominal</b> return -- BEFORE removing inflation. The<br>"
                 + "engine applies inflation separately (to spending), so feed a nominal number<br>"
                 + "here, not a real one.<br><br>"
-                + "The 6.70% default reflects conservative expert forward estimates for the next<br>"
-                + "~10-15 years, which run well below the historical nominal S&amp;P 500 CAGR of<br>"
-                + "roughly 10.5% (dividends reinvested). Experts expect lower returns ahead due<br>"
-                + "to elevated valuations.<br><br>"
+                + "The 5.5% default reflects 2026 forward-looking capital market assumptions<br>"
+                + "from J.P. Morgan (October 2025) and Vanguard (December 2025 VCMM run). Both<br>"
+                + "houses forecast muted near-term returns driven by elevated large-cap<br>"
+                + "valuations: Vanguard projects ~3.9-5.9% annualized U.S. equities over 10<br>"
+                + "years; J.P. Morgan projects ~6.4% for a 60/40 over 10-15 years. Historical<br>"
+                + "nominal S&amp;P CAGR of ~10.5% is well above forward consensus.<br><br>"
+                + "See Assumptions &amp; Methods section 2 for the full CMA basis and the<br>"
+                + "corresponding EDJ-managed net series.<br><br>"
                 + "<b>Nominal vs real:</b> real (inflation-adjusted) return &asymp; this figure minus<br>"
-                + "your inflation assumption. At 6.70% nominal - 3.79% inflation that is ~2.9%<br>"
+                + "your inflation assumption. At 5.5% nominal - 2.3% inflation that is ~3.2%<br>"
                 + "real. Do NOT enter a real number here or inflation gets removed twice.<br>"
                 + "Update at least annually as new forward estimates publish.</html>");
         spStdDev          = spinD(10.79, 0.0, 40.0, 0.01, "0.00#");
@@ -916,17 +920,20 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "Annual volatility of returns, from the 1961-2024 historical S&amp;P 500 series.<br>"
                 + "Volatility -- not average return -- is the dominant driver of sequence-of-<br>"
                 + "returns risk and thus the sustainable withdrawal. Default 10.79%.</html>");
-        spInflation       = spinD(3.0,   0.0, 15.0, 0.01, "0.00#");
+        spInflation       = spinD(2.3,   0.0, 15.0, 0.01, "0.00#");
         spInflation.setToolTipText("<html><b>General spending Mean inflation (%/yr)</b><br>"
                 + "Applied to living expenses and Roth-conversion tax growth.<br>"
-                + "<b>Does not include medical inflation</b> &mdash; medical typically outpaces general<br>"
-                + "inflation (Medigap Plan G is age-rated, Part D drug cost creep, dental/vision/hearing),<br>"
-                + "so it has its own dedicated <b>Medical inflation</b> field in the Annual Spending section.<br><br>"
-                + "The 3.0% default sits inside current forward consensus (Fed 2% target, Treasury<br>"
-                + "breakevens, Cleveland Fed model cluster around 2.5-3%), with some near-term upside<br>"
-                + "risk (tariffs, deficits). The 1961-2024 historical average is 3.79% and includes<br>"
-                + "the high-inflation 1970s-80s; set the input higher (e.g. 3.79%) to plan against<br>"
-                + "that regime as a stress case, paired with the historical volatility below.<br>"
+                + "<b>Does not include medical</b> &mdash; medical typically outpaces general<br>"
+                + "inflation (Medigap age-rating, Part D drug creep, dental/vision/hearing<br>"
+                + "usage rising with age), so it has its own dedicated <b>Medical Cost Increase</b><br>"
+                + "field in the Annual Spending section.<br><br>"
+                + "The 2.3% default is anchored to the Social Security 2026 Trustees Report<br>"
+                + "(intermediate assumptions, ultimate long-range CPI-W of 2.4%/yr) and the<br>"
+                + "CBO's projection that the Federal Reserve reaches its 2% target over the<br>"
+                + "2027-2035 window. Housing and health are modeled as separate, faster-<br>"
+                + "growing series and are excluded from this &quot;core&quot; figure.<br><br>"
+                + "See Assumptions &amp; Methods section 2 for the full basis. The 1961-2024<br>"
+                + "historical average is 3.79% and is available as a stress-case setting.<br>"
                 + "Update at least annually.</html>");
         spInflationStdDev = spinD(2.73,  0.0, 10.0, 0.01, "0.00#");
         spInflationStdDev.setToolTipText("<html><b>Inflation standard deviation (%/yr)</b><br>"
@@ -957,6 +964,20 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "the figure changes once you and your spouse are both on Medicare (~2027-2028).<br>"
                 + "The tool inflates this line at the medical-inflation rate below.</html>");
         spMedInflation = spinD(4.5,     0.0, 15.0,   0.1,  "0.0#");
+        spMedInflation.setToolTipText("<html><b>Medical Cost Increase (%/yr)</b><br>"
+                + "The annual growth rate applied to the Medical spending line -- effectively<br>"
+                + "the <b>medical spending growth rate</b>, not pure CPI inflation. It combines two<br>"
+                + "forces:<br><br>"
+                + "&nbsp;&nbsp;<b>1. General price inflation for medical goods and services</b> --<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;medical CPI historically outpaces core CPI by 1-2%/yr.<br>"
+                + "&nbsp;&nbsp;<b>2. Age-related cost creep</b> -- Medigap Plan G in Arizona is age-<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;rated (premiums rise ~5-7%/yr just from getting older),<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Part D drug costs creep as more medications are added, and<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dental/vision/hearing usage rises with age.<br><br>"
+                + "The 4.5% default is a reasonable midpoint for a household on Medicare with<br>"
+                + "Medigap. If your Medigap plan issuer publishes a specific age-rating<br>"
+                + "schedule, or your prescription list is unusually stable/growing, adjust<br>"
+                + "accordingly. This is separate from the General spending inflation above.</html>");
         spBaseTax      = spinI( 17_500, 0, 200_000, 1_000, "#,###");
         spTaxInflation = spinD(3.79,    0.0, 10.0,  0.01,  "0.00#");
         spGoGo         = spinD(1.000,   0.0,  5.0,  0.001, "0.000#");
@@ -1020,7 +1041,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         inner.add(card("Annual Spending (2027 Base $)", new Object[]{
                 "Living expenses ($/yr)",             spLivingExp,
                 "Medical -- premiums & out-of-pocket ($/yr)", spMedical,
-                "Medical inflation (%/yr)",           spMedInflation,
+                "Medical Cost Increase (%/yr)",       spMedInflation,
                 "Go-go years multiplier",             spGoGo,
                 "Go-go years duration (from wd start)", spGoGoDuration,
                 "Slow-go multiplier (v6)",             spSlowGo,
@@ -2706,7 +2727,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "<ul style='margin:0 0 0 18px; padding:0;'>"
                 + "<li><a href='#intro' style='color:#264653; text-decoration:none;'>Three approaches to dynamic spending</a></li>"
                 + "<li><a href='#sec1' style='color:#264653; text-decoration:none;'>1. Core method &mdash; PoS as input, dollars as output</a></li>"
-                + "<li><a href='#sec2' style='color:#264653; text-decoration:none;'>2. Market assumptions (1961&ndash;2024 historical basis)</a></li>"
+                + "<li><a href='#sec2' style='color:#264653; text-decoration:none;'>2. Market assumptions &mdash; forward capital-market basis (2026 CMAs)</a></li>"
                 + "<li><a href='#sec3' style='color:#264653; text-decoration:none;'>3. Tax engine (v3) &mdash; federal + state + IRMAA</a></li>"
                 + "<li><a href='#sec3a' style='color:#264653; text-decoration:none;'>3a. Single mode &mdash; spouse fields disabled (v4)</a></li>"
                 + "<li><a href='#sec4' style='color:#264653; text-decoration:none;'>4. Standard deduction &mdash; what IS and is NOT modeled</a></li>"
@@ -2795,29 +2816,74 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "current balance and other live inputs).</p>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
-                + "<h3 style='color:#2a5d34;'><a name='sec2'></a>2. Market assumptions (1961&ndash;2024 historical basis)</h3>"
+                + "<h3 style='color:#2a5d34;'><a name='sec2'></a>2. Market assumptions &mdash; forward capital-market basis (2026 CMAs)</h3>"
+                + "<p>Prior versions used the 1961-2024 historical average as the primary basis. The current "
+                + "defaults are anchored to <b>forward-looking capital market assumptions</b> published in the "
+                + "second half of 2025 by major asset managers, which forecast materially lower near-term returns "
+                + "than the long-run historical average due to elevated large-cap valuations. Historical figures "
+                + "remain available as user-selectable stress-case settings; they are documented at the end of "
+                + "this section.</p>"
+
+                + "<p><b>General inflation CAGR.</b> General price inflation is anchored to the Social Security "
+                + "2026 Trustees Report, whose intermediate assumptions set an ultimate long-range CPI-W growth "
+                + "rate of 2.4% per year, consistent with the CBO's projection that the Federal Reserve reaches "
+                + "its 2% target over the 2027-2035 window. This assumption schedule holds general inflation "
+                + "near 2.2% in the first five years and drifts to 2.4% for the balance of the horizon. Housing "
+                + "and health are modeled as separate, faster-growing series and are therefore excluded from "
+                + "this &quot;core&quot; figure; shelter CPI starts elevated at roughly 3.4% (per BLS data "
+                + "through May 2026) and tapers toward ~2.5% long-run, while health is escalated on its own "
+                + "spending basis (see the health assumption). All nominal returns elsewhere in the model are "
+                + "deflated against this general-inflation series. The current default value is <b>2.3%</b>.</p>"
+
+                + "<p><b>Market return CAGR.</b> Equity returns use nominal U.S. large-cap total-return "
+                + "assumptions drawn from the 2026 forward-looking capital market assumptions of J.P. Morgan "
+                + "(October 2025) and Vanguard (December 2025 VCMM run). Both houses forecast unusually muted "
+                + "near-term returns driven by elevated starting valuations in large-cap technology: Vanguard "
+                + "projects roughly 3.9%-5.9% annualized for U.S. equities over the next ten years, and J.P. "
+                + "Morgan projects a 6.4% return for a 60/40 portfolio over a 10-15 year horizon. Accordingly, "
+                + "this model uses ~4.5% for the first five years and ~4.9% at ten years, then reverts toward "
+                + "a long-run ~7.0% for years 15 through 30 as valuations are assumed to normalize. Figures "
+                + "beyond the sources' published 10-15 year horizons are interpolated toward historical norms "
+                + "and are not independently sourced; all figures are nominal and are deflated by the general-"
+                + "inflation series within the simulation. The current default value is <b>5.5%</b>.</p>"
+
+                + "<p><b>EDJ (Edward Jones) CAGR.</b> The Edward Jones return series models a 65/35 stock-bond "
+                + "allocation held in the Advisory Solutions Fund Models program, stated net of all fees. Gross "
+                + "returns are built from the same 2026 J.P. Morgan and Vanguard building blocks used for the "
+                + "market-return series (near-term ~5.3%, rising toward ~7.0% long-run for a 65/35 mix). From "
+                + "this gross figure an all-in annual cost drag of approximately 1.7% is subtracted, comprising "
+                + "the Edward Jones Program Fee (beginning at 1.35% per the February 2025 schedule, before "
+                + "balance breakpoints), the added Platform Fee (~0.09%), and the embedded expense ratios of "
+                + "the underlying funds (~0.35-0.50%). The resulting net series runs ~3.6% at year five, ~4.2% "
+                + "at year ten, and ~5.3% for years 20 through 30. The near-term impact of fees is material "
+                + "&mdash; roughly a third of gross return in the early years &mdash; and a higher household-"
+                + "asset breakpoint would lower the program fee and raise these net figures by an estimated "
+                + "10-20 basis points. This series is nominal and is deflated by the general-inflation series "
+                + "within the simulation. <i>Reference documentation only &mdash; the model uses a single return "
+                + "input; to evaluate the EDJ-managed path, enter the corresponding net figure in the Expected "
+                + "nominal return field.</i></p>"
+
+                + "<p><b>Other market inputs.</b></p>"
                 + "<ul>"
-                + "<li>Expected NOMINAL return: 6.70% (user-editable). This is a forward-looking nominal "
-                + "estimate &mdash; before removing inflation, which the engine applies separately. The 6.70% "
-                + "reflects conservative expert forward views for the next ~10-15 years and runs well below the "
-                + "historical nominal S&amp;P 500 CAGR of ~10.5% (dividends reinvested). Do not enter a real "
-                + "(inflation-adjusted) number here, or inflation would be removed twice.</li>"
-                + "<li>Return standard deviation: 10.79% (1961-2024). Volatility, not average return, dominates "
-                + "sequence-of-returns risk and the sustainable withdrawal.</li>"
-                + "<li><b>General spending mean inflation:</b> 3.0% default &mdash; sits inside current "
-                + "forward consensus (Fed 2% target, Treasury breakevens, Cleveland Fed model cluster ~2.5-3%). "
-                + "The 1961-2024 historical average is 3.79% and includes the high-inflation 1970s-80s; set the "
-                + "input higher (e.g. 3.79%) to plan against that regime as a stress case, paired with the "
-                + "historical volatility below. Applied to living expenses and Roth-conversion tax growth &mdash; "
-                + "medical inflation is a separate input in the Annual Spending section, since medical typically "
-                + "outpaces general inflation. Inflation std dev: 2.73%.</li>"
-                + "<li>Social Security COLA: 2.4%.</li>"
+                + "<li>Return standard deviation: <b>10.79%</b> (1961-2024 historical S&amp;P 500). Long-run "
+                + "equity volatility is more stable than long-run mean return, so retaining the historical "
+                + "volatility while using a forward mean is standard practice. Volatility, not average return, "
+                + "dominates sequence-of-returns risk and the sustainable withdrawal.</li>"
+                + "<li>Inflation standard deviation: 2.73% (1961-2024 historical CPI).</li>"
+                + "<li>Social Security COLA: 2.4% (matches SSA Trustees intermediate assumption).</li>"
                 + "</ul>"
-                + "<p>Sources: Damodaran (NYU Stern) S&amp;P 500 total-return series; BLS CPI; SSA benefit "
-                + "adjustment schedules. Asset-allocation glide path and mortality weighting are deliberately NOT "
-                + "modeled (see section 8). Note the current mix pairs a FORWARD return estimate with HISTORICAL "
-                + "inflation/volatility; this is intentionally conservative (implied real return ~2.9%), not a "
-                + "matched forward-with-forward or historical-with-historical pair.</p>"
+
+                + "<p><b>Historical basis (available as a stress case).</b> The 1961-2024 historical averages "
+                + "&mdash; nominal S&amp;P 500 CAGR of ~10.5%, general inflation of 3.79% &mdash; remain "
+                + "available by editing the inputs. A useful stress pairing is the historical inflation (3.79%) "
+                + "with the forward return (5.5%), which produces an implied real return near 1.7% and tests "
+                + "the plan against a low-returns-and-high-inflation regime at once.</p>"
+
+                + "<p>Sources: Social Security 2026 Trustees Report; Congressional Budget Office 2025 long-"
+                + "term projections; J.P. Morgan 2026 Long-Term Capital Market Assumptions (October 2025); "
+                + "Vanguard Capital Markets Model (December 2025 run); BLS CPI series through May 2026; "
+                + "Edward Jones Advisory Solutions Fund Models fee schedule (February 2025). Asset-allocation "
+                + "glide path and mortality weighting are deliberately NOT modeled (see section 9).</p>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec3'></a>3. Tax engine (v3) &mdash; federal + state + IRMAA</h3>"
