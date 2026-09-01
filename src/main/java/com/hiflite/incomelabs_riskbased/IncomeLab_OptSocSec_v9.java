@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v9.java
-// Last modified: Saturday, August 29, 2026 at 01:14 PM MST (UTC-7)
+// Last modified: Tuesday, September 01, 2026 at 09:14 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v9";
-    private static final String BUILD_STAMP = "Saturday, August 29, 2026 at 01:14 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, September 01, 2026 at 09:14 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1310,7 +1310,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 + "for the flat Base tax above. Greyed out and ignored when the computed engine<br>"
                 + "is ON.</html>");
 
-        inner.add(card("Tax Engine & Roth Conversion (v3)", new Object[]{
+        inner.add(card("Tax Engine (v3)", new Object[]{
                 "Filing status",           cmbFilingStatus,
                 "Death event (v6)",        cmbDeathWho,
                 "Year of death (v6)",      spDeathYear,
@@ -1324,6 +1324,12 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 "Custom: exclude cap ($, 0=none)", spCustomExclCap,
                 "Base tax -- yr 1 ($/yr) [flat only]",  spBaseTax,
                 "Tax inflation (%/yr) [flat only]",     spTaxInflation,
+        }));
+        inner.add(Box.createVerticalStrut(4));
+        // v9: Roth conversion + IRMAA controls split into their own collapsible
+        // section, collapsed by default (rarely edited). All persistence keys and
+        // tooltips unchanged -- only the visual grouping moved.
+        inner.add(card("Roth Conversion & IRMAA Surcharge", new Object[]{
                 "Conversion mode",         tglConvMode,
                 "Flat conversion ($/yr)",  spConvFlat,
                 "Fill: IRMAA tier ceiling", cmbFillIrmaaTier,
@@ -1332,7 +1338,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
                 "Fill cap ($/yr, 0=NO LIMIT)", spConvCap,
                 "IRMAA threshold growth",  cmbIrmaaMode,
                 "Base thresholds",         btnEditThresholds,
-        }));
+        }, /*defaultExpanded=*/false));
         inner.add(Box.createVerticalStrut(4));
         refreshTaxEngineEnabled();  // set initial enabled/greyed state
         refreshStateFieldsEnabled();  // v5: initial state-field enable/greyed state
@@ -8691,6 +8697,13 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
     //  UI HELPERS
     // ========================================================================
     private JPanel card(String title, Object[] items) {
+        return card(title, items, true);   // default: sections start expanded
+    }
+
+    // v9: overload allowing a section to start COLLAPSED by default (e.g. the
+    // rarely-edited Roth Conversion & IRMAA Surcharge section). A saved panel
+    // state still overrides this default on scenario load.
+    private JPanel card(String title, Object[] items, boolean defaultExpanded) {
         JPanel card = new JPanel();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBackground(Color.WHITE);
@@ -8703,7 +8716,7 @@ public class IncomeLab_OptSocSec_v9 extends JFrame {
         // v7: section slug (stable key for save/load), derived from the title so
         // no call site changes. Titles are unique across the pane.
         final String key = sectionKey(title);
-        final boolean startExpanded = sectionExpanded.getOrDefault(key, Boolean.TRUE);
+        final boolean startExpanded = sectionExpanded.getOrDefault(key, defaultExpanded);
 
         // Body panel holds every row; its visibility is what collapse toggles.
         JPanel body = new JPanel();
