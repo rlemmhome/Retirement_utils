@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v10.java
-// Last modified: Saturday, September 05, 2026 at 04:25 PM MST (UTC-7)
+// Last modified: Saturday, September 05, 2026 at 07:51 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v10";
-    private static final String BUILD_STAMP = "Saturday, September 05, 2026 at 04:25 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, September 05, 2026 at 07:51 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -2087,17 +2087,46 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
                         } else {
                             headroom = "&nbsp;&nbsp;<i>No fill ceiling this row (flat or no conversion).</i><br>";
                         }
+                        // Component breakdown. The engine builds MAGI as exactly
+                        //   magi = taxableSS + tradDraw + annuity + conversion
+                        // (see simulatePro: r.magi = taxableSS + ordinaryOther,
+                        //  then magiWithConv = tr.magi + conv). taxableSS, annuity,
+                        // conversion and magi are all stored on the row; the
+                        // Traditional-draw term is not, so it is recovered exactly
+                        // as the residual. Because the same pre-conversion taxableSS
+                        // appears in both the stored magi and the stored taxableSS
+                        // field, the residual equals the true Traditional draw
+                        // (RMD or larger discretionary draw, whichever applied).
+                        // Deriving it as the residual guarantees the four lines sum
+                        // to the MAGI shown above in every case, in both nominal and
+                        // real-dollar modes (each term divided by the same d).
+                        long ssComp   = (long)(er.taxableSS / d);
+                        long annComp  = (long)(er.annuity   / d);
+                        long convComp = (long)(er.conversion/ d);
+                        long tradComp = magiDisp - ssComp - annComp - convComp;
                         return String.format(
                                 "<html><b>MAGI -- Modified AGI this year</b><br>"
                                         + "&nbsp;&nbsp;MAGI:&nbsp;<b>%s</b><br>"
-                                        + "%s<br>"
-                                        + "Components: taxable Social Security + ordinary income<br>"
-                                        + "(RMD / Traditional draw + annuity) + this year's gross Roth<br>"
-                                        + "conversion. This is the quantity IRMAA and the fill-to-target<br>"
-                                        + "sizing key off -- NOT the Total income column (which is a<br>"
-                                        + "cash-flow figure using full SS and excluding conversions).<br>"
+                                        + "%s"
+                                        + "<br><b>Components (sum to MAGI):</b><br>"
+                                        + "&nbsp;&nbsp;Taxable Social Security:&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Ordinary income (Traditional draw):&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;&nbsp;&nbsp;<i>= RMD or larger discretionary draw</i><br>"
+                                        + "&nbsp;&nbsp;Annuity:&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Roth conversion (gross):&nbsp;+%s<br>"
+                                        + "&nbsp;&nbsp;----------------------------<br>"
+                                        + "&nbsp;&nbsp;<b>MAGI total:&nbsp;%s</b><br>"
+                                        + "<br>MAGI is the quantity IRMAA and the fill-to-target sizing<br>"
+                                        + "key off -- NOT the Total income column (a cash-flow figure<br>"
+                                        + "using full SS and excluding conversions). The gross conversion<br>"
+                                        + "is ordinary income here even though only the net lands in Roth.<br>"
                                         + "The IRMAA surcharge you actually pay lags this by 2 years.</html>",
-                                CURRENCY.format(magiDisp), headroom);
+                                CURRENCY.format(magiDisp), headroom,
+                                CURRENCY.format(ssComp),
+                                CURRENCY.format(tradComp),
+                                CURRENCY.format(annComp),
+                                CURRENCY.format(convComp),
+                                CURRENCY.format(magiDisp));
                     }
                     case COL_ROTH_CONV -> {
                         if (!er.drawing || er.conversion <= 0) return null;
