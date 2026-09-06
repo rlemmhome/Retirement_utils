@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v10.java
-// Last modified: Saturday, September 05, 2026 at 03:33 PM MST (UTC-7)
+// Last modified: Saturday, September 05, 2026 at 04:25 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v10";
-    private static final String BUILD_STAMP = "Saturday, September 05, 2026 at 03:33 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, September 05, 2026 at 04:25 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -3231,12 +3231,27 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
                 + "<li><b>Inflation-skip (PMR0):</b> after a down-return year, the annual inflation raise is "
                 + "skipped if the withdrawal rate is above the initial rate.</li>"
                 + "</ul>"
-                + "<p><b>Two deliberate deviations from the textbook GK spec</b> (both conservative): this tool "
+                + "<p><b>Three deliberate deviations from the textbook GK spec.</b> This tool "
                 + "(a) does NOT suspend the guardrails in the final 15 years of the horizon (the original authors "
                 + "say the CPR/PR need not apply in the last 15 years; keeping them applied cuts spending later, "
-                + "which is more cautious), and (b) skips the inflation adjustment entirely in a down-plus-high-"
-                + "rate year rather than capping it at 6%. The GK tab is provided as a comparison overlay and as "
-                + "the engine behind the Stress Test tab &mdash; it is NOT the recommended planning method.</p>"
+                + "which is more cautious &mdash; conservative), (b) skips the inflation adjustment entirely in a "
+                + "down-plus-high-rate year rather than capping it at 6% (conservative), and (c) applies this "
+                + "application's <b>go-go/slow-go spending multiplier on top of the GK-rule withdrawal</b> "
+                + "(Actual wd = GK withdrawal &times; go-go multiplier), which the 2006 spec has no concept of. "
+                + "Deviation (c) is a front-loading overlay, NOT conservative: it deliberately raises early "
+                + "withdrawals so the GK tab's spending shape is comparable to the Pro PoS tab. <b>To run a GK "
+                + "simulation true to the textbook spec, set the go-go and slow-go durations (go-go years and "
+                + "slow-go years) to 0 in the input panel</b> &mdash; then the multiplier resolves to 1.0 and the "
+                + "withdrawal shown is the pure rule output. Note those durations are <b>shared inputs</b> that "
+                + "also drive the Pro PoS and Stress Test tabs, so restore your normal go-go/slow-go settings "
+                + "afterward.</p>"
+                + "<p><b>The GK tab does not implement slow-go.</b> Unlike the Pro PoS engine, which has a full "
+                + "three-tier go-go / slow-go / no-go curve, the GK engine reads only the go-go duration and "
+                + "multiplier. The slow-go multiplier and slow-go duration are inert on this tab &mdash; setting "
+                + "them changes nothing in the GK simulation. (Zeroing the slow-go years for a pure-GK run is "
+                + "therefore harmless but, on the GK tab specifically, unnecessary; it matters for the shared "
+                + "Pro PoS and Stress Test tabs.) The GK tab is provided as a comparison overlay and as the "
+                + "engine behind the Stress Test tab &mdash; it is NOT the recommended planning method.</p>"
                 + "<p><b>The core problem with ALL withdrawal-rate methods.</b> The 4% rule and its dynamic "
                 + "descendants (including Guyton-Klinger) share a fundamental flaw in how they define success. "
                 + "A withdrawal-rate method takes a percentage of the CURRENT balance, and 'success' is "
@@ -3255,7 +3270,8 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
                 + "why the GK 'final balance' is misleading.</b> A red gap means the guardrail-driven paycheck "
                 + "plus guaranteed income fell short of the budgeted spending that year. In this model the GK "
                 + "withdrawal is set by the RULE (a percentage of balance, guardrail-adjusted), not by the "
-                + "spending need &mdash; and only that rule-driven withdrawal decrements the portfolio. The "
+                + "spending need &mdash; and that rule-driven withdrawal, after the go-go/slow-go multiplier is "
+                + "applied (the Actual wd column), is what decrements the portfolio. The "
                 + "shortfall is displayed but not funded, and the RMD overage is redirected to Roth/MM rather "
                 + "than covering it. So the GK tab reports 'portfolio survived' while the red gaps show the "
                 + "paycheck under-funded the budget for years. The survival is real; the ADEQUACY is not.</p>"
@@ -7520,10 +7536,34 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
                 BorderFactory.createLineBorder(new Color(220, 190, 150), 1),
                 BorderFactory.createEmptyBorder(5, 8, 5, 8)));
 
+        // Pure-GK fidelity banner (deep blue, italic). The go-go/slow-go multipliers
+        // scale the GK withdrawal, which the 2006 spec does not include. To run a
+        // textbook-faithful GK simulation, the user zeroes the go-go/slow-go DURATIONS
+        // -- but those inputs are shared with the Pro PoS and Stress Test tabs, so the
+        // banner warns to restore them afterward. See Assumptions section 8.
+        JLabel gkPureNote = new JLabel("<html><i><b>Pure Guyton-Klinger note:</b> the go-go and slow-go "
+                + "multipliers scale the withdrawals shown here (Actual wd = GK withdrawal x go-go multiplier). "
+                + "The 2006 Guyton-Klinger spec has no go-go concept. To run a simulation true to the spec, set "
+                + "the <b>go-go years</b> and <b>slow-go years</b> (durations) to <b>0</b> in the input panel. "
+                + "Note that these are shared inputs that also drive the Pro PoS and Stress Test tabs -- "
+                + "<b>restore your go-go/slow-go settings afterward.</b> See section 8 on the Assumptions &amp; "
+                + "Methods tab.</i></html>");
+        gkPureNote.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        gkPureNote.setForeground(new Color(20, 60, 120));   // deep, muted blue
+        gkPureNote.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(150, 175, 215), 1),
+                BorderFactory.createEmptyBorder(5, 8, 5, 8)));
+
+        // Stack the two notes vertically so neither displaces the other.
+        JPanel gkNotes = new JPanel(new BorderLayout(0, 4));
+        gkNotes.setBackground(new Color(245, 245, 242));
+        gkNotes.add(gkPureNote, BorderLayout.NORTH);
+        gkNotes.add(gkNote,     BorderLayout.SOUTH);
+
         JPanel topGkWrap = new JPanel(new BorderLayout(0, 4));
         topGkWrap.setBackground(new Color(245, 245, 242));
-        topGkWrap.add(topGk,  BorderLayout.NORTH);
-        topGkWrap.add(gkNote, BorderLayout.SOUTH);
+        topGkWrap.add(topGk,   BorderLayout.NORTH);
+        topGkWrap.add(gkNotes, BorderLayout.SOUTH);
 
         JScrollPane gkScroll = new JScrollPane(tblGk);
         gkScroll.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
