@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v10.java
-// Last modified: Saturday, September 05, 2026 at 07:51 PM MST (UTC-7)
+// Last modified: Monday, September 07, 2026 at 04:23 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -100,7 +100,7 @@ import java.util.List;
  * =============================================================================
  * Compile:  javac IncomeLab_OptSocSec_v10.java
  * Run:      java com.hiflite.incomelabs_riskbased.IncomeLab_OptSocSec_v10
- * Requires Java 11+. No external dependencies.
+ * Requires Java 16+, but JDK 25+ is desired. No external dependencies.
  */
 public class IncomeLab_OptSocSec_v10 extends JFrame {
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v10";
-    private static final String BUILD_STAMP = "Saturday, September 05, 2026 at 07:51 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, September 07, 2026 at 04:23 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1797,7 +1797,7 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
                         return String.format(
                                 "<html><b>Annuity / pension income</b><br>"
                                         + "This is a <b>fixed nominal amount</b> -- it does not adjust for inflation.<br><br>"
-                                        + "Its purchasing power erodes every year. At a 3.79% inflation rate,<br>"
+                                        + "Its purchasing power erodes every year. At a 3.79%% inflation rate,<br>"
                                         + "it retains only about <b>67%% of its starting-year buying power</b><br>"
                                         + "after 10 years -- and roughly 50%% after 18 years.<br><br>"
                                         + "Toggle the <b>Real $</b> button (top right) to see this erosion<br>"
