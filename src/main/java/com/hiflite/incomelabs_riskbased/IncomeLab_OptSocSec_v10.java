@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v10.java
-// Last modified: Monday, September 07, 2026 at 04:23 PM MST (UTC-7)
+// Last modified: Tuesday, September 08, 2026 at 08:57 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v10";
-    private static final String BUILD_STAMP = "Monday, September 07, 2026 at 04:23 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, September 08, 2026 at 08:57 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -641,7 +641,7 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
                 + "<b>Default: 22</b> -- converges to within ~$1.<br>"
                 + "16 = within ~$50. 12 = within ~$500.<br>"
                 + "Smallest runtime impact of the three parameters.</html>");
-        spMcFanPaths   = spinI(500, 20, 2000, 20, "#,###");
+        spMcFanPaths   = spinI(500, 20, 2500, 20, "#,###");
         spMcFanPaths.setToolTipText("<html><b>Fan chart paths</b><br>"
                 + "Full simulation paths used to draw the fan chart and<br>"
                 + "compute the actual PoS metric shown at the top.<br><br>"
@@ -2762,6 +2762,7 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
                 + "<ul style='margin:0 0 0 18px; padding:0;'>"
                 + "<li><a href='#intro' style='color:#264653; text-decoration:none;'>Three approaches to dynamic spending</a></li>"
                 + "<li><a href='#sec1' style='color:#264653; text-decoration:none;'>1. Core method &mdash; PoS as input, dollars as output</a></li>"
+                + "<li><a href='#sec1a' style='color:#264653; text-decoration:none;'>1a. Engine parameters &mdash; solve paths, binary-search iterations, fan paths</a></li>"
                 + "<li><a href='#sec2' style='color:#264653; text-decoration:none;'>2. Market assumptions &mdash; forward capital-market basis (2026 CMAs)</a></li>"
                 + "<li><a href='#sec3' style='color:#264653; text-decoration:none;'>3. Tax engine (v3) &mdash; federal + state + IRMAA</a></li>"
                 + "<li><a href='#sec3a' style='color:#264653; text-decoration:none;'>3a. Single mode &mdash; spouse fields disabled (v4)</a></li>"
@@ -2850,6 +2851,45 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
                 + "The intended workflow is frequent re-running (the sustainable dollar figure moves with the "
                 + "current balance and other live inputs).</p>"
 
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec1a'></a>1a. Engine parameters &mdash; solve paths, binary-search iterations, fan paths</h3>"
+                + "<p>Three inputs on the simulation-parameters card control the accuracy and runtime of the "
+                + "two-level solver described above. They do not change the planning result in expectation &mdash; "
+                + "they change how precisely and how noisily it is estimated. All three are saved with the scenario.</p>"
+                + "<p><b>MC solve paths</b> (default <b>1000</b>; range <b>50&ndash;5,000</b>). Inside the solver, each candidate "
+                + "withdrawal is tested by running this many Monte Carlo return/inflation paths and measuring what fraction "
+                + "survive. More paths give a smoother, less noisy estimate of the survival fraction, so the solved withdrawal "
+                + "lands closer to the true target-PoS figure; fewer paths add dollar variance to that solved number. This is "
+                + "the <b>single biggest driver of total runtime</b> &mdash; roughly halving it roughly halves solver time. "
+                + "Accuracy ladder: <b>100</b> = ~8&times; faster but ~$1,000 of run-to-run variance in the solved withdrawal; "
+                + "<b>200</b> = ~4&times; faster, ~$500 variance; <b>800</b> = high accuracy. The default <b>1000</b> sits "
+                + "deliberately above the 800 high-accuracy mark for maximum stability &mdash; cheap insurance on a fast machine.</p>"
+                + "<p><b>Binary search iterations</b> (default <b>25</b>; range <b>8&ndash;30</b>). Having a way to score any "
+                + "candidate withdrawal, the solver brackets the answer and halves the interval this many times to pin down the "
+                + "largest withdrawal that still meets the PoS target. Each extra iteration halves the remaining dollar "
+                + "uncertainty. Accuracy ladder: <b>12</b> = within ~$500; <b>16</b> = within ~$50; <b>22</b> = within ~5 cents. "
+                + "<b>The default 25 already converges to within about a penny.</b> Pushing it to the maximum 30 tightens that to "
+                + "a few hundredths of a cent &mdash; and since the withdrawal is displayed in whole dollars, <b>anything past 25 "
+                + "changes nothing you can see.</b> The upper range exists only for the curious; it buys no usable precision. "
+                + "This has the <b>smallest runtime impact</b> of the three.</p>"
+                + "<p><b>Fan chart paths</b> (default <b>500</b>; range <b>20&ndash;2,500</b>). Separately from the solver, this "
+                + "many full lifetime paths are drawn to render the fan chart and to compute the <b>Actual PoS</b> metric in the "
+                + "top strip. Each fan path re-solves its withdrawal annually against its own evolving balance, so a fan path is "
+                + "the <b>most expensive kind of path</b> in the engine; fewer of them make the fan and the PoS reading noisier "
+                + "without biasing them. Accuracy ladder: <b>50</b> = rough but usable for a quick check; <b>100</b> = ~4&times; "
+                + "faster than default but visibly choppier; <b>400</b> = smooth fan, stable PoS. The default <b>500</b> is a "
+                + "half-step above that for the steadiest run-to-run PoS readout. The displayed year-by-year table is the median "
+                + "across these paths.</p>"
+                + "<p><b>Why the ranges are capped.</b> The maximums (5,000 / 30 / 2,500) are performance guardrails, not accuracy "
+                + "limits. Beyond the defaults each parameter still improves precision with diminishing returns, but the caps exist "
+                + "so that a user on a modest machine cannot accidentally set something like 50,000 and appear to hang the app while "
+                + "it grinds through hundreds of millions of extra year-calculations. On a fast workstation the ceilings run in a "
+                + "few seconds; the point of the cap is protecting the slow case, not restricting yours.</p>"
+                + "<p><b>How they fit together.</b> Solve paths and binary-search iterations are the <i>inner</i> cost, paid "
+                + "at every displayed year to find that year's sustainable draw (solve paths &times; iterations MC runs per "
+                + "year); fan paths are the <i>outer</i> layer that turns the solved policy into the chart and the PoS "
+                + "number. The SS Optimizer's ranking scan (section 11) deliberately uses its own reduced path counts for a "
+                + "fast first pass, then re-verifies the top candidates at full fidelity.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec2'></a>2. Market assumptions &mdash; forward capital-market basis (2026 CMAs)</h3>"
                 + "<p>Prior versions used the 1961-2024 historical average as the primary basis. The current "
