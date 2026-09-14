@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v10.java
-// Last modified: Tuesday, September 08, 2026 at 08:57 AM MST (UTC-7)
+// Last modified: Sunday, September 13, 2026 at 06:27 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v10";
-    private static final String BUILD_STAMP = "Tuesday, September 08, 2026 at 08:57 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, September 13, 2026 at 06:27 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -2770,6 +2770,7 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
                 + "<li><a href='#sec5' style='color:#264653; text-decoration:none;'>5. Social Security taxability &mdash; provisional-income formula</a></li>"
                 + "<li><a href='#sec6' style='color:#264653; text-decoration:none;'>6. IRMAA &mdash; Medicare surcharge, costed and visible</a></li>"
                 + "<li><a href='#sec6a' style='color:#264653; text-decoration:none;'>6a. Which numbers to act on &mdash; the live column vs. the projected balances</a></li>"
+                + "<li><a href='#sec6b' style='color:#264653; text-decoration:none;'>6b. Re-solve cadence &mdash; annual decision, monthly paycheck</a></li>"
                 + "<li><a href='#sec7' style='color:#264653; text-decoration:none;'>7. Spending, medical costs, and Roth conversions</a></li>"
                 + "<li><a href='#sec7a' style='color:#264653; text-decoration:none;'>7a. Spending curve &mdash; go-go, slow-go, no-go</a></li>"
                 + "<li><a href='#sec8' style='color:#264653; text-decoration:none;'>8. Why PoS is the primary method &mdash; the withdrawal-rate flaw</a></li>"
@@ -3155,7 +3156,7 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
                 + "table &mdash; Portfolio, Trad Bal, Roth Bal, Money Mkt &mdash; is a percentile snapshot of a "
                 + "stochastic fan (each cell is the independent median of <i>that</i> quantity across paths), so "
                 + "the columns do not tie out arithmetically row-to-row and are not meant to. The intended workflow "
-                + "is to re-run this tool every quarter (or at least yearly) with your <i>current, actual</i> "
+                + "is to re-run this tool annually with your <i>current, actual</i> "
                 + "account balances typed in fresh. That re-baselining is what keeps the plan honest, so a balance "
                 + "the tool projects for some year a decade out is never something you act on &mdash; by the time "
                 + "that year arrives you will have re-run with real numbers many times over.</p>"
@@ -3186,6 +3187,44 @@ public class IncomeLab_OptSocSec_v10 extends JFrame {
                 + "leaves a little conversion headroom unused in that one year. Given that busting a cliff is far "
                 + "worse than under-filling, that is the right direction to be wrong.</p>"
 
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec6b'></a>6b. Re-solve cadence &mdash; annual decision, monthly paycheck</h3>"
+                + "<div style='background:#eef5ec; border-left:4px solid #2a5d34; padding:8px 12px; margin:6px 0 10px 0;'>"
+                + "<p style='margin:0; font-weight:bold; color:#1f4a29;'>Look as often as you like; decide once a year. "
+                + "Make the withdrawal decision on roughly the same calendar date each year, and let the months in between "
+                + "run on autopilot.</p></div>"
+                + "<p><b>Running it more often is fine &mdash; acting on it more often is not.</b> There is no harm in "
+                + "opening the tool any time you are curious and re-solving to see where you stand. The caution is only "
+                + "about how often you <i>change your paycheck</i>. The sustainable withdrawal is an annual quantity by "
+                + "construction &mdash; spending, taxes, RMDs, IRMAA tiers and SS COLAs all move on annual cycles &mdash; "
+                + "and markets are noisy quarter to quarter. If you re-solved and re-set your income every quarter or every "
+                + "month, a transient dip would cut your paycheck and the rebound would raise it again: you would pass the "
+                + "portfolio's short-term volatility straight through to your income, which is the opposite of what a "
+                + "withdrawal policy is for. Deciding once a year averages that noise out while still catching genuine "
+                + "trends (a real bear market or a real run-up shows up over a year; a single bad month does not).</p>"
+                + "<p><b>The workflow that avoids the whipsaw.</b> Pick a fixed date &mdash; a birthday, January 2nd, "
+                + "whatever is easy to remember &mdash; and do the same thing on it every year:</p>"
+                + "<ol>"
+                + "<li>Open the tool, type in your <i>current, actual</i> account balances, update ages and any SS status "
+                + "changes, and re-solve.</li>"
+                + "<li>Take that year's <b>Actual wd</b> figure &mdash; that is the whole year's spending withdrawal.</li>"
+                + "<li>Move that one-year amount out of the IRA / tax-deferred account and into a <b>high-yield savings "
+                + "account, money-market account, or other high-interest-earning account</b> in a single annual transaction. "
+                + "This locks in the year's income and takes it off the volatility table.</li>"
+                + "<li>Each month, move <b>one-twelfth</b> of that amount from that cash account into your <b>spending "
+                + "(checking) account</b> for living expenses.</li>"
+                + "</ol>"
+                + "<p>The monthly transfer is pure cash-flow mechanics &mdash; a steady, predictable paycheck for budgeting "
+                + "&mdash; while the cash-account balance simply draws down to zero over the year and is refilled at the next "
+                + "annual re-solve. Because the year's spending is already parked in cash, a mid-year market drop does not "
+                + "touch the income you have already set; it just changes what next year's re-solve will hand you. This also "
+                + "keeps the IRA distribution to one clean annual event, which is far easier for tax withholding, RMD "
+                + "reconciliation and Roth-conversion planning than twelve scattered withdrawals.</p>"
+                + "<p><b>The one reason to re-solve off-cycle.</b> Re-run and reset mid-year only for a genuine "
+                + "<i>structural</i> change &mdash; a large unplanned expense or windfall, the death of a spouse (which "
+                + "changes filing status and SS), a home sale, or a health event that shifts the planning horizon. Those "
+                + "change the tool's <i>inputs</i>, not just the balance, so a fresh solve is warranted. Ordinary market "
+                + "movement, up or down, is never a reason to re-solve between annual checkpoints.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec7'></a>7. Spending, medical costs, and Roth conversions</h3>"
                 + "<p><b>Medical spending (the Medical column)</b> is a single lump input covering all health-care "
