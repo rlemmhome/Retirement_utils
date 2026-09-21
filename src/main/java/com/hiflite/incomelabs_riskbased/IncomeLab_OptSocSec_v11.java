@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v11.java
-// Last modified: Sunday, September 20, 2026 at 12:33 PM MST (UTC-7)
+// Last modified: Sunday, September 20, 2026 at 06:21 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v11";
-    private static final String BUILD_STAMP = "Sunday, September 20, 2026 at 12:33 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, September 20, 2026 at 06:21 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -3325,6 +3325,14 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "produces and leaves the funding source to you.</p>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                ;
+        // v11: the Assumptions page is split into two constants here. Java folds an
+        // adjacent-literal chain into ONE compile-time constant, and the class-file
+        // format caps a constant string at 65,535 bytes -- the v11 section-11 text
+        // pushed the single chain past that ("constant string too long"). Splitting
+        // concatenates at runtime instead. Keep future additions below this line, or
+        // add a third part, rather than growing part one.
+        String html2 = ""
                 + "<h3 style='color:#2a5d34;'><a name='sec8'></a>8. Why PoS is the primary method &mdash; the withdrawal-rate flaw</h3>"
                 + "<p><b>Guyton-Klinger faithfulness.</b> The GK tab implements the 2006 Guyton-Klinger decision "
                 + "rules (Journal of Financial Planning, \"Decision Rules and Maximum Initial Withdrawal Rates\"). "
@@ -3543,9 +3551,34 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
                 + "<p><b>Feasibility-min column and its tooltip.</b> The color-coded <i>Feasibility min</i> column "
                 + "shows the worst counted year (after terminal-grace exemption), green when feasible, red when "
-                + "not. Hover any cell for a per-row tooltip that lists every failing year (calendar year, floor "
-                + "type, surplus, needed level, portfolio balance), plus any terminal dips that grace forgave. "
-                + "This is the single most useful way to see <i>why</i> a strategy fails without leaving the tab.</p>"
+                + "not. Hover any cell for a per-row tooltip that opens with the verdict, then lists the failing "
+                + "years (calendar year, floor type, surplus, needed level, portfolio balance), plus any terminal "
+                + "dips that grace forgave. Years are grouped, so a year missing two floors appears once with both "
+                + "named, and the hover list is capped at eight years -- the full list is in the Why dialog below.</p>"
+
+                + "<p><b>Why column (v11).</b> The <i>Why</i> column names the <b>binding constraint</b> for each "
+                + "row and the margin against it, for example <tt>go-go -$14,539</tt> or <tt>green -$4,109</tt>. "
+                + "The binding constraint is the test with the <i>largest</i> miss -- the one that produced this "
+                + "row's shortfall, and therefore the number that positions it. Feasible rows read <tt>PASS</tt>. "
+                + "The column is shaded green or red to match Feasibility min, so the verdict and its reason read "
+                + "as one unit. The floors a row was scored against are captured when you press Run, so editing a "
+                + "floor spinner afterwards never re-explains a row against a floor it was not tested on.</p>"
+
+                + "<p><b>Why dialog (v11).</b> <b>Left-click the Why cell, or right-click any column</b> on a row, "
+                + "to open the full explanation: the verdict, an <i>all four tests</i> table showing value, floor, "
+                + "margin and result for the green buffer, both travel floors and PoS with the binding one "
+                + "highlighted, a <i>why it ranks here</i> section, every failing year, and any terminal-grace "
+                + "forgiveness. The <i>why it ranks here</i> section is the one that resolves the most common "
+                + "surprise: when no combination is feasible, frontier mode ranks by <i>survivor floor</i> first, "
+                + "so the row that came <b>closest to passing</b> can sit at the bottom of the table. The dialog "
+                + "says so explicitly when that happens and points at the <i>Show closest (min shortfall)</i> "
+                + "fallback, which ranks by nearness instead.</p>"
+
+                + "<p><b>Clicks on the results table (v11).</b> Left-click <i>Rank</i>, <i>User SS Start</i> or "
+                + "<i>Spouse SS Start</i> to apply those dates and re-run. Left-click the <i>Why</i> cell, or "
+                + "right-click any column, to open the explanation. Left-clicking any other column selects the row "
+                + "and does nothing else. Before v11 a click anywhere launched a simulation, so a row could not be "
+                + "inspected without running it.</p>"
 
                 + "<p><b>Filing status and annuity.</b> In Single mode the optimizer scans only the primary/User "
                 + "person's claim months; spouse Social Security is excluded. In MFJ it scans the full two-person "
@@ -3555,7 +3588,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "</body></html>";
 
-        ep.setText(html);
+        ep.setText(html + html2);
         ep.setCaretPosition(0);
         JScrollPane sp = new JScrollPane(ep);
         sp.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
@@ -3568,8 +3601,27 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     //  Deterministic scan of all Bob x Jo SS claiming-age combinations.
     //  Uses fixed returns (user's nomReturn / inflation) -- same as the React
     //  optimizer -- fast enough to score all ~5,000+ combos in seconds.
-    //  Click any row -> writes SS start dates to IL spinners -> runs IL sim.
+    //  v11: left-click Rank / User / Spouse -> writes SS start dates to IL
+    //  spinners -> runs IL sim. Left-click the Why cell, or right-click any
+    //  column, opens the explanation dialog instead.
     // =========================================================================
+    // v11: named column indices for the SS Optimizer results table. The v7 MAGI
+    // column insert broke the build because several places carried RAW integer
+    // column labels; inserting "Why" at index 5 here shifts six columns, so every
+    // reference goes through these constants instead of a literal.
+    private static final int OCOL_RANK      = 0;
+    private static final int OCOL_USER      = 1;
+    private static final int OCOL_SPOUSE    = 2;
+    private static final int OCOL_POS       = 3;
+    private static final int OCOL_FEASMIN   = 4;
+    private static final int OCOL_WHY       = 5;   // v11
+    private static final int OCOL_MINSURP   = 6;
+    private static final int OCOL_GOGO      = 7;
+    private static final int OCOL_SLOWGO    = 8;
+    private static final int OCOL_SURVFLOOR = 9;
+    private static final int OCOL_SSFULL    = 10;
+    private static final int OCOL_VERIFIED  = 11;
+
     private JPanel buildSsOptimizerPanel() {
         JPanel p = new JPanel(new BorderLayout(0, 6));
         p.setBackground(new Color(245, 245, 242));
@@ -3744,9 +3796,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // == Results table ==================================================
         // v9 Option 2: columns show the real Pro-engine metrics for each claim
         // combination, so the trade-off is visible rather than collapsed to one pick.
+        // v11: "Why" inserted at OCOL_WHY (5) -- the binding constraint and the
+        // margin against it, so the verdict reads without hovering or clicking.
         String[] optCols = {
                 "Rank", "User SS Start", "Spouse SS Start",
-                "PoS %", "Feasibility min", "Min surplus",
+                "PoS %", "Feasibility min", "Why", "Min surplus",
                 "Go-go headroom", "Slow-go headroom", "Survivor Floor",
                 "SS at full claim", "Verified"
         };
@@ -3754,11 +3808,37 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
         tblOpt = new JTable(tblOptModel) {
+            // v11: per-column header tooltip. Overriding createDefaultTableHeader is
+            // the canonical hook -- replacing the header after construction would
+            // drop the ToolTipManager registration the table set up for it.
+            @Override protected JTableHeader createDefaultTableHeader() {
+                return new JTableHeader(columnModel) {
+                    @Override public String getToolTipText(java.awt.event.MouseEvent e) {
+                        int vCol = columnAtPoint(e.getPoint());
+                        if (vCol == OCOL_WHY) {
+                            return "<html><b>Why</b><br>"
+                                    + "The constraint that decided this row's rank,"
+                                    + " and how far it missed.<br>"
+                                    + "<b>Click any cell in this column for the full"
+                                    + " explanation of that row's rank.</b><br>"
+                                    + "Feasible rows read PASS; the margin is shown"
+                                    + " in the dialog.</html>";
+                        }
+                        return super.getToolTipText(e);
+                    }
+                };
+            }
             @Override public String getToolTipText(java.awt.event.MouseEvent e) {
                 int vRow = rowAtPoint(e.getPoint());
                 int vCol = columnAtPoint(e.getPoint());
-                if (vRow >= 0 && vCol == 4 && vRow < optRowResults.size()) {
-                    return feasibilityTooltip(optRowResults.get(vRow));
+                if (vRow >= 0 && vRow < optRowResults.size()) {
+                    SsOptResult r = optRowResults.get(vRow);
+                    // v11: the verdict is now reachable from every column that can
+                    // CAUSE a failure. Pre-v11 only Feasibility min answered, so
+                    // hovering the column responsible for the miss gave nothing.
+                    if (vCol == OCOL_FEASMIN || vCol == OCOL_WHY) return feasibilityTooltip(r);
+                    if (vCol == OCOL_POS || vCol == OCOL_GOGO || vCol == OCOL_SLOWGO)
+                        return columnTooltip(r, vCol);
                 }
                 return super.getToolTipText(e);
             }
@@ -3771,13 +3851,17 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         tblOpt.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         tblOpt.setSelectionBackground(new Color(190, 220, 255));
 
-        int[] optWidths = {40, 110, 110, 60, 100, 100, 110, 110, 110, 110, 70};
+        // v11: 130 for "Why" inserted at OCOL_WHY -- wide enough for
+        // "slow-go -$10,778" without truncation.
+        int[] optWidths = {40, 110, 110, 60, 100, 130, 100, 110, 110, 110, 110, 70};
         for (int i = 0; i < optWidths.length && i < tblOpt.getColumnCount(); i++)
             tblOpt.getColumnModel().getColumn(i).setPreferredWidth(optWidths[i]);
 
         // Row coloring: gold/silver/bronze for the top 3; infeasible rows tinted.
         // The "Feasibility min" column (index 4) is additionally shaded green (pass)
         // or red (fail) so the verdict reads at a glance without a Yes/No column.
+        // v11: the "Why" column shares that shading so the verdict and its reason
+        // read as one unit.
         javax.swing.table.DefaultTableCellRenderer optRend = new javax.swing.table.DefaultTableCellRenderer() {
             final Color GOLD   = new Color(255, 245, 150);
             final Color SILVER = new Color(232, 232, 232);
@@ -3790,10 +3874,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 java.awt.Component c = super.getTableCellRendererComponent(t,v,sel,foc,row,col);
                 boolean feas = row < optRowResults.size() && optRowResults.get(row).feasible;
                 if (!sel) {
-                    Object ro = tblOptModel.getValueAt(row, 0);
+                    Object ro = tblOptModel.getValueAt(row, OCOL_RANK);
                     int rank = ro instanceof Integer ? (Integer)ro : 9999;
-                    if (col == 4) {
-                        // Feasibility-min cell: green if the plan passes, red if it fails.
+                    if (col == OCOL_FEASMIN || col == OCOL_WHY) {
+                        // Feasibility-min and Why cells: green if the plan passes,
+                        // red if it fails.
                         c.setBackground(feas ? FEAS_GREEN : FEAS_RED);
                     } else if (rank == 1) c.setBackground(GOLD);
                     else if (rank == 2) c.setBackground(SILVER);
@@ -3802,31 +3887,65 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     else                c.setBackground(row%2==0 ? Color.WHITE : new Color(248,248,245));
                     c.setForeground(Color.BLACK);
                 }
-                // Left-align the two date columns (1,2); right-align the rest.
-                ((JLabel)c).setHorizontalAlignment((col==1||col==2)?LEFT:RIGHT);
+                // Left-align the date columns and the Why text; right-align figures.
+                ((JLabel)c).setHorizontalAlignment(
+                        (col==OCOL_USER||col==OCOL_SPOUSE||col==OCOL_WHY)?LEFT:RIGHT);
                 return c;
             }
         };
         tblOpt.setDefaultRenderer(Object.class, optRend);
 
-        // Click row -> apply SS dates to IL spinners and run IL
+        // v11 GESTURE MAP (item D). Pre-v11 ANY click anywhere on a row called
+        // applyAndRun, so a row could not be inspected without launching a full
+        // simulation. Now:
+        //   left-click Rank / User / Spouse .... apply those dates and re-run
+        //   left-click Why ..................... open the explanation dialog
+        //   right-click anywhere ............... open the explanation dialog
+        //   left-click any other column ........ select only, nothing runs
+        // Double-click was rejected as the dialog trigger: mouseClicked fires with
+        // clickCount 1 before 2, so the first click would still start a run.
         tblOpt.addMouseListener(new java.awt.event.MouseAdapter() {
+            private boolean popupHandled = false;
+            // X11 (CachyOS) raises the popup trigger on PRESS, Windows on RELEASE.
+            // Checking only one of them silently does nothing on the other platform.
+            @Override public void mousePressed(java.awt.event.MouseEvent e) {
+                popupHandled = false;
+                if (e.isPopupTrigger()) { popupHandled = true; openWhyAt(e); }
+            }
+            @Override public void mouseReleased(java.awt.event.MouseEvent e) {
+                if (!popupHandled && e.isPopupTrigger()) { popupHandled = true; openWhyAt(e); }
+            }
             @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (popupHandled || e.isPopupTrigger()) return;
+                if (!SwingUtilities.isLeftMouseButton(e)) return;
                 int row = tblOpt.rowAtPoint(e.getPoint());
+                int col = tblOpt.columnAtPoint(e.getPoint());
                 if (row < 0) return;
-                // Read SS dates from parallel list (indexed by model row)
-                if (row >= optRowDates.size()) return;
-                int[] dates = optRowDates.get(row);
-                applyAndRun(dates[0], dates[1], dates[2], dates[3]);
+                if (col == OCOL_WHY) { openWhyAt(e); return; }
+                if (col == OCOL_RANK || col == OCOL_USER || col == OCOL_SPOUSE) {
+                    // Read SS dates from parallel list (indexed by model row)
+                    if (row >= optRowDates.size()) return;
+                    int[] dates = optRowDates.get(row);
+                    applyAndRun(dates[0], dates[1], dates[2], dates[3]);
+                }
+                // Any other column: selection only. This is the v11 guard.
             }
         });
 
+        // v11: the gesture map gets its own line so it is not buried behind the
+        // dollar-mode caveat, which stays verbatim on a second line.
         JLabel clickHint = new JLabel(
-                "  Click any row to apply those SS start dates to the IL simulation and run automatically."
-                        + "  |  Floors & columns use the Real/Nominal mode active when you press Run"
-                        + " -- flip the toggle (top right) and re-run to switch.");
+                "  Left-click Rank / User SS Start / Spouse SS Start = apply those dates and re-run."
+                        + "     Left-click the Why cell, or right-click any column"
+                        + " = explain this row's rank.");
         clickHint.setFont(new Font("SansSerif", Font.ITALIC, 12));
         clickHint.setForeground(new Color(0, 80, 150));
+
+        JLabel modeHint = new JLabel(
+                "  Floors & columns use the Real/Nominal mode active when you press Run"
+                        + " -- flip the toggle (top right) and re-run to switch.");
+        modeHint.setFont(new Font("SansSerif", Font.ITALIC, 12));
+        modeHint.setForeground(new Color(100, 100, 100));
 
         JPanel north = new JPanel();
         north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
@@ -3835,10 +3954,12 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         ctrlRow.setAlignmentX(LEFT_ALIGNMENT);
         objRow.setAlignmentX(LEFT_ALIGNMENT);
         clickHint.setAlignmentX(LEFT_ALIGNMENT);
+        modeHint.setAlignmentX(LEFT_ALIGNMENT);
         north.add(modeRow);
         north.add(ctrlRow);
         north.add(objRow);
         north.add(clickHint);
+        north.add(modeHint);
 
         p.add(north,                   BorderLayout.NORTH);
         p.add(new JScrollPane(tblOpt), BorderLayout.CENTER);
@@ -4375,7 +4496,69 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         if (sawSlow && r.minSlowGoSurplus < slowGoFloor){ feas = false; shortfall = Math.max(shortfall, slowGoFloor - r.minSlowGoSurplus); }
         if (r.actualPoS < posTarget)      { feas = false; shortfall = Math.max(shortfall, 1); }  // PoS miss flagged
         r.feasible = feas; r.shortfall = shortfall;
+
+        // v11: record the floors in force, this row's signed margin against each,
+        // and WHICH test produced `shortfall`. Purely additive -- the feas/shortfall
+        // arithmetic above is byte-for-byte the v10 logic.
+        captureBinding(r, greenTestMin, greenBuf, sawGo, goGoFloor,
+                sawSlow, slowGoFloor, posTarget);
         return r;
+    }
+
+    /**
+     * v11: capture the floors this row was scored against, its signed margin to
+     * each, and the BINDING constraint -- the test that produced `shortfall`.
+     *
+     * Deliberately static and free of any simulation state so it can be exercised
+     * headlessly against known numbers; the binding choice is the thing the Why
+     * column and dialog report, so it needs to be testable without a Pro run.
+     *
+     * Mirrors the max() in scoreCombinationPro: the largest miss wins, and among
+     * equal misses the earlier test keeps it (Math.max does not replace on a tie),
+     * so the comparisons are strict >. PoS contributes only the sentinel 1 to
+     * shortfall, so it binds only when no dollar floor reached 1 -- hence best < 1.
+     */
+    static void captureBinding(SsOptResult r, int greenTestMin, int greenBuf,
+                               boolean sawGo, int goGoFloor,
+                               boolean sawSlow, int slowGoFloor, int posTarget) {
+        r.floorGreen  = greenBuf;    r.floorGoGo = goGoFloor;
+        r.floorSlowGo = slowGoFloor; r.floorPoS  = posTarget;
+        r.marginGreen   = (greenTestMin == Integer.MAX_VALUE)
+                ? Integer.MAX_VALUE : (greenTestMin - greenBuf);
+        r.marginGoGo    = sawGo   ? (r.minGoGoSurplus   - goGoFloor)   : Integer.MAX_VALUE;
+        r.marginSlowGo  = sawSlow ? (r.minSlowGoSurplus - slowGoFloor) : Integer.MAX_VALUE;
+        r.marginPoS     = r.actualPoS - posTarget;
+
+        String bind = ""; int bindM = 0;
+        if (!r.feasible) {
+            int best = Integer.MIN_VALUE;
+            if (r.marginGreen != Integer.MAX_VALUE && r.marginGreen < 0 && -r.marginGreen > best)
+            { best = -r.marginGreen;   bind = "green";   bindM = r.marginGreen; }
+            if (r.marginGoGo != Integer.MAX_VALUE && r.marginGoGo < 0 && -r.marginGoGo > best)
+            { best = -r.marginGoGo;    bind = "go-go";   bindM = r.marginGoGo; }
+            if (r.marginSlowGo != Integer.MAX_VALUE && r.marginSlowGo < 0 && -r.marginSlowGo > best)
+            { best = -r.marginSlowGo;  bind = "slow-go"; bindM = r.marginSlowGo; }
+            if (r.marginPoS < 0 && best < 1) { bind = "PoS"; bindM = 0; }
+        } else {
+            // Feasible: name the TIGHTEST dollar floor, so a fragile pass is visible.
+            int best = Integer.MAX_VALUE;
+            if (r.marginGreen   != Integer.MAX_VALUE && r.marginGreen   < best) { best = r.marginGreen;   bind = "green"; }
+            if (r.marginGoGo    != Integer.MAX_VALUE && r.marginGoGo    < best) { best = r.marginGoGo;    bind = "go-go"; }
+            if (r.marginSlowGo  != Integer.MAX_VALUE && r.marginSlowGo  < best) { best = r.marginSlowGo;  bind = "slow-go"; }
+            bindM = (best == Integer.MAX_VALUE) ? 0 : best;
+        }
+        r.bindFloor = bind; r.bindMargin = bindM;
+    }
+
+    // v11: the "Why" cell text -- the binding constraint and this row's margin
+    // against it. Infeasible rows name the floor and the miss; feasible rows read
+    // simply PASS (Bob's choice: the margin is in the dialog, not the column).
+    private static String whyText(SsOptResult r) {
+        if (r.feasible) return "PASS";
+        if ("PoS".equals(r.bindFloor))
+            return String.format("PoS -%.1f pp", Math.abs(r.marginPoS));
+        if (r.bindFloor == null || r.bindFloor.isEmpty()) return "--";
+        return r.bindFloor + " -" + CURRENCY.format((long) Math.abs(r.bindMargin));
     }
 
     private static boolean approxEq(double a, double b) { return Math.abs(a - b) < 1e-6; }
@@ -4443,33 +4626,96 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // floor (calendar year, surplus, balance, which floor + its level), notes any
     // terminal dips that terminal-grace exempted, and on a passing row states that
     // it passes. All dollars in the mode the scan was run in (real or nominal).
+    // v11: the one-line verdict shared by the tooltip and the dialog -- WHICH test
+    // decided this row and by how much. This is the number that sets the rank, and
+    // pre-v11 it appeared nowhere in the UI.
+    private static String verdictLine(SsOptResult r) {
+        if (r.feasible) {
+            String near = r.bindFloor.isEmpty() ? ""
+                    : " Tightest floor: " + r.bindFloor + ", "
+                    + CURRENCY.format((long) r.bindMargin) + " of headroom.";
+            return "<b>FEASIBLE</b> &mdash; meets the green buffer, both travel floors,"
+                    + " and the PoS target." + near;
+        }
+        if ("PoS".equals(r.bindFloor)) {
+            return String.format("<b>NOT FEASIBLE</b> &mdash; binding constraint: <b>PoS</b>,"
+                            + " %.1f%% against a %d%% target (%.1f pp short).",
+                    r.actualPoS, r.floorPoS, Math.abs(r.marginPoS));
+        }
+        if (r.bindFloor == null || r.bindFloor.isEmpty())
+            return "<b>NOT FEASIBLE</b>.";
+        int lvl = "green".equals(r.bindFloor) ? r.floorGreen
+                : "go-go".equals(r.bindFloor) ? r.floorGoGo : r.floorSlowGo;
+        return "<b>NOT FEASIBLE</b> &mdash; binding constraint: <b>" + r.bindFloor
+                + "</b>, short by <b>" + CURRENCY.format((long) Math.abs(r.bindMargin))
+                + "</b> against a " + CURRENCY.format((long) lvl) + " floor.";
+    }
+
+    // v11: group violations by calendar year. Green is recorded in one if-block and
+    // go-go / slow-go in separate ones, so a single bad year previously emitted two
+    // or three rows that read as different years.
+    private static java.util.LinkedHashMap<Integer, java.util.List<FloorMiss>> violationsByYear(SsOptResult r) {
+        java.util.LinkedHashMap<Integer, java.util.List<FloorMiss>> byYear = new java.util.LinkedHashMap<>();
+        for (FloorMiss m : r.violations)
+            byYear.computeIfAbsent(m.calYear, k -> new java.util.ArrayList<>()).add(m);
+        return byYear;
+    }
+
+    /** v11: one grouped violation row rendered as HTML table cells. */
+    private static String violationRow(java.util.List<FloorMiss> ms, int year) {
+        StringBuilder floors = new StringBuilder();
+        for (int i = 0; i < ms.size(); i++) {
+            if (i > 0) floors.append(", ");
+            floors.append(ms.get(i).floor);
+        }
+        FloorMiss first = ms.get(0);
+        int worstNeed = first.floorLevel;
+        for (FloorMiss m : ms) worstNeed = Math.max(worstNeed, m.floorLevel);
+        return "<tr><td>" + year + "</td><td>" + floors + "</td><td>"
+                + CURRENCY.format((long) first.surplus) + "</td><td>"
+                + CURRENCY.format((long) worstNeed) + "</td><td>"
+                + CURRENCY.format((long) first.balance) + "</td></tr>";
+    }
+
     private String feasibilityTooltip(SsOptResult r) {
         String unit = r.dollarsReal ? "today's $" : "future $";
         StringBuilder sb = new StringBuilder("<html>");
+        sb.append(verdictLine(r)).append("<br>");
         if (r.feasible) {
-            sb.append("<b>Feasible</b> &mdash; meets green buffer, go-go and slow-go floors, and the PoS target.<br>");
             sb.append("Worst counted year: <b>")
                     .append(r.feasMinYear > 0 ? String.valueOf(r.feasMinYear) : "n/a")
                     .append("</b> at ").append(CURRENCY.format((long) r.feasMin))
                     .append(" surplus (").append(unit).append(").");
         } else {
-            sb.append("<b>Not feasible</b> &mdash; the following year(s) miss a floor (").append(unit).append("):<br>");
-            if (r.violations.isEmpty() && r.actualPoS > 0) {
-                sb.append("PoS ").append(String.format("%.1f%%", r.actualPoS))
-                        .append(" is below the target.");
-            } else {
+            java.util.LinkedHashMap<Integer, java.util.List<FloorMiss>> byYear = violationsByYear(r);
+            if (!byYear.isEmpty()) {
+                sb.append("Year(s) missing a floor (").append(unit).append("):<br>");
                 sb.append("<table cellpadding=2>");
-                sb.append("<tr><td><b>Year</b></td><td><b>Floor</b></td><td><b>Surplus</b></td>")
+                sb.append("<tr><td><b>Year</b></td><td><b>Floor(s)</b></td><td><b>Surplus</b></td>")
                         .append("<td><b>Needs</b></td><td><b>Portfolio</b></td></tr>");
-                for (FloorMiss m : r.violations) {
-                    sb.append("<tr><td>").append(m.calYear).append("</td><td>")
-                            .append(m.floor).append("</td><td>")
-                            .append(CURRENCY.format((long) m.surplus)).append("</td><td>")
-                            .append(CURRENCY.format((long) m.floorLevel)).append("</td><td>")
-                            .append(CURRENCY.format((long) m.balance)).append("</td></tr>");
+                // v11: cap the hover list. An unbounded list could run to 40+ rows
+                // on a 30-year horizon missing all three floors; the full list lives
+                // in the dialog, where it can scroll.
+                int shown = 0;
+                for (java.util.Map.Entry<Integer, java.util.List<FloorMiss>> en : byYear.entrySet()) {
+                    if (shown >= 8) break;
+                    sb.append(violationRow(en.getValue(), en.getKey()));
+                    shown++;
                 }
                 sb.append("</table>");
+                int more = byYear.size() - shown;
+                if (more > 0)
+                    sb.append("<i>...and ").append(more).append(" more year(s)"
+                            + " -- click this cell for the full list.</i><br>");
             }
+        }
+        // v11: ALWAYS surface a PoS miss. Pre-v11 this was reported only when the
+        // violations list was empty, so a row missing PoS *and* a dollar floor
+        // never mentioned PoS at all.
+        if (r.marginPoS < 0) {
+            sb.append("<br><b>PoS</b> ").append(String.format("%.1f%%", r.actualPoS))
+                    .append(" is below the ").append(r.floorPoS).append("% target (")
+                    .append(String.format("%.1f", Math.abs(r.marginPoS))).append(" pp short).");
         }
         if (!r.gracedDips.isEmpty()) {
             sb.append("<br><i>Terminal grace forgave a below-buffer dip (portfolio covers it) in: ");
@@ -4481,8 +4727,230 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             }
             sb.append(".</i>");
         }
+        sb.append("<br><br><i>Click the Why cell, or right-click the row,"
+                + " for the full explanation of this rank.</i>");
         sb.append("</html>");
         return sb.toString();
+    }
+
+    // v11: focused tooltip for the columns that can each cause a failure, so
+    // hovering the column responsible explains itself instead of staying silent.
+    private String columnTooltip(SsOptResult r, int col) {
+        String unit = r.dollarsReal ? "today's $" : "future $";
+        StringBuilder sb = new StringBuilder("<html>");
+        if (col == OCOL_POS) {
+            sb.append("<b>PoS ").append(String.format("%.1f%%", r.actualPoS)).append("</b>")
+                    .append(" against a ").append(r.floorPoS).append("% target &mdash; ")
+                    .append(r.marginPoS < 0
+                            ? "<b>" + String.format("%.1f", Math.abs(r.marginPoS)) + " pp short</b>."
+                            : String.format("%.1f", r.marginPoS) + " pp of headroom.");
+        } else if (col == OCOL_GOGO) {
+            if (r.marginGoGo == Integer.MAX_VALUE)
+                sb.append("No go-go years in this plan, so the go-go floor does not apply.");
+            else sb.append("<b>Worst go-go year: ").append(CURRENCY.format((long) r.minGoGoSurplus))
+                    .append("</b> against a ").append(CURRENCY.format((long) r.floorGoGo))
+                    .append(" floor &mdash; ").append(marginPhrase(r.marginGoGo))
+                    .append(" (").append(unit).append(").");
+        } else if (col == OCOL_SLOWGO) {
+            if (r.marginSlowGo == Integer.MAX_VALUE)
+                sb.append("No slow-go years in this plan, so the slow-go floor does not apply.");
+            else sb.append("<b>Worst slow-go year: ").append(CURRENCY.format((long) r.minSlowGoSurplus))
+                    .append("</b> against a ").append(CURRENCY.format((long) r.floorSlowGo))
+                    .append(" floor &mdash; ").append(marginPhrase(r.marginSlowGo))
+                    .append(" (").append(unit).append(").");
+        }
+        sb.append("<br><br><i>Click the Why cell, or right-click the row,"
+                + " for the full explanation of this rank.</i></html>");
+        return sb.toString();
+    }
+
+    /** v11: "$412 short" / "$412 of headroom" for a signed dollar margin. */
+    private static String marginPhrase(int margin) {
+        return margin < 0
+                ? "<b>" + CURRENCY.format((long) Math.abs(margin)) + " short</b>"
+                : CURRENCY.format((long) margin) + " of headroom";
+    }
+
+    // v11: resolve the clicked/right-clicked row and open its explanation.
+    private void openWhyAt(java.awt.event.MouseEvent e) {
+        int row = tblOpt.rowAtPoint(e.getPoint());
+        if (row < 0 || row >= optRowResults.size()) return;
+        tblOpt.setRowSelectionInterval(row, row);
+        showWhyDialog(optRowResults.get(row), row + 1);
+    }
+
+    // v11 item B: the full explanation. Leads with the verdict, shows all four
+    // tests side by side, then explains WHY THIS ROW RANKS WHERE IT DOES -- the
+    // question that the pre-v11 per-year tooltip never answered, and the one that
+    // makes a near-miss row sitting at the bottom of the table look like a bug.
+    private void showWhyDialog(SsOptResult r, int rank) {
+        String unit = r.dollarsReal ? "today's $" : "future $";
+        int total = optRowResults.size();
+        int feasCount = 0, minShort = Integer.MAX_VALUE, minShortRank = 0;
+        double bestFloor = -1;
+        for (int i = 0; i < total; i++) {
+            SsOptResult o = optRowResults.get(i);
+            if (o.feasible) feasCount++;
+            if (!o.feasible && o.shortfall < minShort) { minShort = o.shortfall; minShortRank = i + 1; }
+            if (o.survivorFloor > bestFloor) bestFloor = o.survivorFloor;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        // v11: sizes in a <style> block, in PIXELS, and deliberately not points.
+        // Two separate Swing traps here, both measured rather than assumed:
+        //   1. An inline font-size on <body> alone does not reach h2/h3/td -- the
+        //      HTMLEditorKit's default stylesheet supplies those, so headings and
+        //      every table cell stay at the kit default.
+        //   2. The kit barely honours pt: rendering the same content at 11pt and
+        //      then 14pt grew the block only ~6%, essentially a no-op. The same
+        //      content in px scales properly.
+        // Measured rendered height of the dialog body at 860px wide: 256px at the
+        // original 11pt, 366px at the sizes below (+43%), minimum content width
+        // 812px -- inside the 940px dialog with room for the scrollbar.
+        sb.append("<html><head><style>")
+                .append("body { font-family:SansSerif; font-size:18px; }")
+                .append("p    { font-family:SansSerif; font-size:18px; }")
+                .append("td   { font-family:SansSerif; font-size:17px; }")
+                .append("h2   { font-family:SansSerif; font-size:25px; }")
+                .append("h3   { font-family:SansSerif; font-size:19px; }")
+                .append("</style></head><body>");
+        sb.append("<h2 style='margin-bottom:2px;'>Why this combination ranks here</h2>");
+        sb.append("<p style='margin-top:0;color:#555;'>User SS <b>")
+                .append(String.format("%02d/%d", r.bobMonth, r.bobYear)).append("</b>");
+        if (r.joYear > 0) sb.append(" &nbsp;&middot;&nbsp; Spouse SS <b>")
+                .append(String.format("%02d/%d", r.joMonth, r.joYear)).append("</b>");
+        sb.append(" &nbsp;&middot;&nbsp; Rank <b>").append(rank).append(" of ").append(total)
+                .append("</b> &nbsp;&middot;&nbsp; ").append(r.verified ? "full fidelity" : "scan fidelity")
+                .append("</p>");
+
+        sb.append("<h3 style='margin-bottom:2px;'>VERDICT</h3>");
+        sb.append("<p style='margin-top:0;'>").append(verdictLine(r)).append("</p>");
+
+        sb.append("<h3 style='margin-bottom:2px;'>ALL FOUR TESTS</h3>");
+        sb.append("<table cellpadding=4 border=1 cellspacing=0>");
+        sb.append("<tr bgcolor='#eeeeee'><td><b>Test</b></td><td><b>Value</b></td>")
+                .append("<td><b>Floor</b></td><td><b>Margin</b></td><td><b>Result</b></td></tr>");
+        sb.append(testRow("Green buffer", r.marginGreen == Integer.MAX_VALUE ? null
+                        : CURRENCY.format((long) (r.marginGreen + r.floorGreen)),
+                CURRENCY.format((long) r.floorGreen), r.marginGreen, "green".equals(r.bindFloor),
+                "not binding -- no counted year fell below the buffer"
+                        + " (terminal-grace dips are exempt)"));
+        sb.append(testRow("Go-go floor", r.marginGoGo == Integer.MAX_VALUE ? null
+                        : CURRENCY.format((long) r.minGoGoSurplus),
+                CURRENCY.format((long) r.floorGoGo), r.marginGoGo, "go-go".equals(r.bindFloor),
+                "not applicable -- this plan has no go-go years"));
+        sb.append(testRow("Slow-go floor", r.marginSlowGo == Integer.MAX_VALUE ? null
+                        : CURRENCY.format((long) r.minSlowGoSurplus),
+                CURRENCY.format((long) r.floorSlowGo), r.marginSlowGo, "slow-go".equals(r.bindFloor),
+                "not applicable -- this plan has no slow-go years"));
+        boolean posBinds = "PoS".equals(r.bindFloor);
+        sb.append("<tr").append(posBinds ? " bgcolor='#ffd6d6'" : "").append("><td>PoS</td><td>")
+                .append(String.format("%.1f%%", r.actualPoS)).append("</td><td>")
+                .append(r.floorPoS).append("%</td><td>")
+                .append(String.format("%+.1f pp", r.marginPoS)).append("</td><td>")
+                .append(r.marginPoS < 0 ? "<b>FAIL</b>" : "pass")
+                .append(posBinds ? " &lt;-- binding" : "").append("</td></tr>");
+        sb.append("</table>");
+        sb.append("<p style='color:#555;'>Dollars shown in ").append(unit)
+                .append(" (the Real/Nominal mode active when the scan was run).</p>");
+
+        sb.append("<h3 style='margin-bottom:2px;'>WHY IT RANKS HERE</h3>");
+        sb.append("<p style='margin-top:0;'>Survivor floor: <b>")
+                .append(CURRENCY.format((long) r.survivorFloor)).append("</b>");
+        if (!r.feasible) sb.append(" &nbsp;&middot;&nbsp; Shortfall: <b>")
+                .append(CURRENCY.format((long) r.shortfall)).append("</b>");
+        sb.append("</p>");
+        if (feasCount > 0) {
+            if (r.feasible) {
+                sb.append("<p>").append(feasCount).append(" of ").append(total)
+                        .append(" combinations are feasible. Feasible rows rank by survivor floor,"
+                                + " highest first.</p>");
+            } else {
+                sb.append("<p>").append(feasCount).append(" of ").append(total)
+                        .append(" combinations are feasible, and <b>every one of them ranks above this"
+                                + " row</b> regardless of survivor floor or how close this row came"
+                                + " to passing.</p>");
+            }
+        } else {
+            String modeName = (lastOptInfeasMode == 1) ? "Show closest (min shortfall)"
+                    : (lastOptInfeasMode == 2) ? "Relax travel floor" : "Trade-off frontier";
+            sb.append("<p>No combination is feasible, so the fallback <b>").append(modeName)
+                    .append("</b> decides the order. ")
+                    .append(lastOptInfeasMode == 1
+                            ? "That ranks by smallest shortfall first."
+                            : "That ranks by survivor floor first, with smallest shortfall only as a tiebreak.")
+                    .append("</p>");
+        }
+        // The line that explains the surprise: nearest-to-passing sitting at the bottom.
+        if (!r.feasible && minShort != Integer.MAX_VALUE && r.shortfall == minShort
+                && rank > Math.max(3, total / 4)) {
+            sb.append("<p style='background:#fff4c2;padding:6px;'><b>NOTE:</b> this row has the"
+                            + " smallest shortfall of all ").append(total).append(" rows &mdash; it is the"
+                            + " <b>closest to passing</b> &mdash; yet it ranks ").append(rank)
+                    .append(" because its survivor floor is low and the current fallback ranks survivor"
+                            + " floor first. Switch the fallback dropdown to <b>Show closest"
+                            + " (min shortfall)</b> to rank by nearness instead.</p>");
+        } else if (!r.feasible && minShortRank > 0 && minShortRank != rank) {
+            sb.append("<p style='color:#555;'>The row closest to passing is rank ")
+                    .append(minShortRank).append(" (shortfall ")
+                    .append(CURRENCY.format((long) minShort)).append(").</p>");
+        }
+
+        java.util.LinkedHashMap<Integer, java.util.List<FloorMiss>> byYear = violationsByYear(r);
+        if (!byYear.isEmpty()) {
+            sb.append("<h3 style='margin-bottom:2px;'>FAILING YEARS (").append(byYear.size()).append(")</h3>");
+            sb.append("<table cellpadding=4 border=1 cellspacing=0>");
+            sb.append("<tr bgcolor='#eeeeee'><td><b>Year</b></td><td><b>Floor(s)</b></td>")
+                    .append("<td><b>Surplus</b></td><td><b>Needs</b></td><td><b>Portfolio</b></td></tr>");
+            for (java.util.Map.Entry<Integer, java.util.List<FloorMiss>> en : byYear.entrySet())
+                sb.append(violationRow(en.getValue(), en.getKey()));
+            sb.append("</table>");
+        }
+        if (!r.gracedDips.isEmpty()) {
+            sb.append("<h3 style='margin-bottom:2px;'>FORGIVEN BY TERMINAL GRACE</h3><p style='margin-top:0;'>");
+            for (int i = 0; i < r.gracedDips.size(); i++) {
+                FloorMiss m = r.gracedDips.get(i);
+                if (i > 0) sb.append(", ");
+                sb.append(m.calYear).append(" (").append(CURRENCY.format((long) m.surplus))
+                        .append(", balance ").append(CURRENCY.format((long) m.balance)).append(")");
+            }
+            sb.append(" &mdash; below the buffer, but the portfolio covers the dip.</p>");
+        }
+
+        // v11: the gesture map travels with the dialog, so the answer is on screen
+        // wherever the user happens to be.
+        sb.append("<hr><p style='color:#555;font-size:15px;'>")
+                .append("Left-click <b>Rank / User SS Start / Spouse SS Start</b> = apply those dates"
+                        + " and re-run. &nbsp; Left-click the <b>Why</b> cell, or right-click any column"
+                        + " = open this explanation.</p>");
+        sb.append("</body></html>");
+
+        JEditorPane pane = new JEditorPane("text/html", sb.toString());
+        pane.setEditable(false);
+        pane.setCaretPosition(0);
+        pane.setBackground(Color.WHITE);
+        JScrollPane sp = new JScrollPane(pane);
+        // v11: sized up with the type. Measured minimum content width at the sizes
+        // above is 812px, so 940 clears it with room for the vertical scrollbar.
+        sp.setPreferredSize(new Dimension(940, 700));
+        JOptionPane.showMessageDialog(this, sp, "Why this combination ranks here",
+                JOptionPane.PLAIN_MESSAGE);
+    }
+
+    /**
+     * v11: one row of the ALL FOUR TESTS table. A null value means the test did
+     * not apply, and naMsg says why -- the reason differs per floor (no go-go
+     * years at all vs. no counted green year), so it is not a generic string.
+     */
+    private static String testRow(String name, String value, String floor, int margin,
+                                  boolean binds, String naMsg) {
+        if (value == null)
+            return "<tr><td>" + name + "</td><td colspan=4><i>" + naMsg + "</i></td></tr>";
+        return "<tr" + (binds ? " bgcolor='#ffd6d6'" : "") + "><td>" + name + "</td><td>"
+                + value + "</td><td>" + floor + "</td><td>"
+                + (margin < 0 ? "-" : "+") + CURRENCY.format((long) Math.abs(margin)) + "</td><td>"
+                + (margin < 0 ? "<b>FAIL</b>" : "pass")
+                + (binds ? " &lt;-- binding" : "") + "</td></tr>";
     }
 
     private void populateOptTable(java.util.List<SsOptResult> results,
@@ -4514,6 +4982,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     joClaims ? String.format("%02d/%d", r.joMonth, r.joYear) : "--",
                     String.format("%.1f%%", r.actualPoS),
                     CURRENCY.format((long) r.feasMin),
+                    whyText(r),                          // v11: OCOL_WHY
                     CURRENCY.format((long) r.minSurplus),
                     goHead,
                     slowHead,
@@ -4529,14 +4998,14 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         if (feasibleCount > 0) {
             head = String.format(
                     "%,d of %,d combinations feasible (meet green + travel floors + PoS). "
-                            + "Ranked by survivor floor. Click a row to apply and run.",
+                            + "Ranked by survivor floor. Click the Why cell for the reason.",
                     feasibleCount, show);
         } else {
             String modeName = (infeasMode == 1) ? "closest (least shortfall)"
                     : (infeasMode == 2) ? "relaxed floors" : "trade-off frontier";
             head = String.format(
                     "No combination meets all floors. Showing %s. "
-                            + "Trade travel headroom against survivor floor; click a row to apply and run.",
+                            + "Trade travel headroom against survivor floor; click the Why cell for the reason.",
                     modeName);
         }
         lblOptStatus.setText(head);
@@ -4587,6 +5056,24 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // missed. Plus terminal dips that were EXEMPTED by grace (not failures).
         java.util.List<FloorMiss> violations = new java.util.ArrayList<>();
         java.util.List<FloorMiss> gracedDips = new java.util.ArrayList<>();
+        // v11: the floor levels this row was ACTUALLY scored against, captured at
+        // scan time. The display layer must never re-derive the verdict from the
+        // live spinners -- those can move between pressing Run and hovering a row
+        // (markStale only warns), which would explain a row against a floor it was
+        // never tested on.
+        int    floorGreen, floorGoGo, floorSlowGo, floorPoS;
+        // v11: signed margins. Negative = miss, positive = headroom.
+        // Integer.MAX_VALUE = test not applicable (no go-go / no slow-go years, or
+        // no counted green year), mirroring the sentinels used by the scorer.
+        int    marginGreen  = Integer.MAX_VALUE;
+        int    marginGoGo   = Integer.MAX_VALUE;
+        int    marginSlowGo = Integer.MAX_VALUE;
+        double marginPoS    = 0;    // percentage points (PoS is not a dollar figure)
+        // v11: the BINDING constraint -- the test that produced `shortfall` via the
+        // max() in scoreCombinationPro. When feasible this instead names the NEAREST
+        // dollar floor and bindMargin is positive. Empty only when nothing applies.
+        String bindFloor  = "";     // "green" | "go-go" | "slow-go" | "PoS" | ""
+        int    bindMargin = 0;      // signed dollars (0 when PoS binds -- see marginPoS)
     }
 
     // v9: one floor miss (or graced dip) recorded for the SS Optimizer tooltip.
