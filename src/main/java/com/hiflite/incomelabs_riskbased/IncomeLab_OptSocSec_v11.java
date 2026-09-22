@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v11.java
-// Last modified: Sunday, September 20, 2026 at 06:21 PM MST (UTC-7)
+// Last modified: Monday, September 21, 2026 at 03:59 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v11";
-    private static final String BUILD_STAMP = "Sunday, September 20, 2026 at 06:21 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, September 21, 2026 at 03:59 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -170,8 +170,30 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private JSpinner spWomanPIA, spWomanSSStartYear, spWomanSSStartMonth;
     private JLabel   lblSSBenefitNote;
     private JSpinner spSSCola;
-    private JSpinner spAnnuity, spAnnuityStartYear, spAnnuityStartMonth;
-    private JCheckBox chkUseAnnuity; // v4: activate/deactivate annuity (default off)
+    // v11: three guaranteed-income streams, indexed STREAM_ANNUITY / _PENSION /
+    // _MILITARY. Arrays rather than 39 individually named fields: every control
+    // behaves identically across the three cards, only the defaults differ, so
+    // one builder fills all three and one listener serves all three.
+    private static final int STREAM_ANNUITY  = 0;
+    private static final int STREAM_PENSION  = 1;
+    private static final int STREAM_MILITARY = 2;
+    private static final int STREAM_COUNT    = 3;
+    private static final String[] STREAM_NAME = { "annuity", "pension", "military" };
+    private final JCheckBox[] chkUseStream    = new JCheckBox[STREAM_COUNT];
+    private final JSpinner[]  spStreamAmt     = new JSpinner[STREAM_COUNT];
+    private final JSpinner[]  spStreamStartY  = new JSpinner[STREAM_COUNT];
+    private final JSpinner[]  spStreamStartM  = new JSpinner[STREAM_COUNT];
+    private final JSpinner[]  spStreamEndY    = new JSpinner[STREAM_COUNT];
+    @SuppressWarnings("unchecked")
+    private final JComboBox<String>[] cmbStreamCola = new JComboBox[STREAM_COUNT];
+    private final JSpinner[]  spStreamColaRate    = new JSpinner[STREAM_COUNT];
+    private final JSpinner[]  spStreamColaHaircut = new JSpinner[STREAM_COUNT];
+    private final JSpinner[]  spStreamSurvPct     = new JSpinner[STREAM_COUNT];
+    @SuppressWarnings("unchecked")
+    private final JComboBox<String>[] cmbStreamSurvWho = new JComboBox[STREAM_COUNT];
+    private final JCheckBox[] chkStreamStateExempt = new JCheckBox[STREAM_COUNT];
+    private final JSpinner[]  spStreamTaxablePct   = new JSpinner[STREAM_COUNT];
+    private final JSpinner[]  spStreamFullTaxFrom  = new JSpinner[STREAM_COUNT];
     private JSpinner spNomReturn, spStdDev, spInflation, spInflationStdDev;
     private JSpinner spLivingExp, spMedical, spMedInflation;
     private JSpinner spBaseTax, spTaxInflation;
@@ -875,25 +897,22 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
 
-        // == Annuity =======================================================
-        spAnnuity           = spinI(0, 0, 500_000, 500, "#,###");
-        spAnnuityStartYear  = spinI(2028, 2020, 2040, 1, "#");
-        spAnnuityStartMonth = spinI(4,    1,    12,   1, "#");
-        chkUseAnnuity       = new JCheckBox("Use annuity", false); // default: deactivated
-        chkUseAnnuity.setToolTipText("<html><b>Use annuity</b><br>"
-                + "When OFF (default), the annuity is deactivated: its income is treated as $0 in<br>"
-                + "the simulation and the SS optimizer, and the three annuity fields below are<br>"
-                + "grayed and locked. Their values are preserved, so turning this back ON restores<br>"
-                + "the annuity with no re-entry.<br><br>"
-                + "The on/off state is saved with the scenario. Scenarios saved before this control<br>"
-                + "existed have no stored state and load deactivated.</html>");
-        chkUseAnnuity.addActionListener(e -> refreshAnnuityFieldsEnabled());
-        inner.add(card("Annuity (non-COLA)", new Object[]{
-                "Use annuity",                chkUseAnnuity,
-                "Annual annuity income ($)",  spAnnuity,
-                "Annuity start year",         spAnnuityStartYear,
-                "Annuity start month",        spAnnuityStartMonth,
-        }));
+        // == Guaranteed income streams (v11) ===============================
+        // Three independent streams. A household can hold all three at once, so
+        // they are never merged or reused. Identical controls on each card; only
+        // the defaults differ, which is the entire difference between an annuity,
+        // a private pension and military retired pay.
+        inner.add(buildStreamCard(STREAM_ANNUITY, "Annuity (non-COLA)", "Use annuity",
+                "Annual annuity income ($)", 0, 2028, 4, /*cola*/0, /*survPct*/0,
+                /*stateExempt*/false));
+        inner.add(Box.createVerticalStrut(4));
+        inner.add(buildStreamCard(STREAM_PENSION, "Pension", "Use pension",
+                "Annual pension income ($)", 0, 2028, 1, /*cola*/0, /*survPct*/0,
+                /*stateExempt*/false));
+        inner.add(Box.createVerticalStrut(4));
+        inner.add(buildStreamCard(STREAM_MILITARY, "Military retired pay", "Use military retired pay",
+                "Annual retired pay ($)", 0, 2026, 1, /*cola*/2, /*survPct*/55,
+                /*stateExempt*/true));
         inner.add(Box.createVerticalStrut(4));
 
         // == Market Assumptions ============================================
@@ -1344,7 +1363,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         refreshDeathFieldsEnabled();  // v6: initial death-event enable/greyed state
         refreshColaWarn();            // v6: initial COLA guard note
         refreshOptObjective();        // v6: initial optimizer objective banner
-        refreshAnnuityFieldsEnabled();  // v4: initial annuity enable/greyed state
+        refreshStreamFieldsEnabled();   // v11: initial stream enable/greyed state
 
         // == Pro PoS advisory guardrails ===================================
         spProPosUpperGuardrail = spinD(20.0, 5.0, 50.0, 1.0, "0.0#");
@@ -1735,7 +1754,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 "User Age", "Cal yr", "Portfolio bal (50th%)",         // 0 1 2
                 "Pro PoS withdrawal", "Actual wd", "Wd %",              // 3 4 5
                 "Rate drift",                                             // 6 (v6: renamed from "Alert")
-                "User SS", "Spouse SS", "Annuity", "Fixed Inc",          // 7 8 9 10
+                "User SS", "Spouse SS", "Annuity/Pen/Mil", "Fixed Inc",  // 7 8 9 10 (v11)
                 "Living Exp", "Medical", "Tax (est)",                    // 11 12 13
                 "Total spend", "Total income", "Surplus/gap",            // 14 15 16
                 "Infl factor",                                           // 17
@@ -1792,20 +1811,47 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                             + "portfolio drift. The Guyton-Klinger guardrails tab provides<br>"
                             + "an alternative dynamic-spending overlay.</html>"; }
                     case 9 -> {
-                        // Annuity -- fixed nominal, erodes in real terms
+                        // v11: the combined Annuity/Pen/Mil column, broken out per
+                        // stream. The pre-v11 text asserted "fixed nominal -- does
+                        // not adjust for inflation", which is false once a stream
+                        // tracks inflation (military retired pay does).
                         double d = showRealDollars ? er.inflFactor : 1.0;
-                        return String.format(
-                                "<html><b>Annuity / pension income</b><br>"
-                                        + "This is a <b>fixed nominal amount</b> -- it does not adjust for inflation.<br><br>"
-                                        + "Its purchasing power erodes every year. At a 3.79%% inflation rate,<br>"
-                                        + "it retains only about <b>67%% of its starting-year buying power</b><br>"
-                                        + "after 10 years -- and roughly 50%% after 18 years.<br><br>"
-                                        + "Toggle the <b>Real $</b> button (top right) to see this erosion<br>"
-                                        + "directly: the annuity column will visibly shrink year over year<br>"
-                                        + "while SS and portfolio withdrawals (which are inflation-adjusted)<br>"
-                                        + "remain relatively stable in real-dollar terms.<br><br>"
-                                        + "This year's nominal value: %s</html>",
-                                CURRENCY.format((long)(er.annuity / d)));
+                        SimInputs si = lastResults.inp;
+                        StringBuilder sb = new StringBuilder(
+                                "<html><b>Annuity / pension / military retired pay</b><br>"
+                                        + "The combined guaranteed income from the three streams, "
+                                        + "each with its own COLA rule.<br><br>"
+                                        + "<table cellpadding=2>");
+                        String[] nm = { "Annuity", "Pension", "Military" };
+                        int[]    vals = { er.annuityOnly, er.pensionOnly, er.militaryOnly };
+                        FixedStream[] ss = (si == null) ? null : new FixedStream[]{
+                                si.annuityStream, si.pensionStream, si.militaryStream };
+                        boolean any = false;
+                        for (int k = 0; k < 3; k++) {
+                            if (ss == null || !ss[k].active()) continue;
+                            any = true;
+                            sb.append("<tr><td><b>").append(nm[k]).append("</b></td><td>")
+                                    .append(CURRENCY.format((long) (vals[k] / d)))
+                                    .append("</td><td><i>").append(colaDesc(ss[k]))
+                                    .append("</i></td></tr>");
+                        }
+                        if (!any) sb.append("<tr><td colspan=3><i>No stream is active."
+                                + " Turn one on in the input panel.</i></td></tr>");
+                        sb.append("</table>");
+                        if (any) sb.append("<b>Total: ")
+                                .append(CURRENCY.format((long) (er.annuity / d)))
+                                .append("</b><br>");
+                        if (er.survivorYear) sb.append("<br><i>Survivor year: any stream set to"
+                                + " reduce on this death is already at its survivor"
+                                + " percentage.</i><br>");
+                        sb.append("<br>A <b>non-COLA</b> stream is a fixed check, so its buying"
+                                + " power erodes: at 3.79% inflation it holds about <b>67%</b>"
+                                + " of its starting-year value after 10 years and roughly"
+                                + " <b>50%</b> after 18. Toggle <b>Real $</b> to watch that"
+                                + " happen. A stream that <b>tracks inflation</b> holds its"
+                                + " real value instead, and stays roughly flat in Real $.");
+                        sb.append("</html>");
+                        return sb.toString();
                     }
                     case 5 -> {
                         // v6: Wd % cell -- explain the colour AND show the actual
@@ -1914,10 +1960,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     case 10 -> {
                         double d = showRealDollars ? er.inflFactor : 1.0;
                         return String.format(
-                                "<html><b>Fixed Inc = User SS + Spouse SS + Annuity</b><br>"
+                                "<html><b>Fixed Inc = User SS + Spouse SS + Annuity/Pen/Mil</b><br>"
                                         + "&nbsp;&nbsp;User SS:&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;Spouse SS:&nbsp;%s<br>"
-                                        + "&nbsp;&nbsp;Annuity:&nbsp;&nbsp;&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Annuity/Pen/Mil:&nbsp;&nbsp;&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;= Fixed Inc:&nbsp;<b>%s</b></html>",
                                 CURRENCY.format((long)(er.manSS / d)),
                                 CURRENCY.format((long)(er.womanSS / d)),
@@ -2112,7 +2158,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                                         + "&nbsp;&nbsp;Taxable Social Security:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;Ordinary income (Traditional draw):&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;&nbsp;&nbsp;<i>= RMD or larger discretionary draw</i><br>"
-                                        + "&nbsp;&nbsp;Annuity:&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Annuity/Pen/Mil:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;Roth conversion (gross):&nbsp;+%s<br>"
                                         + "&nbsp;&nbsp;----------------------------<br>"
                                         + "&nbsp;&nbsp;<b>MAGI total:&nbsp;%s</b><br>"
@@ -2230,7 +2276,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                             + "Monte Carlo trials survive, re-solved each year on the median balance.<br>"
                             + "<b>Guaranteed income (SS/annuity) is NOT subtracted</b> -- this is what the<br>"
                             + "portfolio alone can sustain. See Surplus/gap for budget headroom.</html>";
-                    case 10 -> "<html><b>Fixed Inc -- guaranteed income (fed by User SS + Spouse SS + Annuity)</b><br>"
+                    case 10 -> "<html><b>Fixed Inc -- guaranteed income (fed by User SS + Spouse SS + Annuity/Pen/Mil)</b><br>"
                             + "= User SS + Spouse SS + Annuity for the year.<br>"
                             + "This is the non-portfolio income floor. Hover a cell to see the<br>"
                             + "three source values that add up to that year's figure.</html>";
@@ -2777,6 +2823,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "<li><a href='#sec9' style='color:#264653; text-decoration:none;'>9. RMDs, additional v9 stress inputs, and deliberately omitted features</a></li>"
                 + "<li><a href='#sec10' style='color:#264653; text-decoration:none;'>10. Caveats</a></li>"
                 + "<li><a href='#sec11' style='color:#264653; text-decoration:none;'>11. SS Optimizer &mdash; objective, feasibility, and ranking</a></li>"
+                + "<li><a href='#sec12' style='color:#264653; text-decoration:none;'>12. Guaranteed income streams &mdash; annuity, pension, military retired pay</a></li>"
                 + "</ul></div>"
                 + "<h3 style='color:#2a5d34;'><a name='intro'></a>Three approaches to dynamic spending</h3>"
                 + "<p>This tool contains two spending engines, and it is worth understanding how each relates to "
@@ -3240,7 +3287,8 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "Traditional draw) + annuity), minus the MFJ + age-65 standard deduction, through the "
                 + "brackets + the selected state tax + IRMAA. Pre-75 the discretionary "
                 + "draw is treated as 100% Traditional; post-75 the RMD floors (and usually exceeds) the draw. "
-                + "The annuity is ordinary income (held inside an IRA). RMD overages &mdash; the amount the "
+                + "Guaranteed income streams are ordinary income; each stream's taxable share is set on its own "
+                + "card and defaults to 100% (see section 12). RMD overages &mdash; the amount the "
                 + "RMD forces out beyond what the household actually spends &mdash; are already-taxed dollars "
                 + "that accumulate into a separate <b>Money Market reserve</b> (its own column on the Pro table). "
                 + "The reserve grows with your inflation assumption each year, and is <b>excluded from the "
@@ -3585,6 +3633,54 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "grid. The <i>Use annuity</i> checkbox on the Portfolio panel is respected -- when the annuity is "
                 + "off, it contributes $0 to every combination.</p>"
 
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+
+                + "<h3 style='color:#2a5d34;'><a name='sec12'></a>12. Guaranteed income streams &mdash; annuity, pension, military retired pay</h3>"
+                + "<p><b>Three independent streams (v11).</b> A household can hold an annuity, a private or "
+                + "public pension, and military retired pay all at once, so each gets its own card and its own "
+                + "<i>Use ...</i> checkbox. They are never merged. Each card carries the identical control set; "
+                + "the only difference between the three is the defaults, which is genuinely the only difference "
+                + "between the instruments. All three default OFF and contribute $0 until enabled, in the Pro "
+                + "PoS engine, the Guyton-Klinger tab and the SS Optimizer alike.</p>"
+                + "<p><b>COLA.</b> <i>None</i> is a fixed nominal check that never rises &mdash; the usual case "
+                + "for private pensions and non-COLA annuities, and what the pre-v11 annuity did "
+                + "unconditionally. <i>Fixed %</i> compounds a set rate. <i>Tracks inflation</i> rides each "
+                + "path's simulated inflation, holding real purchasing power flat: <b>military retired pay works "
+                + "this way</b>, being indexed to CPI-W, which is why that card defaults to it. The optional "
+                + "<i>COLA haircut</i> subtracts a constant amount from the indexing each year and defaults to "
+                + "0; it is the same control Social Security has, and exists because CPI-W weights a "
+                + "working-age basket while retirees spend more on healthcare and housing (the experimental "
+                + "CPI-E has historically run about 0.2 pp/yr higher).</p>"
+                + "<p><b>Survivor continuation.</b> A stream can drop to a percentage of itself after the death "
+                + "event: 0% for a single-life annuity or pension, 50/75/100% for a joint-and-survivor "
+                + "election, 55% for the standard military Survivor Benefit Plan. It applies only when "
+                + "<i>Reduces on</i> names a person AND a death year is set on the Death Event card; the "
+                + "default is <i>None</i>, so nothing changes unless you say so. <b>This corrects a pre-v11 "
+                + "defect</b>: the annuity kept paying 100% forever after a death while Social Security "
+                + "correctly stopped for the decedent.</p>"
+                + "<p><b>Taxation.</b> Federally these are ordinary income and the taxable share defaults to "
+                + "<b>100%</b>, which is correct for a pension, for military retired pay, and for any annuity "
+                + "held inside an IRA or 401(k). Lower it only for a NON-QUALIFIED annuity bought with "
+                + "already-taxed money: each payment then returns part of your own principal, untaxed, plus "
+                + "earnings, taxed, split by the IRS exclusion ratio (investment in the contract divided by "
+                + "total expected payments). That exclusion ends once the investment is fully recovered, after "
+                + "which the whole payment is taxable &mdash; enter that year in <i>Fully taxable from year</i>. "
+                + "Leaving the defaults at 100% and 0 reproduces the pre-v11 treatment exactly.</p>"
+                + "<p><b>State tax.</b> <i>Exempt from state income tax</i> removes a stream from the STATE "
+                + "taxable base only; federal tax is unaffected. <b>Arizona exempts military retired pay in "
+                + "full</b> (tax year 2021 onward), which is why that card defaults to checked. The exemption "
+                + "is a <b>direct subtraction</b> from the state base and works on every state profile, the "
+                + "built-in Arizona one included. It is deliberately independent of the profile's <i>exclude "
+                + "retirement income</i> flag, because the two model different rules: that flag is for a state "
+                + "which exempts retirement-ACCOUNT withdrawals, while this is for a state which exempts one "
+                + "specific income stream. Arizona does the second and not the first &mdash; it taxes IRA and "
+                + "401(k) money while exempting military retired pay &mdash; so the two are applied separately "
+                + "and a stream is never subtracted twice.</p>"
+                + "<p><b>End year.</b> 0 means lifetime, the normal case. Set a year only for a term-certain "
+                + "payout: the stream pays through that year and nothing after.</p>"
+                + "<p><b>Display.</b> The three streams share one Pro PoS column, <i>Annuity/Pen/Mil</i>, "
+                + "showing their total; hover any cell for the per-stream breakdown with each stream's COLA "
+                + "rule. <i>Fixed Inc</i> continues to mean User SS + Spouse SS + that total.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "</body></html>";
 
@@ -5440,19 +5536,195 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     }
 
     /**
-     * v4: The "Use annuity" checkbox activates/deactivates the annuity. When
-     * OFF (default), the three annuity spinners are disabled (grayed and locked)
-     * and their values are preserved; the annuity is passed as $0 into both the
-     * main simulation and the SS optimizer (see the SimInputs builder and the
-     * optimizer snapshot). Turning it back ON restores the annuity with no
-     * re-entry. The on/off state is persisted with the scenario.
+     * v11: build one guaranteed-income-stream card. All three cards carry the
+     * identical control set -- the difference between an annuity, a pension and
+     * military retired pay is entirely in the defaults passed here.
      */
-    private void refreshAnnuityFieldsEnabled() {
-        if (chkUseAnnuity == null) return; // guard: called during construction
-        boolean on = chkUseAnnuity.isSelected();
-        if (spAnnuity != null)           spAnnuity.setEnabled(on);
-        if (spAnnuityStartYear != null)  spAnnuityStartYear.setEnabled(on);
-        if (spAnnuityStartMonth != null) spAnnuityStartMonth.setEnabled(on);
+    private JPanel buildStreamCard(int k, String title, String useLabel, String amtLabel,
+                                   int defAmt, int defStartY, int defStartM,
+                                   int defCola, int defSurvPct, boolean defStateExempt) {
+        chkUseStream[k] = new JCheckBox(useLabel, false);   // default: deactivated
+        chkUseStream[k].setToolTipText("<html><b>" + useLabel + "</b><br>"
+                + "When OFF (default) this stream is deactivated: its income is treated as $0<br>"
+                + "in the simulation, the Guyton-Klinger tab and the SS optimizer, and the<br>"
+                + "fields below are grayed and locked. Their values are preserved, so turning<br>"
+                + "this back ON restores the stream with no re-entry.<br><br>"
+                + "The on/off state is saved with the scenario. Scenarios saved before this<br>"
+                + "control existed have no stored state and load deactivated.</html>");
+        chkUseStream[k].addActionListener(e -> refreshStreamFieldsEnabled());
+
+        spStreamAmt[k]    = spinI(defAmt, 0, 500_000, 500, "#,###");
+        spStreamAmt[k].setToolTipText("<html><b>" + amtLabel + "</b><br>"
+                + "The annual amount in the stream's FIRST year, before any COLA.<br>"
+                + "Enter today's dollars if the payment has not started yet.</html>");
+
+        spStreamStartY[k] = spinI(defStartY, 2020, 2060, 1, "#");
+        spStreamStartM[k] = spinI(defStartM, 1, 12, 1, "#");
+        spStreamStartM[k].setToolTipText("<html><b>Start month</b><br>"
+                + "The first year is prorated from this month: a start month of 4 pays<br>"
+                + "9/12 of the annual amount in the start year.</html>");
+
+        spStreamEndY[k]   = spinI(0, 0, 2100, 1, "#");
+        spStreamEndY[k].setToolTipText("<html><b>End year</b><br>"
+                + "<b>0 = lifetime</b> (the normal case for a pension, an annuity with a<br>"
+                + "life payout, and military retired pay).<br>"
+                + "Set a year only for a TERM-CERTAIN payout that stops on a known date --<br>"
+                + "the stream pays through that year and nothing after.</html>");
+
+        cmbStreamCola[k] = new JComboBox<>(new String[]{
+                "None (fixed nominal)", "Fixed % per year", "Tracks inflation" });
+        cmbStreamCola[k].setSelectedIndex(defCola);
+        cmbStreamCola[k].setToolTipText("<html><b>Cost-of-living adjustment</b><br>"
+                + "<b>None</b> -- a fixed check that never rises. Most PRIVATE PENSIONS and<br>"
+                + "non-COLA annuities work this way, and inflation erodes them steadily.<br>"
+                + "<b>Fixed %</b> -- rises by a set percentage every year. Some public<br>"
+                + "pensions cap their COLA this way.<br>"
+                + "<b>Tracks inflation</b> -- rises with the SIMULATED inflation of each path,<br>"
+                + "holding real purchasing power flat. <b>MILITARY RETIRED PAY works this<br>"
+                + "way</b> (it is indexed to CPI-W), as does Social Security.</html>");
+        cmbStreamCola[k].addActionListener(e -> refreshStreamFieldsEnabled());
+
+        spStreamColaRate[k] = spinD(2.00, 0.0, 15.0, 0.05, "0.00");
+        spStreamColaRate[k].setToolTipText("<html><b>Fixed COLA rate</b><br>"
+                + "Used only when COLA is set to <i>Fixed % per year</i>.</html>");
+
+        spStreamColaHaircut[k] = spinD(0.00, 0.0, 3.0, 0.05, "0.00");
+        spStreamColaHaircut[k].setToolTipText("<html><b>COLA haircut (%/yr)</b><br>"
+                + "Used only when COLA is set to <i>Tracks inflation</i>. Subtracts a constant<br>"
+                + "amount from the indexing each year.<br><br>"
+                + "<b>Default 0</b> -- the stream keeps pace with inflation exactly.<br>"
+                + "Raise it if you believe the index understates YOUR cost increases: CPI-W<br>"
+                + "weights a working-age basket, and retirees spend more on healthcare and<br>"
+                + "housing. The experimental CPI-E has historically run about 0.2 pp/yr higher.<br>"
+                + "This is the same control Social Security has (its shortfall setting).</html>");
+
+        spStreamSurvPct[k] = spinD(defSurvPct, 0.0, 100.0, 1.0, "0.#");
+        spStreamSurvPct[k].setToolTipText("<html><b>Survivor continuation %</b><br>"
+                + "How much of this income keeps paying after the death event.<br><br>"
+                + "<b>0%</b> -- the stream stops entirely (a single-life annuity or pension).<br>"
+                + "<b>50 / 75 / 100%</b> -- a joint-and-survivor election.<br>"
+                + "<b>55%</b> -- the standard military Survivor Benefit Plan (SBP) benefit.<br><br>"
+                + "This applies ONLY when <i>Reduces on</i> below names a person AND a death<br>"
+                + "year is set on the Death Event card. Leave <i>Reduces on</i> at None and the<br>"
+                + "stream pays in full regardless.</html>");
+
+        cmbStreamSurvWho[k] = new JComboBox<>(new String[]{
+                "None -- pays in full", "User dies", "Spouse dies" });
+        cmbStreamSurvWho[k].setSelectedIndex(0);
+        cmbStreamSurvWho[k].setToolTipText("<html><b>Reduces on</b><br>"
+                + "Whose death cuts this stream to the survivor percentage above.<br>"
+                + "Pick the person the income belongs to -- the pensioner, the annuitant,<br>"
+                + "or the veteran.<br><br>"
+                + "<b>None</b> (default) means the death event never changes this stream.<br>"
+                + "Nothing happens either way unless a death year is set on the Death<br>"
+                + "Event card.</html>");
+        cmbStreamSurvWho[k].addActionListener(e -> refreshStreamFieldsEnabled());
+
+        chkStreamStateExempt[k] = new JCheckBox("Exempt from state income tax", defStateExempt);
+        chkStreamStateExempt[k].setToolTipText("<html><b>Exempt from state income tax</b><br>"
+                + "Federal tax is unaffected -- this only removes the stream from the STATE<br>"
+                + "taxable base.<br><br>"
+                + "<b>Arizona exempts military retired pay in full</b> (since tax year 2021),<br>"
+                + "which is why it is checked by default on that card. Private pensions and<br>"
+                + "annuities are generally state-taxable.<br><br>"
+                + "This routes the stream through the state profile's retirement-income<br>"
+                + "exclusion. That exclusion is all-or-nothing per profile, so if you need<br>"
+                + "military pay exempt while IRA withdrawals stay taxable, use the Custom<br>"
+                + "state profile. See the Assumptions tab.</html>");
+
+        spStreamTaxablePct[k] = spinD(100.0, 0.0, 100.0, 1.0, "0.#");
+        spStreamTaxablePct[k].setToolTipText("<html><b>Taxable portion %</b><br>"
+                + "<b>100% is correct for a pension, military retired pay, and any annuity<br>"
+                + "held inside an IRA or 401(k)</b> -- the money went in untaxed, so all of<br>"
+                + "it is taxable coming out. Leave it at 100 unless you know otherwise.<br><br>"
+                + "Lower it only for a NON-QUALIFIED annuity, bought with money you had<br>"
+                + "already paid tax on. Each payment then returns part of your own principal<br>"
+                + "(not taxed again) plus earnings (taxed). The split is the IRS exclusion<br>"
+                + "ratio: investment in the contract divided by total expected payments.<br>"
+                + "$100,000 in, $200,000 expected back = 50% taxable.</html>");
+
+        // v11 FIX: "Fully taxable from year" is enabled only while the taxable
+        // portion is below 100, so the PERCENTAGE has to drive the refresh. Without
+        // this listener the field stayed greyed after lowering the percentage and
+        // could not be typed into until some other control happened to fire.
+        spStreamTaxablePct[k].addChangeListener(e -> refreshStreamFieldsEnabled());
+
+        spStreamFullTaxFrom[k] = spinI(0, 0, 2100, 1, "#");
+        spStreamFullTaxFrom[k].setToolTipText("<html><b>Fully taxable from year</b><br>"
+                + "<b>0 = never switches</b>, which is the right setting whenever the taxable<br>"
+                + "portion above is 100%.<br><br>"
+                + "For a non-qualified annuity, the exclusion ends once you have recovered<br>"
+                + "your entire investment -- after that the whole payment is taxable for the<br>"
+                + "rest of your life. Enter the year that happens; your contract states the<br>"
+                + "recovery period.</html>");
+
+        return card(title, new Object[]{
+                useLabel,                       chkUseStream[k],
+                amtLabel,                       spStreamAmt[k],
+                "Start year",                   spStreamStartY[k],
+                "Start month",                  spStreamStartM[k],
+                "End year (0 = lifetime)",      spStreamEndY[k],
+                "COLA",                         cmbStreamCola[k],
+                "Fixed COLA rate (%/yr)",       spStreamColaRate[k],
+                "COLA haircut (%/yr)",          spStreamColaHaircut[k],
+                "Survivor continuation (%)",    spStreamSurvPct[k],
+                "Reduces on",                   cmbStreamSurvWho[k],
+                "State tax",                    chkStreamStateExempt[k],
+                "Taxable portion (%)",          spStreamTaxablePct[k],
+                "Fully taxable from year",      spStreamFullTaxFrom[k],
+        });
+    }
+
+    /**
+     * v11 (was v4's refreshAnnuityFieldsEnabled): each stream's "Use ..." checkbox
+     * activates or deactivates that stream. When OFF, its fields are grayed and
+     * locked and their values are preserved; the stream is passed as $0 into the
+     * main simulation, the Guyton-Klinger tab and the SS optimizer. Turning it
+     * back ON restores it with no re-entry. The state persists with the scenario.
+     *
+     * Also greys the two COLA detail fields that the selected COLA mode does not
+     * use, so it is obvious which one is live.
+     */
+    private void refreshStreamFieldsEnabled() {
+        for (int k = 0; k < STREAM_COUNT; k++) {
+            if (chkUseStream[k] == null) return;   // guard: called during construction
+            boolean on = chkUseStream[k].isSelected();
+            if (spStreamAmt[k]    != null) spStreamAmt[k].setEnabled(on);
+            if (spStreamStartY[k] != null) spStreamStartY[k].setEnabled(on);
+            if (spStreamStartM[k] != null) spStreamStartM[k].setEnabled(on);
+            if (spStreamEndY[k]   != null) spStreamEndY[k].setEnabled(on);
+            if (cmbStreamCola[k]  != null) cmbStreamCola[k].setEnabled(on);
+            int cola = (cmbStreamCola[k] != null) ? cmbStreamCola[k].getSelectedIndex() : 0;
+            if (spStreamColaRate[k]    != null) spStreamColaRate[k].setEnabled(on && cola == 1);
+            if (spStreamColaHaircut[k] != null) spStreamColaHaircut[k].setEnabled(on && cola == 2);
+            if (cmbStreamSurvWho[k] != null) cmbStreamSurvWho[k].setEnabled(on);
+            int who = (cmbStreamSurvWho[k] != null) ? cmbStreamSurvWho[k].getSelectedIndex() : 0;
+            if (spStreamSurvPct[k] != null) spStreamSurvPct[k].setEnabled(on && who != 0);
+            if (chkStreamStateExempt[k] != null) chkStreamStateExempt[k].setEnabled(on);
+            if (spStreamTaxablePct[k]   != null) spStreamTaxablePct[k].setEnabled(on);
+            boolean partial = spStreamTaxablePct[k] != null
+                    && dv(spStreamTaxablePct[k]) < 99.999;
+            if (spStreamFullTaxFrom[k] != null) spStreamFullTaxFrom[k].setEnabled(on && partial);
+        }
+    }
+
+    /** v11: build one stream record from its card. */
+    private FixedStream readStream(int k) {
+        if (chkUseStream[k] == null) return FixedStream.none();
+        int amt = chkUseStream[k].isSelected() ? iv(spStreamAmt[k]) : 0;
+        return new FixedStream(
+                amt,
+                iv(spStreamStartY[k]),
+                iv(spStreamStartM[k]),
+                iv(spStreamEndY[k]),
+                cmbStreamCola[k].getSelectedIndex(),
+                dv(spStreamColaRate[k]) / 100.0,
+                dv(spStreamColaHaircut[k]) / 100.0,
+                dv(spStreamSurvPct[k]),
+                cmbStreamSurvWho[k].getSelectedIndex(),
+                chkStreamStateExempt[k].isSelected(),
+                dv(spStreamTaxablePct[k]),
+                iv(spStreamFullTaxFrom[k]));
     }
 
     private void saveScenario(javax.swing.JTextField tfDesc) {
@@ -5501,10 +5773,26 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         props.setProperty("man.ssStartMonth",       String.valueOf(iv(spManSSStartMonth)));
         props.setProperty("woman.ssStartYear",      String.valueOf(iv(spWomanSSStartYear)));
         props.setProperty("woman.ssStartMonth",     String.valueOf(iv(spWomanSSStartMonth)));
-        props.setProperty("annuity.amount",         String.valueOf(iv(spAnnuity)));
-        props.setProperty("annuity.enabled",        String.valueOf(chkUseAnnuity.isSelected()));
-        props.setProperty("annuity.startYear",      String.valueOf(iv(spAnnuityStartYear)));
-        props.setProperty("annuity.startMonth",     String.valueOf(iv(spAnnuityStartMonth)));
+        // v11: three streams. Stream 0 KEEPS the original four "annuity.*" key
+        // names and their meaning, so a pre-v11 scenario still loads its annuity
+        // correctly; every other key is new and falls back to a v10-equivalent
+        // default when absent.
+        for (int k = 0; k < STREAM_COUNT; k++) {
+            String p = STREAM_NAME[k] + ".";
+            props.setProperty(p + "amount",       String.valueOf(iv(spStreamAmt[k])));
+            props.setProperty(p + "enabled",      String.valueOf(chkUseStream[k].isSelected()));
+            props.setProperty(p + "startYear",    String.valueOf(iv(spStreamStartY[k])));
+            props.setProperty(p + "startMonth",   String.valueOf(iv(spStreamStartM[k])));
+            props.setProperty(p + "endYear",      String.valueOf(iv(spStreamEndY[k])));
+            props.setProperty(p + "cola",         String.valueOf(cmbStreamCola[k].getSelectedIndex()));
+            props.setProperty(p + "colaRate",     String.valueOf(dv(spStreamColaRate[k])));
+            props.setProperty(p + "colaHaircut",  String.valueOf(dv(spStreamColaHaircut[k])));
+            props.setProperty(p + "survPct",      String.valueOf(dv(spStreamSurvPct[k])));
+            props.setProperty(p + "survWho",      String.valueOf(cmbStreamSurvWho[k].getSelectedIndex()));
+            props.setProperty(p + "stateExempt",  String.valueOf(chkStreamStateExempt[k].isSelected()));
+            props.setProperty(p + "taxablePct",   String.valueOf(dv(spStreamTaxablePct[k])));
+            props.setProperty(p + "fullTaxFrom",  String.valueOf(iv(spStreamFullTaxFrom[k])));
+        }
         props.setProperty("man.tradIRA",            String.valueOf(iv(spManTradIRA)));
         props.setProperty("man.rothIRA",            String.valueOf(iv(spManRothIRA)));
         props.setProperty("man.trad401K",           String.valueOf(iv(spManTrad401K)));
@@ -5659,14 +5947,32 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         setSpinnerI(spManSSStartMonth,    props, "man.ssStartMonth",       warnings);
         setSpinnerI(spWomanSSStartYear,   props, "woman.ssStartYear",      warnings);
         setSpinnerI(spWomanSSStartMonth,  props, "woman.ssStartMonth",     warnings);
-        setSpinnerI(spAnnuity,            props, "annuity.amount",         warnings);
-        // v4: annuity on/off. Absent in pre-feature scenarios -> default off.
-        if (chkUseAnnuity != null) {
-            String ae = props.getProperty("annuity.enabled");
-            chkUseAnnuity.setSelected(ae != null && ae.trim().equalsIgnoreCase("true"));
+        // v11: three streams. Stream 0 reads the original four "annuity.*" keys,
+        // so a pre-v11 scenario restores its annuity exactly. Every key added in
+        // v11 is absent from those files and falls back to the v10-equivalent
+        // default (no COLA, no survivor reduction, lifetime, 100% taxable, state
+        // taxable), so an old scenario reproduces its old numbers.
+        for (int k = 0; k < STREAM_COUNT; k++) {
+            String p = STREAM_NAME[k] + ".";
+            setSpinnerI(spStreamAmt[k],    props, p + "amount",     warnings);
+            if (chkUseStream[k] != null) {
+                String ae = props.getProperty(p + "enabled");
+                chkUseStream[k].setSelected(ae != null && ae.trim().equalsIgnoreCase("true"));
+            }
+            setSpinnerI(spStreamStartY[k], props, p + "startYear",  warnings);
+            setSpinnerI(spStreamStartM[k], props, p + "startMonth", warnings);
+            setStreamIntIfPresent(spStreamEndY[k],       props, p + "endYear");
+            setStreamIntIfPresent(spStreamFullTaxFrom[k], props, p + "fullTaxFrom");
+            setStreamDblIfPresent(spStreamColaRate[k],    props, p + "colaRate");
+            setStreamDblIfPresent(spStreamColaHaircut[k], props, p + "colaHaircut");
+            setStreamDblIfPresent(spStreamSurvPct[k],     props, p + "survPct");
+            setStreamDblIfPresent(spStreamTaxablePct[k],  props, p + "taxablePct");
+            setStreamComboIfPresent(cmbStreamCola[k],     props, p + "cola");
+            setStreamComboIfPresent(cmbStreamSurvWho[k],  props, p + "survWho");
+            String se = props.getProperty(p + "stateExempt");
+            if (se != null && chkStreamStateExempt[k] != null)
+                chkStreamStateExempt[k].setSelected(se.trim().equalsIgnoreCase("true"));
         }
-        setSpinnerI(spAnnuityStartYear,   props, "annuity.startYear",      warnings);
-        setSpinnerI(spAnnuityStartMonth,  props, "annuity.startMonth",     warnings);
         setSpinnerI(spManTradIRA,         props, "man.tradIRA",            warnings);
         setSpinnerI(spManRothIRA,         props, "man.rothIRA",            warnings);
         setSpinnerI(spManTrad401K,        props, "man.trad401K",           warnings);
@@ -5835,7 +6141,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         refreshStateFieldsEnabled();  // v5: apply loaded state selection greying
         refreshDeathFieldsEnabled();  // v6: apply loaded death-event greying
         refreshColaWarn();            // v6: apply loaded COLA guard note
-        refreshAnnuityFieldsEnabled();  // v4: apply loaded annuity on/off state
+        refreshStreamFieldsEnabled();   // v11: apply loaded stream on/off state
         addRecentFile(file.getAbsolutePath());
         if (cmbRecent != null) loadRecentFiles(cmbRecent);
         String warnMsg = warnings.isEmpty() ? "" : "  [Warnings: " + String.join(", ", warnings) + "]";
@@ -5891,6 +6197,43 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             double lo = ((Number)m.getMinimum()).doubleValue(), hi = ((Number)m.getMaximum()).doubleValue();
             sp.setValue(Math.max(lo, Math.min(hi, v)));
         } catch (Exception e) { warnings.add("bad value for " + key + ": " + val); }
+    }
+
+    // v11: silent loaders for keys introduced with the income streams. A pre-v11
+    // scenario has none of them, and that is not a defect -- the control keeps the
+    // card default, which is the v10-equivalent behavior. Warning on every absent
+    // key would bury the real warnings under thirty lines of noise on every old
+    // file, so these stay quiet on absence and only clamp on a bad value.
+    private void setStreamIntIfPresent(JSpinner sp, java.util.Properties props, String key) {
+        String val = props.getProperty(key);
+        if (val == null || sp == null) return;
+        try {
+            int v = Integer.parseInt(val.trim());
+            SpinnerNumberModel m = (SpinnerNumberModel) sp.getModel();
+            int lo = ((Number) m.getMinimum()).intValue(), hi = ((Number) m.getMaximum()).intValue();
+            sp.setValue(Math.max(lo, Math.min(hi, v)));
+        } catch (Exception ignored) { }
+    }
+
+    private void setStreamDblIfPresent(JSpinner sp, java.util.Properties props, String key) {
+        String val = props.getProperty(key);
+        if (val == null || sp == null) return;
+        try {
+            double v = Double.parseDouble(val.trim());
+            SpinnerNumberModel m = (SpinnerNumberModel) sp.getModel();
+            double lo = ((Number) m.getMinimum()).doubleValue();
+            double hi = ((Number) m.getMaximum()).doubleValue();
+            sp.setValue(Math.max(lo, Math.min(hi, v)));
+        } catch (Exception ignored) { }
+    }
+
+    private void setStreamComboIfPresent(JComboBox<String> cb, java.util.Properties props, String key) {
+        String val = props.getProperty(key);
+        if (val == null || cb == null) return;
+        try {
+            int v = Integer.parseInt(val.trim());
+            if (v >= 0 && v < cb.getItemCount()) cb.setSelectedIndex(v);
+        } catch (Exception ignored) { }
     }
 
     // v7: encode a double[] as a comma-separated integer list for scenario save.
@@ -6218,11 +6561,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 i.womanSSStartYear, i.womanSSStartMonth);
         i.manSSAmount        = (int) Math.round(i.manSSMonthly   * 12);
         i.womanSSAmount      = (int) Math.round(i.womanSSMonthly * 12);
-        // v4: annuity is included only when "Use annuity" is checked (default off).
-        i.annuity            = (chkUseAnnuity != null && chkUseAnnuity.isSelected())
-                ? iv(spAnnuity) : 0;
-        i.annuityStartYear   = iv(spAnnuityStartYear);
-        i.annuityStartMonth  = iv(spAnnuityStartMonth);
+        // v11: three streams, each included only when its "Use ..." box is checked
+        // (all default off, as the v4 annuity checkbox did).
+        i.annuityStream      = readStream(STREAM_ANNUITY);
+        i.pensionStream      = readStream(STREAM_PENSION);
+        i.militaryStream     = readStream(STREAM_MILITARY);
         i.manTradIRA     = iv(spManTradIRA);
         i.manRothIRA     = iv(spManRothIRA);
         i.manTrad401K    = iv(spManTrad401K);
@@ -6666,7 +7009,16 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             double ssInflNow  = inflAt(medInfl, inp.baseYear, calYear);   // v6
             double manSS      = manSSSurv(inp, y, ssInflNow, medManStartInfl, medWomanStartInfl);
             double womanSS    = womanSSSurv(inp, y, ssInflNow, medManStartInfl, medWomanStartInfl);
-            double ann        = annuityThisYear(inp, y);
+            // v11: three streams. The median path already carries per-year
+            // inflation factors, so each stream's start factor is a DIRECT lookup
+            // into medInfl -- no running capture, nothing to forget to trigger.
+            double fAnn  = inflAt(medInfl, inp.baseYear, inp.annuityStream.startYear());
+            double fPen  = inflAt(medInfl, inp.baseYear, inp.pensionStream.startYear());
+            double fMil  = inflAt(medInfl, inp.baseYear, inp.militaryStream.startYear());
+            double annOnly = streamThisYear(inp.annuityStream,  inp, calYear, ssInflNow, fAnn);
+            double penOnly = streamThisYear(inp.pensionStream,  inp, calYear, ssInflNow, fPen);
+            double milOnly = streamThisYear(inp.militaryStream, inp, calYear, ssInflNow, fMil);
+            double ann        = annOnly + penOnly + milOnly;
             double guaranteed = manSS + womanSS + ann;
             boolean survivor  = isSurvivorYear(inp, calYear);   // v6
             TaxEngine.FilingStatus fsYear = filingFor(inp, calYear);  // v6 per-year
@@ -6716,7 +7068,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 // is not spent.
                 double tradPortion = Math.min(wdActual, Math.max(0, medTrad));
                 double tradDraw = Math.max(combRmd, tradPortion);
-                double ordinaryBeforeConv = tradDraw + ann;
+                // v11: only the TAXABLE portion of the streams is ordinary income.
+                // Defaults are 100%, so this equals `ann` and reproduces v10; a
+                // non-qualified annuity's return-of-principal share is excluded.
+                double annTaxable = streamsTaxable(inp, calYear, ssInflNow, fAnn, fPen, fMil);
+                double ordinaryBeforeConv = tradDraw + annTaxable;
 
                 // MAGI (before conversion) drives the fill; taxable SS depends on
                 // the conversion is a SEPARATE Traditional distribution (see
@@ -6765,7 +7121,12 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 TaxEngine.TaxResult tr = TaxEngine.compute(
                         grossSS, ordinaryBeforeConv, magiTwoYrPrior,
                         manAge >= 65, womanAge >= 65, inflFactor, irmaaTF,
-                        fsYear, stProfile, calYear, tradDraw);
+                        // v11: retirementOrdinary stays tradDraw ONLY. A stream's
+                        // state exemption travels in its own parameter below, so a
+                        // Custom profile that also excludes retirement income cannot
+                        // subtract the same dollars twice.
+                        fsYear, stProfile, calYear, tradDraw,
+                        streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil));
 
                 tax          = tr.totalTax;                 // living-expenses tax
                 taxableSSInt = (int) tr.taxableSS;
@@ -6839,6 +7200,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             row.manSS         = (int) manSS;
             row.womanSS       = (int) womanSS;
             row.annuity       = (int) ann;
+            // v11: per-stream components behind the combined column, so the cell
+            // tooltip can break out which stream contributed what.
+            row.annuityOnly   = (int) annOnly;
+            row.pensionOnly   = (int) penOnly;
+            row.militaryOnly  = (int) milOnly;
             row.guaranteed    = (int) guaranteed;
             row.living        = (int) living;
             row.medical       = (int) medical;
@@ -7162,7 +7528,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                         ? String.format("  [COLA TRACKS SIMULATED INFLATION, shortfall %.1f%%/yr"
                         + " -- the fixed COLA above is NOT in use]", inp.ssColaShortfall * 100)
                         : "",
-                CURRENCY.format(inp.annuity), inp.annuityStartYear,
+                streamSummary(inp), streamSummaryStartYear(inp),
                 CURRENCY.format(inp.manTradIRA) + " + " + CURRENCY.format(inp.manTrad401K), manRmdYear,
                 CURRENCY.format(inp.womanTradIRA) + " + " + CURRENCY.format(inp.womanTrad401K), womanRmdYear,
                 CURRENCY.format(inp.manRothIRA) + " (man Roth IRA) + "
@@ -7437,12 +7803,195 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         return womanSSThisYear(inp, y, 0, 0);
     }
 
-    private double annuityThisYear(SimInputs inp, int y) {
-        int calYear = inp.baseYear + y;
-        if (calYear < inp.annuityStartYear) return 0;
-        if (calYear == inp.annuityStartYear)
-            return inp.annuity * (13.0 - inp.annuityStartMonth) / 12.0;
-        return inp.annuity;
+    // ========================================================================
+    //  v11: GUARANTEED INCOME STREAMS  (annuity / pension / military retired pay)
+    //  Replaces the single v10 annuityThisYear. Three independent streams share
+    //  one implementation; only their defaults differ.
+    // ========================================================================
+
+    /**
+     * Growth factor for one stream between its start year and calYear. Mirrors
+     * ssGrowth() deliberately, so the two behave identically where they mean the
+     * same thing.
+     *
+     *   colaMode 0 -- none. Always 1.0: a fixed nominal check, which is what most
+     *                 private pensions and non-COLA annuities are, and exactly
+     *                 what the v10 annuity did unconditionally.
+     *   colaMode 1 -- a fixed percentage, compounded.
+     *   colaMode 2 -- rides SIMULATED inflation (military retired pay is indexed
+     *                 to CPI-W), optionally minus a constant annual haircut, the
+     *                 same shape as ssColaShortfall for Social Security.
+     *
+     * With no usable inflation basis, mode 2 stays FLAT rather than guessing. The
+     * guard exists so a future call site that forgets to pass one cannot silently
+     * inflate a benefit; callers always supply a basis.
+     */
+    private static double streamGrowth(FixedStream s, int yearsSinceStart,
+                                       double inflNow, double inflAtStart) {
+        if (yearsSinceStart <= 0) return 1.0;
+        if (s.colaMode() == 2) {
+            if (inflAtStart > 0 && inflNow > 0) {
+                double hc = Math.max(0, s.colaHaircut());
+                return (inflNow / inflAtStart) / Math.pow(1 + hc, yearsSinceStart);
+            }
+            return 1.0;
+        }
+        if (s.colaMode() == 1) return Math.pow(1 + s.colaRate(), yearsSinceStart);
+        return 1.0;
+    }
+
+    /**
+     * One stream's nominal payment for a calendar year.
+     *
+     * With colaMode 0, survivorPct 0 and endYear 0 this returns exactly what v10's
+     * annuityThisYear returned -- same start-year proration, same flat amount
+     * after -- which is what keeps pre-v11 scenarios bit-identical.
+     */
+    private static double streamThisYear(FixedStream s, SimInputs inp, int calYear,
+                                         double inflNow, double inflAtStreamStart) {
+        if (s == null || !s.active())                 return 0;
+        if (calYear <  s.startYear())                 return 0;
+        if (s.endYear() > 0 && calYear > s.endYear()) return 0;
+
+        double amt = s.amount()
+                * streamGrowth(s, calYear - s.startYear(), inflNow, inflAtStreamStart);
+        // Start year prorated from the start month, as the v10 annuity was.
+        if (calYear == s.startYear()) amt *= (13.0 - s.startMonth()) / 12.0;
+
+        // v11: survivor continuation. The v10 annuity kept paying 100% forever
+        // after a death event while Social Security correctly stopped for the
+        // decedent; a stream now drops to its elected survivor percentage.
+        if (s.deathTrigger() != 0 && inp.deathWho == s.deathTrigger()
+                && isSurvivorYear(inp, calYear)) {
+            amt *= s.survivorPct() / 100.0;
+        }
+        return amt;
+    }
+
+    /**
+     * All three streams for one year.
+     *
+     * Start factors are passed in rather than looked up here because each call
+     * site carries a different inflation basis: the Pro loop has the median path's
+     * factors, the conversion sizers use the deterministic Math.pow basis they
+     * already use for everything else, and the GK loop has its own per-path
+     * running factor. Explicit doubles rather than a lambda keep the
+     * conversion-sizing path -- which runs inside the binary search -- free of
+     * per-call allocation.
+     */
+    private static double streamsThisYear(SimInputs inp, int calYear, double inflNow,
+                                          double fAnnuity, double fPension, double fMilitary) {
+        return streamThisYear(inp.annuityStream,  inp, calYear, inflNow, fAnnuity)
+                + streamThisYear(inp.pensionStream,  inp, calYear, inflNow, fPension)
+                + streamThisYear(inp.militaryStream, inp, calYear, inflNow, fMilitary);
+    }
+
+    /** v11: the deterministic inflation basis the conversion sizers already use. */
+    private static double detInflAt(SimInputs inp, int calYear) {
+        return Math.pow(1 + inp.inflation, Math.max(0, calYear - inp.baseYear));
+    }
+
+    /** v11: streams summed on the deterministic basis (conversion sizing). */
+    private static double streamsDet(SimInputs inp, int calYear) {
+        return streamsThisYear(inp, calYear, detInflAt(inp, calYear),
+                detInflAt(inp, inp.annuityStream.startYear()),
+                detInflAt(inp, inp.pensionStream.startYear()),
+                detInflAt(inp, inp.militaryStream.startYear()));
+    }
+
+    /**
+     * v11: the TAXABLE portion of one stream.
+     *
+     * Default 100% -- a qualified annuity, a pension and military retired pay are
+     * all fully taxable federally -- which reproduces v10. A NON-QUALIFIED annuity
+     * is bought with already-taxed money, so each payment returns part of your own
+     * principal (not taxed again) plus earnings (taxed). taxablePct is that
+     * exclusion ratio; fullyTaxableFrom is the year the investment finishes being
+     * recovered, after which the whole payment becomes taxable.
+     */
+    private static double taxablePart(FixedStream s, SimInputs inp, int calYear,
+                                      double inflNow, double startFactor) {
+        double gross = streamThisYear(s, inp, calYear, inflNow, startFactor);
+        if (gross == 0) return 0;
+        boolean full = (s.fullyTaxableFrom() > 0 && calYear >= s.fullyTaxableFrom());
+        double pct = full ? 100.0 : s.taxablePct();
+        return gross * Math.max(0, Math.min(100.0, pct)) / 100.0;
+    }
+
+    /** v11: taxable portion of all three streams. */
+    private static double streamsTaxable(SimInputs inp, int calYear, double inflNow,
+                                         double fA, double fP, double fM) {
+        return taxablePart(inp.annuityStream,  inp, calYear, inflNow, fA)
+                + taxablePart(inp.pensionStream,  inp, calYear, inflNow, fP)
+                + taxablePart(inp.militaryStream, inp, calYear, inflNow, fM);
+    }
+
+    /** v11: taxable portion on the deterministic basis (conversion sizing). */
+    private static double streamsTaxableDet(SimInputs inp, int calYear) {
+        return streamsTaxable(inp, calYear, detInflAt(inp, calYear),
+                detInflAt(inp, inp.annuityStream.startYear()),
+                detInflAt(inp, inp.pensionStream.startYear()),
+                detInflAt(inp, inp.militaryStream.startYear()));
+    }
+
+    /**
+     * v11: the part of the streams eligible for a STATE retirement-income
+     * exclusion. Arizona, for instance, exempts military retired pay entirely
+     * while still taxing IRA withdrawals. Only the taxable portion can be
+     * excluded -- a non-taxable return of principal was never in the base.
+     */
+    private static double streamsStateExempt(SimInputs inp, int calYear, double inflNow,
+                                             double fA, double fP, double fM) {
+        double t = 0;
+        if (inp.annuityStream.stateExempt())
+            t += taxablePart(inp.annuityStream,  inp, calYear, inflNow, fA);
+        if (inp.pensionStream.stateExempt())
+            t += taxablePart(inp.pensionStream,  inp, calYear, inflNow, fP);
+        if (inp.militaryStream.stateExempt())
+            t += taxablePart(inp.militaryStream, inp, calYear, inflNow, fM);
+        return t;
+    }
+
+    /** v11: state-exempt portion on the deterministic basis. */
+    private static double streamsStateExemptDet(SimInputs inp, int calYear) {
+        return streamsStateExempt(inp, calYear, detInflAt(inp, calYear),
+                detInflAt(inp, inp.annuityStream.startYear()),
+                detInflAt(inp, inp.pensionStream.startYear()),
+                detInflAt(inp, inp.militaryStream.startYear()));
+    }
+
+    /** v11: human-readable COLA description for one stream. */
+    private static String colaDesc(FixedStream s) {
+        if (s.colaMode() == 2)
+            return s.colaHaircut() > 0
+                    ? String.format("COLA tracks inflation less %.2f%%/yr", s.colaHaircut() * 100)
+                    : "COLA tracks inflation";
+        if (s.colaMode() == 1) return String.format("COLA %.2f%%/yr", s.colaRate() * 100);
+        return "non-COLA";
+    }
+
+    /** v11: the active streams, named, for the plain-text scenario summary. */
+    private static String streamSummary(SimInputs inp) {
+        StringBuilder sb = new StringBuilder();
+        String[] names = { "Annuity", "Pension", "Military" };
+        FixedStream[] ss = { inp.annuityStream, inp.pensionStream, inp.militaryStream };
+        for (int k = 0; k < 3; k++) {
+            if (!ss[k].active()) continue;
+            if (sb.length() > 0) sb.append(" + ");
+            sb.append(names[k]).append(' ').append(CURRENCY.format(ss[k].amount()))
+                    .append(" (").append(colaDesc(ss[k])).append(')');
+        }
+        return sb.length() == 0 ? CURRENCY.format(0) : sb.toString();
+    }
+
+    /** v11: earliest active stream start year, for the summary's "from" year. */
+    private static int streamSummaryStartYear(SimInputs inp) {
+        int best = 0;
+        for (FixedStream s : new FixedStream[]{
+                inp.annuityStream, inp.pensionStream, inp.militaryStream }) {
+            if (s.active() && (best == 0 || s.startYear() < best)) best = s.startYear();
+        }
+        return best;
     }
 
     // v6: spending multiplier for a given simulation year. Phase 1 = go-go,
@@ -7531,7 +8080,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         double grossSS = manSSSurv(inp, y, iNow, iManStart, iWomanStart)
                 + womanSSSurv(inp, y, iNow, iManStart, iWomanStart);
         double rmd     = combinedRmd(inp, trad, calYear, manAge, womanAge);
-        double ann     = annuityThisYear(inp, y);
+        // v11: TAXABLE portion of the three streams, on this method's existing
+        // deterministic inflation basis. With every stream at its v10-equivalent
+        // settings (no COLA, 100% taxable) this equals the old annuity figure.
+        double ann     = streamsTaxableDet(inp, calYear);
         // v6 FIX: match the display basis -- ordinary income is the actual
         // Traditional portion of the draw (RMD floors it), not the full
         // withdrawal and not the RMD alone. Sizing conversions off RMD only
@@ -7561,14 +8113,17 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         double grossSS = manSSSurv(inp, y, iNow, iManStart, iWomanStart)
                 + womanSSSurv(inp, y, iNow, iManStart, iWomanStart);
         double rmd     = combinedRmd(inp, trad, calYear, manAge, womanAge);
-        double ann     = annuityThisYear(inp, y);
+        double ann     = streamsTaxableDet(inp, calYear);   // v11
         double ordinaryBeforeConv = Math.max(rmd, Math.min(wdActual, Math.max(0, trad))) + ann;  // v6 FIX
         TaxEngine.StateTaxProfile stProfile = TaxEngine.stateProfile(inp.stateCode);
         TaxEngine.TaxResult tr = TaxEngine.compute(grossSS, ordinaryBeforeConv,
                 magiBeforeForConv(grossSS, ordinaryBeforeConv, inflFactor, fs),
                 manAge >= 65, womanAge >= 65, inflFactor,
                 TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, Math.max(0, y - 2)),
-                fs, stProfile, calYear, rmd);
+                // v11: retirementOrdinary stays rmd ONLY; the stream exemption
+                // travels in its own parameter (see stateTaxLiving).
+                fs, stProfile, calYear, rmd,
+                streamsStateExemptDet(inp, calYear));
         double[] ctax = TaxEngine.conversionTax(tr.taxableIncome, convGross,
                 inflFactor, fs, stProfile, calYear, rmd);
         return convGross - ctax[0];
@@ -7615,6 +8170,14 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // v6: GK inflation factor at each SS start year, captured as the loop
         // passes it (see the Pro PoS fan loop for the same pattern).
         double gkManStartInfl = 0, gkWomanStartInfl = 0;
+        // v11: this loop's inflation factor recorded for EVERY year, so an income
+        // stream's start-year factor is a LOOKUP rather than a conditional capture
+        // like the two SS variables above. Deliberate: a capture depends on an
+        // "if (calYear == startYear)" firing, which is a failure mode waiting to
+        // happen; an unconditional write has none. Mirrors inflAt() on medInfl in
+        // the Pro loop. A stream pays nothing before its start year, so by the
+        // time it is paying, that slot is already filled.
+        double[] gkInflByYear = new double[inp.horizon + 1];
 
         double manTradIRA    = inp.manTradIRA;
         double manTrad401K   = inp.manTrad401K;
@@ -7643,10 +8206,16 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             else        inflFactor *= (1 + yearInfl);
             if (calYear == inp.manSSStartYear)   gkManStartInfl   = inflFactor;
             if (calYear == inp.womanSSStartYear) gkWomanStartInfl = inflFactor;
+            if (y < gkInflByYear.length) gkInflByYear[y] = inflFactor;   // v11
 
             double manSS      = manSSSurv(inp, y, inflFactor, gkManStartInfl, gkWomanStartInfl);
             double womanSS    = womanSSSurv(inp, y, inflFactor, gkManStartInfl, gkWomanStartInfl);
-            double ann        = annuityThisYear(inp, y);
+            // v11: three streams, start factors looked up from this loop's own
+            // recorded inflation series.
+            double ann        = streamsThisYear(inp, calYear, inflFactor,
+                    inflAt(gkInflByYear, inp.baseYear, inp.annuityStream.startYear()),
+                    inflAt(gkInflByYear, inp.baseYear, inp.pensionStream.startYear()),
+                    inflAt(gkInflByYear, inp.baseYear, inp.militaryStream.startYear()));
             double guaranteed = manSS + womanSS + ann;
             double living     = drawing ? inp.livingExp   * inflFactor : 0;
             double medical    = drawing ? inp.medical     * Math.pow(1 + inp.medInflation, y) : 0;
@@ -7760,7 +8329,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 "GK withdrawal", "Actual wd", "Wd %",                       // 3 4 5
                 "Rules (raw)",                                                // 6 hidden
                 "Rule flags",                                                 // 7 visible
-                "User SS", "Spouse SS", "Annuity", "Fixed Inc",              // 8 9 10 11
+                "User SS", "Spouse SS", "Annuity/Pen/Mil", "Fixed Inc",      // 8 9 10 11 (v11)
                 "Living Exp", "Medical", "Tax (est) *",                      // 12 13 14 (v6: * legacy)
                 "Total spend", "Total income", "Surplus/gap",                // 15 16 17
                 "Infl factor",                                                // 18
@@ -7818,10 +8387,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 if (col == 11) { // Fixed Inc
                     double d = showRealDollars ? gr.inflFactor : 1.0;
                     return String.format(
-                            "<html><b>Fixed Inc = User SS + Spouse SS + Annuity</b><br>"
+                            "<html><b>Fixed Inc = User SS + Spouse SS + Annuity/Pen/Mil</b><br>"
                                     + "&nbsp;&nbsp;User SS:&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
                                     + "&nbsp;&nbsp;Spouse SS:&nbsp;%s<br>"
-                                    + "&nbsp;&nbsp;Annuity:&nbsp;&nbsp;&nbsp;%s<br>"
+                                    + "&nbsp;&nbsp;Annuity/Pen/Mil:&nbsp;&nbsp;&nbsp;%s<br>"
                                     + "&nbsp;&nbsp;= Fixed Inc:&nbsp;<b>%s</b></html>",
                             CURRENCY.format((long)(gr.manSS / d)),
                             CURRENCY.format((long)(gr.womanSS / d)),
@@ -7951,7 +8520,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                                     + "<b>CPR[v]</b> = Capital Preservation Rule: withdrawal cut 10%.<br>"
                                     + "<b>PR[^]</b> = Prosperity Rule: withdrawal raised 10%.</html>");
                     case 11 -> gkHeader.setToolTipText(
-                            "<html><b>Fixed Inc -- guaranteed income (fed by User SS + Spouse SS + Annuity)</b><br>"
+                            "<html><b>Fixed Inc -- guaranteed income (fed by User SS + Spouse SS + Annuity/Pen/Mil)</b><br>"
                                     + "= User SS + Spouse SS + Annuity for the year.<br>"
                                     + "The non-portfolio income floor. Hover a cell to see the<br>"
                                     + "three source values that add up to that year's figure.</html>");
@@ -8813,9 +9382,22 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
          */
         static double stateTaxLiving(StateTaxYear sty, double federalTaxableIncome,
                                      double taxableSS, double retirementOrdinary,
+                                     double streamStateExempt,
                                      double inflFactor) {
             double base = federalTaxableIncome;
             if (!sty.taxesSocialSecurity) base -= taxableSS;
+            // v11 FIX: a stream flagged "exempt from state income tax" is subtracted
+            // UNCONDITIONALLY, not through excludesRetirementIncome below.
+            //
+            // Routing it through that flag was wrong and silently did nothing on the
+            // built-in Arizona profile, which sets exclRetire=false because Arizona
+            // DOES tax IRA/401(k) withdrawals. The two rules are different things:
+            // excludesRetirementIncome models a state that exempts retirement-ACCOUNT
+            // withdrawals, while this models a state that exempts a specific income
+            // stream -- Arizona exempts military retired pay in full (2021 onward)
+            // while taxing IRA money. Gating one on the other made the Military
+            // card's default-checked box a no-op.
+            if (streamStateExempt > 0) base -= streamStateExempt;
             if (sty.excludesRetirementIncome) {
                 double excl = (sty.retirementExclusionCap > 0)
                         ? Math.min(retirementOrdinary, infl(sty.retirementExclusionCap, inflFactor))
@@ -9061,7 +9643,8 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                                  double inflFactor, double irmaaThreshFactor,
                                  FilingStatus fs,
                                  StateTaxProfile stateProfile, int simYear,
-                                 double retirementOrdinary) {
+                                 double retirementOrdinary,
+                                 double streamStateExempt) {
             TaxResult r = new TaxResult();
             r.taxableSS     = taxableSocialSecurity(grossSS, ordinaryOther, inflFactor, fs);
             r.ordinaryOther = ordinaryOther;
@@ -9075,7 +9658,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             // prior azBase * 2.5% computation; other profiles apply their flags.
             StateTaxYear sty = stateProfile.forYear(simYear);
             r.stateTax      = stateTaxLiving(sty, r.taxableIncome, r.taxableSS,
-                    retirementOrdinary, inflFactor);
+                    retirementOrdinary, streamStateExempt, inflFactor);
 
             // IRMAA THRESHOLDS index per the chosen mode; the surcharge AMOUNT
             // still tracks general inflation (Medicare costs rise with prices).
@@ -9169,6 +9752,42 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // ========================================================================
     //  DATA CLASSES
     // ========================================================================
+    /**
+     * v11: one guaranteed income stream -- an annuity, a pension, or military
+     * retired pay. Three independent instances live on SimInputs, because a
+     * household can hold all three at once; they are never merged or reused.
+     *
+     * IMMUTABLE BY DESIGN, and that is load-bearing. SimInputs.copy() clones by
+     * reflection for the SS Optimizer and documents that every field is "a
+     * primitive or immutable String, so shallow copy is a true independent copy."
+     * A record's components are final, so sharing the reference between a clone
+     * and its original cannot leak a mutation back into the user's live inputs.
+     * Do NOT convert this to a mutable class without also making copy() deep.
+     *
+     * amount == 0 means inactive: the stream contributes nothing anywhere. The
+     * per-card "Use ..." checkbox is what zeroes it (see readInputs).
+     */
+    record FixedStream(
+            int     amount,            // annual $ at the start year; 0 = inactive
+            int     startYear,
+            int     startMonth,        // first year prorated (13 - month)/12
+            int     endYear,           // 0 = lifetime; else last paying year
+            int     colaMode,          // 0 = none, 1 = fixed %, 2 = tracks inflation
+            double  colaRate,          // used when colaMode == 1
+            double  colaHaircut,       // used when colaMode == 2; 0 = pure CPI
+            double  survivorPct,       // 0..100, applied from the survivor year on
+            int     deathTrigger,      // 0 = none, 1 = user's death, 2 = spouse's
+            boolean stateExempt,       // joins retirementOrdinary for state exclusion
+            double  taxablePct,        // 100 = fully taxable (qualified)
+            int     fullyTaxableFrom   // 0 = never switches; else taxablePct ends here
+    ) {
+        /** An inactive stream -- the default, so nothing can NPE. */
+        static FixedStream none() {
+            return new FixedStream(0, 0, 1, 0, 0, 0.0, 0.0, 0.0, 0, false, 100.0, 0);
+        }
+        boolean active() { return amount > 0; }
+    }
+
     static class SimInputs {
         int baseYear, portfolio, horizon; double targetPoS;
         int withdrawStartYear, withdrawStartMonth;
@@ -9179,7 +9798,13 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         int manSSAmount, manSSStartYear, manSSStartMonth;
         int womanSSAmount, womanSSStartYear, womanSSStartMonth;
         double ssCola;
-        int annuity, annuityStartYear, annuityStartMonth;
+        // v11: three independent guaranteed-income streams, replacing the v10
+        // annuity triple (annuity / annuityStartYear / annuityStartMonth). An
+        // annuity stream with colaMode 0, survivorPct 0, endYear 0 and
+        // taxablePct 100 reproduces the v10 behavior exactly.
+        FixedStream annuityStream  = FixedStream.none();
+        FixedStream pensionStream  = FixedStream.none();
+        FixedStream militaryStream = FixedStream.none();
         int manTradIRA, manRothIRA, manTrad401K, manRoth401K;
         int womanRoth401K, womanRothIRA, womanTradIRA, womanTrad401K;
         // v8: prior-years Money Mkt (starting) -- an already-taxed cash reserve
@@ -9291,6 +9916,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         double wdPct;
         int  manRmd, womanRmd, combRmd, rmdOverage;
         int  manSS, womanSS, annuity, guaranteed;
+        // v11: the three streams behind the combined "Annuity/Pen/Mil" column.
+        // `annuity` above is their SUM, so Fixed Inc and every downstream total
+        // keep working unchanged.
+        int  annuityOnly, pensionOnly, militaryOnly;
         int  living, medical, tax, totalSpend, totalIncome, surplus;
         // v3 tax engine detail
         int  irmaa, conversion, magi, taxableSS, ordinaryTax, fedTax, stateTax;
