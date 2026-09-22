@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v11.java
-// Last modified: Monday, September 21, 2026 at 03:59 PM MST (UTC-7)
+// Last modified: Monday, September 21, 2026 at 10:09 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v11";
-    private static final String BUILD_STAMP = "Monday, September 21, 2026 at 03:59 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, September 21, 2026 at 10:09 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -343,7 +343,15 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private JSpinner spOptScanPaths, spOptScanFan, spOptVerifyTopN;
     private JSpinner spOptTermGrace;             // v9: terminal-year grace window
     private JComboBox<String> cmbOptGrid;        // year / half-year granularity
-    private JComboBox<String> cmbOptInfeasible;  // fallback when nothing is feasible
+    private JComboBox<String> cmbOptInfeasible;  // v11: penalty preset (was: infeasible fallback)
+    private volatile String optScoreStats = null; // v11: Why-header spread report
+    private double lastOptLambda = 3.0;          // v11: lambda behind the shown table
+    private int    lastOptPosDollars = 1000;     // v11: PoS-point rate behind it
+    private JSpinner spOptLambda;                // v11: penalty weight (B1)
+    private JSpinner spOptPosDollars;            // v11: dollars per PoS point (B1)
+    private boolean  optPresetSyncing = false;   // v11: guards preset <-> spinner feedback
+    /** v11: lambda for each cmbOptInfeasible preset; index 3 = Custom (spinner wins). */
+    private static final double[] OPT_LAMBDA_PRESET = { 0.0, 50.0, 3.0, Double.NaN };
     private int lastOptManBY, lastOptManBM, lastOptWomanBY, lastOptWomanBM;
     private int lastOptManPIA, lastOptWomanPIA;
     private boolean optResultsStale = false;  // true if inputs changed after optimizer ran
@@ -3574,29 +3582,75 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "OFF; both the optimizer and the confirming Pro tab run will use seed 0 and agree within scan-"
                 + "fidelity noise.</p>"
 
-                + "<p><b>Ranking rules &mdash; and why some infeasible orderings look surprising.</b> Feasible "
-                + "combinations always sort ahead of infeasible ones (Feasibility-min cell color tells you which). "
-                + "Among <b>feasible</b>, ranking is by survivor floor descending, tiebreaker raw min surplus.</p>"
-                + "<p>Among <b>infeasible</b>, the <i>If infeasible</i> dropdown decides:</p>"
+                + "<p><b>Ranking (v11).</b> <b>A combination that passes every floor always ranks above one "
+                + "that does not.</b> Feasibility is a gate, not a preference: a plan that funds your "
+                + "green buffer, both travel floors and your PoS target is categorically different "
+                + "from one that does not, and no amount of survivor income overrides that. The table "
+                + "is therefore built in <b>three blocks, ordered by how certain the scan is</b>:</p>"
+                + "<ol>"
+                + "<li><b>PASS</b> &mdash; confidently funds every floor.</li>"
+                + "<li><b>BORDERLINE</b> &mdash; inside the scan's own measured noise, so it cannot be "
+                + "called either way. A row that <i>might</i> pass belongs above every row that "
+                + "definitely does not, and below every row that definitely does.</li>"
+                + "<li><b>FAIL</b> &mdash; confidently misses at least one floor.</li>"
+                + "</ol>"
                 + "<ul>"
-                + "<li><b>Show trade-off frontier</b> (default) &mdash; sorted by <b>survivor floor</b>. A badly-"
-                + "infeasible combination with a high survivor floor can rank <i>above</i> a barely-infeasible one "
-                + "with a lower survivor floor. Answers: <i>if I must accept infeasibility, what maximizes the "
-                + "survivor floor?</i></li>"
-                + "<li><b>Show closest (min shortfall)</b> &mdash; sorted by the <b>smallest worst-floor miss first</b>. "
-                + "Barely-infeasible strategies rank at the top. Answers: <i>which strategies come closest to "
-                + "passing?</i></li>"
-                + "<li><b>Relax travel floor</b> &mdash; sorts like frontier; useful when you want to see what "
-                + "headroom the best combinations actually deliver.</li>"
+                + "<li><b>Within PASS</b> &mdash; ordered by survivor floor, highest first. "
+                + "The penalty setting has no effect here.</li>"
+                + "<li><b>Within BORDERLINE</b> &mdash; also by survivor floor. The penalty score is "
+                + "meaningless for these rows: their miss, if there is one, is smaller than the scan "
+                + "can measure, so there is no trustworthy shortfall to penalise.</li>"
+                + "<li><b>Within FAIL</b> &mdash; ordered by "
+                + "<i>survivor floor &minus; penalty &times; worst miss</i>. This replaced the old "
+                + "frontier / closest / relax dropdown with one continuous knob.</li>"
+                + "<li><b>Ties</b> &mdash; broken on combined annual benefit, then the claim dates. "
+                + "Deterministic, so an identical scan always gives an identical table. The pre-v11 "
+                + "tie-break was minimum surplus, a Monte Carlo figure, and survivor-floor ties are "
+                + "common because max(his, hers) ignores the lower earner whenever the higher one "
+                + "dominates.</li>"
                 + "</ul>"
-                + "<p><b>Example of the frontier surprise.</b> Under frontier mode you can see a rank 5 row with "
-                + "Feasibility min -$4,826 sitting above a rank 53 row with Feasibility min +$6,051 -- the rank 5 "
-                + "misses several floors while rank 53 misses one small floor. The reason is not a bug: rank 5 has "
-                + "survivor floor $57,987 (spouse delayed to 12/2032) while rank 53 has survivor floor $45,203 "
-                + "(spouse claiming 08/2026). Frontier mode is optimizing survivor floor among infeasible, not "
-                + "closeness to feasibility. Switch the dropdown to <b>Show closest</b> to get the ranking that "
-                + "puts nearly-passing strategies at the top.</p>"
-
+                + "<p>The <i>worst miss</i> is the largest of the four shortfalls &mdash; the binding "
+                + "constraint the <i>Why</i> column names. Three are dollars of surplus; a PoS miss is "
+                + "percentage points, converted at the <i>PoS pt = $</i> rate so all four share a "
+                + "scale. Set that rate to 0 to leave PoS out of the ordering entirely.</p>"
+                + "<p><b>Why ranks used to jump, and what actually fixed it.</b> The gate is the same "
+                + "one v9 and v10 used, and ranks still moved dozens of places between identical runs. "
+                + "The gate was never the defect &mdash; <b>deciding it on a few hundred Monte Carlo "
+                + "paths was</b>. Rows sitting within their own measurement error flipped sides at "
+                + "random, and each flip moved a row past the entire passing block. An early v11 build "
+                + "removed the gate in favour of a pure penalty score; that was stable but wrong, "
+                + "because it let failing plans outrank passing ones. The shipping fix attacks the "
+                + "measurement instead:</p>"
+                + "<ul>"
+                + "<li><b>The scan measures its own noise.</b> A handful of spread-out combinations "
+                + "are re-scored at a second seed and the mean change in <i>distance to the pass/fail "
+                + "line</i> becomes the yardstick.</li>"
+                + "<li><b>Every row within 3x that noise of the line is re-scored at full fidelity</b>, "
+                + "iterating until stable &mdash; not just the top N. Those are exactly the rows that "
+                + "flip, so they are the ones worth the time.</li>"
+                + "<li><b>Rows still within 1x the noise become their own BORDERLINE block</b>, shaded "
+                + "amber, sitting between the confident passes and the confident fails. The scan "
+                + "cannot tell whether they pass. A row at +$30 against a $100 buffer is not honestly "
+                + "a pass, and the table now says so instead of showing a confident verdict it cannot "
+                + "support &mdash; nor does it scatter such rows through both blocks the way an "
+                + "amber label on a pass/fail verdict did.</li>"
+                + "</ul>"
+                + "<p><b>Penalty presets.</b> <b>Frontier</b> (0) orders failures by survivor floor "
+                + "alone. <b>Balanced</b> (3, default) costs $3 of apparent survivor floor per $1 "
+                + "missed. <b>Closest</b> (50) makes nearness to passing dominate the failures. "
+                + "<b>Custom</b> takes whatever you type. None of them can lift a failing row above a "
+                + "passing one.</p>"
+                + "<p><b>Scan granularity.</b> Year, half-year, quarterly or monthly steps from today "
+                + "to each person's age 70, with the exact age-70 date always included. Combinations "
+                + "are the PRODUCT of the two date lists, so the count rises steeply &mdash; a monthly "
+                + "grid is roughly 144 times a yearly one and takes minutes rather than seconds. Note "
+                + "that at fine grids adjacent dates differ by far less than the scan's noise floor, "
+                + "so read the spread verdict before trusting a monthly ranking.</p>"
+                + "<p><b>Spread report.</b> Hover the <i>Why</i> column header after a scan: the pass "
+                + "and fail counts, the score range, p10 / median / p90, the measured noise floor, how "
+                + "many rows are borderline, and a verdict comparing the spread to the noise. A list "
+                + "whose whole spread is smaller than its own measurement error is not a meaningful "
+                + "ranking however confident the rank numbers look, and the tooltip says so.</p>"
                 + "<p><b>Feasibility-min column and its tooltip.</b> The color-coded <i>Feasibility min</i> column "
                 + "shows the worst counted year (after terminal-grace exemption), green when feasible, red when "
                 + "not. Hover any cell for a per-row tooltip that opens with the verdict, then lists the failing "
@@ -3616,11 +3670,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "to open the full explanation: the verdict, an <i>all four tests</i> table showing value, floor, "
                 + "margin and result for the green buffer, both travel floors and PoS with the binding one "
                 + "highlighted, a <i>why it ranks here</i> section, every failing year, and any terminal-grace "
-                + "forgiveness. The <i>why it ranks here</i> section is the one that resolves the most common "
-                + "surprise: when no combination is feasible, frontier mode ranks by <i>survivor floor</i> first, "
-                + "so the row that came <b>closest to passing</b> can sit at the bottom of the table. The dialog "
-                + "says so explicitly when that happens and points at the <i>Show closest (min shortfall)</i> "
-                + "fallback, which ranks by nearness instead.</p>"
+                + "forgiveness. The <i>why it ranks here</i> section shows the score arithmetic term by term "
+                + "&mdash; survivor floor, worst miss, penalty, resulting score &mdash; so a row's position is "
+                + "always traceable to numbers you can see. When a row has the smallest miss in the table yet "
+                + "still ranks low, the dialog says so and points at the <i>Penalty</i> control, since weighting "
+                + "nearness more heavily is exactly the lever for that preference.</p>"
 
                 + "<p><b>Clicks on the results table (v11).</b> Left-click <i>Rank</i>, <i>User SS Start</i> or "
                 + "<i>Spouse SS Start</i> to apply those dates and re-run. Left-click the <i>Why</i> cell, or "
@@ -3705,6 +3759,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // column insert broke the build because several places carried RAW integer
     // column labels; inserting "Why" at index 5 here shifts six columns, so every
     // reference goes through these constants instead of a literal.
+    /** v11: months per step for each entry of cmbOptGrid (year/half/quarter/month). */
+    private static final int[] OPT_GRID_STEP = { 12, 6, 3, 1 };
+
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
     private static final int OCOL_SPOUSE    = 2;
@@ -3730,16 +3787,15 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 BorderFactory.createLineBorder(new Color(150, 190, 240), 1),
                 BorderFactory.createEmptyBorder(6, 10, 6, 10)));
 
-        // v9 Option 2: ranking is now FIXED -- feasibility first (green + travel
-        // floors + PoS), then survivor floor among the feasible set. The old
-        // "rank by" dropdown is retired; cmbOptSort is kept as a hidden field to
-        // avoid touching the several places that still reference it, but it is not
-        // added to the panel.
-        cmbOptSort = new JComboBox<>(new String[]{ "Feasibility then survivor floor" });
+        // v11 (B1): ranking is a single continuous score -- survivor floor minus a
+        // penalty on the worst floor miss. Feasibility no longer orders anything.
+        // cmbOptSort stays a hidden field so the few places that reference it still
+        // compile; it is not added to the panel.
+        cmbOptSort = new JComboBox<>(new String[]{ "Score: survivor floor - penalty x worst miss" });
 
         lblOptObjective = new JLabel(
-                "  Objective: keep every year green + fund go-go/slow-go travel + hold PoS,"
-                        + " then maximize JoAnn's survivor floor.");
+                "  Objective: maximize the survivor's income floor, penalised by how far the"
+                        + " worst green / travel / PoS floor is missed.");
         lblOptObjective.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblOptObjective.setForeground(new Color(150, 60, 0));
 
@@ -3752,8 +3808,8 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "When unchecked, click Run Simulation on the Pro PoS / GK tabs as usual.</html>");
 
         JLabel modeNote = new JLabel(
-                "  Each combination is scored by the real Pro engine (reduced-fidelity"
-                        + " scan, then full re-verify of the top few).");
+                "  Each combination is scored by the real Pro engine (reduced-fidelity scan,"
+                        + " then full re-verify of the top few, repeated until the top is stable).");
         modeNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
         modeNote.setForeground(new Color(80, 80, 80));
 
@@ -3846,11 +3902,21 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "feasible). Set it to 0 to require every single year to stay green<br>"
                 + "with no exceptions. SS Optimizer only.</html>");
 
-        cmbOptGrid = new JComboBox<>(new String[]{ "Year grid", "Half-year grid" });
+        // v11: four granularities. The step in months is OPT_GRID_STEP[index].
+        cmbOptGrid = new JComboBox<>(new String[]{
+                "Year grid", "Half-year grid", "Quarterly grid", "Monthly grid" });
         cmbOptGrid.setToolTipText("<html><b>Scan granularity</b><br>"
-                + "Claim dates are scanned at this resolution in the coarse pass.<br>"
-                + "Year grid is fastest; half-year doubles the combinations. The<br>"
-                + "top results are then re-verified at full fidelity.</html>");
+                + "Claim dates are scanned at this resolution. Combinations grow as the<br>"
+                + "PRODUCT of the two people's candidate dates, so the count rises fast:<br>"
+                + "<table cellpadding=2>"
+                + "<tr><td><b>Year</b></td><td>12-month steps</td><td>fastest</td></tr>"
+                + "<tr><td><b>Half-year</b></td><td>6-month steps</td><td>~4x the combinations</td></tr>"
+                + "<tr><td><b>Quarterly</b></td><td>3-month steps</td><td>~16x</td></tr>"
+                + "<tr><td><b>Monthly</b></td><td>1-month steps</td><td>~144x &mdash; minutes, not seconds</td></tr>"
+                + "</table>"
+                + "Each person's exact age-70 date is always included whatever the step.<br>"
+                + "The status line shows the real count before the scan starts, and Cancel<br>"
+                + "stops it at any time.</html>");
 
         spOptScanPaths = spinI(200, 50, 1000, 50, "#,###");
         spOptScanPaths.setToolTipText("<html><b>Scan solve paths (reduced fidelity)</b><br>"
@@ -3867,15 +3933,68 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "re-run at your full Pro-tab fidelity so their PoS, surplus and<br>"
                 + "survivor-floor numbers are exact.</html>");
 
+        // v11 (B1): the three old fallback modes become PENALTY PRESETS. Index order
+        // is preserved so pre-v11 scenarios keep loading, but they now set lambda
+        // rather than selecting a separate sort. Index 3 (Custom) is new.
         cmbOptInfeasible = new JComboBox<>(new String[]{
-                "Show trade-off frontier", "Show closest (min shortfall)", "Relax travel floor" });
-        cmbOptInfeasible.setToolTipText("<html><b>When no combination meets all floors</b><br>"
-                + "<b>Show trade-off frontier</b> -- rank by survivor floor anyway and show<br>"
-                + "each option's travel headroom, so you can see the trade you must<br>"
-                + "make (e.g. claim JoAnn a year earlier to regain go-go headroom).<br>"
-                + "<b>Show closest</b> -- rank by the smallest worst-floor miss.<br>"
-                + "<b>Relax travel floor</b> -- drop the go-go/slow-go floors to whatever<br>"
-                + "the best feasible combination can support, and report that level.</html>");
+                "Frontier (penalty 0)", "Closest (penalty 50)",
+                "Balanced (penalty 3)", "Custom (use Penalty)" });
+        cmbOptInfeasible.setSelectedIndex(2);   // Balanced
+        cmbOptInfeasible.setToolTipText("<html><b>Ranking preset</b><br>"
+                + "Sets the <b>Penalty</b> weight to the right of this control.<br><br>"
+                + "<b>This only orders the FAILING rows.</b> A row that passes every floor always<br>"
+                + "ranks above every row that does not, whatever the penalty; passing rows are<br>"
+                + "ordered by survivor floor alone. The penalty decides how the failures are<br>"
+                + "sorted among themselves:<br>"
+                + "<table cellpadding=2>"
+                + "<tr><td><b>Frontier</b></td><td>penalty 0</td>"
+                + "<td>failures ordered by survivor floor alone</td></tr>"
+                + "<tr><td><b>Balanced</b></td><td>penalty 3</td>"
+                + "<td>a $1 miss costs $3 of apparent survivor floor</td></tr>"
+                + "<tr><td><b>Closest</b></td><td>penalty 50</td>"
+                + "<td>nearness to passing dominates</td></tr>"
+                + "<tr><td><b>Custom</b></td><td>&mdash;</td><td>type your own weight</td></tr>"
+                + "</table></html>");
+        cmbOptInfeasible.addActionListener(e -> {
+            if (optPresetSyncing) return;
+            int k = cmbOptInfeasible.getSelectedIndex();
+            if (k >= 0 && k < OPT_LAMBDA_PRESET.length && !Double.isNaN(OPT_LAMBDA_PRESET[k])) {
+                optPresetSyncing = true;
+                spOptLambda.setValue(OPT_LAMBDA_PRESET[k]);
+                optPresetSyncing = false;
+            }
+        });
+
+        spOptLambda = spinD(3.0, 0.0, 200.0, 0.5, "0.0");
+        spOptLambda.setToolTipText("<html><b>Penalty weight (lambda)</b><br>"
+                + "Dollars of apparent survivor floor given up per dollar the worst floor is<br>"
+                + "missed by. The rank score is:<br><br>"
+                + "&nbsp;&nbsp;<b>score = survivor floor &minus; penalty x worst miss</b><br><br>"
+                + "This replaced the old feasible-then-survivor-floor sort, where crossing the<br>"
+                + "feasibility line jumped a row past EVERY feasible row at once. A row that<br>"
+                + "misses a floor by $50 now drops a little; one that misses by $20,000 drops a<br>"
+                + "lot. Rank moves in proportion to the miss.<br><br>"
+                + "<b>0</b> = ignore misses entirely. <b>Large</b> = rank purely by nearness to<br>"
+                + "passing. Editing this switches the preset to Custom.</html>");
+        spOptLambda.addChangeListener(e -> {
+            if (optPresetSyncing) return;
+            double v = dv(spOptLambda);
+            int match = -1;
+            for (int k = 0; k < OPT_LAMBDA_PRESET.length; k++)
+                if (!Double.isNaN(OPT_LAMBDA_PRESET[k]) && Math.abs(OPT_LAMBDA_PRESET[k] - v) < 1e-9) match = k;
+            optPresetSyncing = true;
+            cmbOptInfeasible.setSelectedIndex(match >= 0 ? match : 3);
+            optPresetSyncing = false;
+        });
+
+        spOptPosDollars = spinI(1000, 0, 50_000, 100, "#,###");
+        spOptPosDollars.setToolTipText("<html><b>PoS point = $ (commensurability)</b><br>"
+                + "Three of the four floors are measured in dollars of surplus; the PoS target is<br>"
+                + "measured in percentage points. To put a PoS miss on the same scale as a dollar<br>"
+                + "miss, one percentage point of PoS shortfall is treated as this many dollars.<br><br>"
+                + "<b>Default $1,000.</b> It is a judgment knob, not a derived figure:<br>"
+                + "set <b>0</b> to make a PoS miss cost nothing in the ranking; raise it to make<br>"
+                + "PoS dominate. A PoS miss is still reported in the Why column either way.</html>");
 
         JPanel objRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
         objRow.setBackground(new Color(245, 245, 242));
@@ -3887,7 +4006,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         objRow.add(new JLabel("Scan paths:"));       objRow.add(spOptScanPaths);
         objRow.add(new JLabel("fan:"));              objRow.add(spOptScanFan);
         objRow.add(new JLabel("Verify top:"));       objRow.add(spOptVerifyTopN);
-        objRow.add(new JLabel("   If infeasible:")); objRow.add(cmbOptInfeasible);
+        objRow.add(new JLabel("   Preset:"));       objRow.add(cmbOptInfeasible);
+        objRow.add(new JLabel("Penalty:"));         objRow.add(spOptLambda);
+        objRow.add(new JLabel("PoS pt = $:"));      objRow.add(spOptPosDollars);
 
         // == Results table ==================================================
         // v9 Option 2: columns show the real Pro-engine metrics for each claim
@@ -3918,7 +4039,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                                     + "<b>Click any cell in this column for the full"
                                     + " explanation of that row's rank.</b><br>"
                                     + "Feasible rows read PASS; the margin is shown"
-                                    + " in the dialog.</html>";
+                                    + " in the dialog."
+                                    + (optScoreStats != null ? optScoreStats : "")
+                                    + "</html>";
                         }
                         return super.getToolTipText(e);
                     }
@@ -3949,7 +4072,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
         // v11: 130 for "Why" inserted at OCOL_WHY -- wide enough for
         // "slow-go -$10,778" without truncation.
-        int[] optWidths = {40, 110, 110, 60, 100, 130, 100, 110, 110, 110, 110, 70};
+        int[] optWidths = {40, 110, 110, 60, 100, 150, 100, 110, 110, 110, 110, 70};
         for (int i = 0; i < optWidths.length && i < tblOpt.getColumnCount(); i++)
             tblOpt.getColumnModel().getColumn(i).setPreferredWidth(optWidths[i]);
 
@@ -3965,6 +4088,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             final Color INFEAS = new Color(250, 232, 232);   // faint red row tint for not-feasible
             final Color FEAS_GREEN = new Color(198, 239, 206); // pass cell (col 4)
             final Color FEAS_RED   = new Color(255, 199, 199); // fail cell (col 4)
+            final Color FEAS_AMBER = new Color(255, 232, 178); // v11: undecidable at this fidelity
             @Override public java.awt.Component getTableCellRendererComponent(
                     JTable t, Object v, boolean sel, boolean foc, int row, int col) {
                 java.awt.Component c = super.getTableCellRendererComponent(t,v,sel,foc,row,col);
@@ -3974,8 +4098,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     int rank = ro instanceof Integer ? (Integer)ro : 9999;
                     if (col == OCOL_FEASMIN || col == OCOL_WHY) {
                         // Feasibility-min and Why cells: green if the plan passes,
-                        // red if it fails.
-                        c.setBackground(feas ? FEAS_GREEN : FEAS_RED);
+                        // red if it fails, AMBER when the row is inside the scan's
+                        // measured noise floor and the verdict is not trustworthy.
+                        boolean bl = row < optRowResults.size() && optRowResults.get(row).borderline;
+                        c.setBackground(bl ? FEAS_AMBER : (feas ? FEAS_GREEN : FEAS_RED));
                     } else if (rank == 1) c.setBackground(GOLD);
                     else if (rank == 2) c.setBackground(SILVER);
                     else if (rank == 3) c.setBackground(BRONZE);
@@ -4364,14 +4490,19 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         final int greenBuf    = iv(spOptGreenBuffer);
         final int termGrace   = iv(spOptTermGrace);   // v9: terminal-year grace window
         final int posTarget   = iv(spTargetPoS);
-        final int gridStepMo  = (cmbOptGrid != null && cmbOptGrid.getSelectedIndex() == 1) ? 6 : 12;
+        final int gridStepMo  = OPT_GRID_STEP[(cmbOptGrid != null)
+                ? Math.max(0, Math.min(cmbOptGrid.getSelectedIndex(), OPT_GRID_STEP.length - 1))
+                : 0];
         final int scanPaths   = iv(spOptScanPaths);
         final int scanFan     = iv(spOptScanFan);
         final int verifyTopN  = iv(spOptVerifyTopN);
         final int fullPaths   = iv(spMcSolvePaths);
         final int fullFan     = iv(spMcFanPaths);
         final int binIters    = iv(spBinaryIters);
-        final int infeasMode  = (cmbOptInfeasible != null) ? cmbOptInfeasible.getSelectedIndex() : 0;
+        final int infeasMode  = (cmbOptInfeasible != null) ? cmbOptInfeasible.getSelectedIndex() : 2;
+        // v11 (B1): the continuous-score parameters.
+        final double lambda     = (spOptLambda != null)     ? dv(spOptLambda)     : 3.0;
+        final int    posDollars = (spOptPosDollars != null) ? iv(spOptPosDollars) : 1000;
         // v9: ONE seed for the whole scan so every combination faces the identical
         // random future and the ranking is fair. Honor the "Re-randomize each run"
         // checkbox exactly as the Pro tab does (line ~5115): a fresh System.nanoTime()
@@ -4425,25 +4556,79 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     if (optCancelRequested) break;
                 }
 
-                // Rank the coarse results by the objective, honoring feasibility.
-                rankOptResults(results, infeasMode);
+                rankOptResults(results, lambda, posDollars, 0);
 
-                // Stage 2: re-verify the top N at full fidelity.
-                if (!optCancelRequested) {
-                    int n = Math.min(verifyTopN, results.size());
-                    for (int i = 0; i < n; i++) {
-                        if (optCancelRequested) break;
-                        publish(String.format("Stage 2: re-verifying %d / %d at full fidelity...", i+1, n));
-                        SsOptResult r = results.get(i);
-                        SsOptResult v = scoreCombinationPro(
-                                baseInp, r.bobYear, r.bobMonth, r.joYear, r.joMonth, single,
-                                goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
-                                fullPaths, fullFan, binIters, optSeed, optReal, /*verified=*/true);
-                        results.set(i, v);
-                    }
-                    // Re-rank after verification (full-fidelity numbers may reorder the top).
-                    rankOptResults(results, infeasMode);
+                // v11: MEASURE the scan's own noise BEFORE deciding anything with it.
+                //
+                // The pass/fail gate is a hard one -- a failing plan never outranks a
+                // passing one -- and that is only trustworthy if the gate is decided
+                // on a reliable number. It is not, at scan fidelity: a few hundred
+                // Monte Carlo paths put rows near a floor inside their own error
+                // bars, and those rows flipped sides between identical runs, which is
+                // what produced the dozens-of-places rank jumps. So the noise is
+                // measured, by re-scoring a handful of spread-out combinations at a
+                // second seed and taking the mean absolute change in DISTANCE TO THE
+                // BOUNDARY -- the quantity the gate actually turns on.
+                double noiseFloor = 0;
+                if (!optCancelRequested && !results.isEmpty()) {
+                    publish("Measuring the scan's noise floor...");
+                    noiseFloor = measureNoiseFloor(results, baseInp, single,
+                            goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
+                            scanPaths, scanFan, binIters, optSeed, optReal, posDollars);
                 }
+                final double noise = noiseFloor;
+
+                // v11: verify the TOP N *and* every row sitting within 3x the noise
+                // floor of the pass/fail line, iterating until stable.
+                //
+                // Those boundary rows are precisely the ones that flip, so they are
+                // the ones worth spending full fidelity on. Re-scored there, the gate
+                // stops flickering for reasons that have nothing to do with the plan.
+                // Pre-v11 verified the top N once and then re-ranked everything,
+                // comparing a few accurate scores against dozens of noisy ones.
+                if (!optCancelRequested) {
+                    final int n = Math.min(verifyTopN, results.size());
+                    final int MAX_ROUNDS = 4;
+                    final int maxVerify  = Math.min(results.size(), Math.max(n, n * 4));
+                    final double band    = 3.0 * noise;
+                    int round = 0, verifiedCount = 0;
+                    while (round < MAX_ROUNDS && !optCancelRequested) {
+                        round++;
+                        boolean didAny = false;
+                        for (int i = 0; i < results.size() && !optCancelRequested; i++) {
+                            SsOptResult r = results.get(i);
+                            if (r.verified) continue;
+                            boolean inTop      = (i < n);
+                            boolean nearLine   = (band > 0) && (Math.abs(r.boundaryDist) <= band);
+                            if (!inTop && !nearLine) continue;
+                            if (verifiedCount >= maxVerify) break;
+                            verifiedCount++;
+                            publish(String.format(
+                                    "Stage 2 (pass %d): full-fidelity re-score of rank %d%s"
+                                            + "  [%d done]", round, i + 1,
+                                    nearLine && !inTop ? " (near the pass/fail line)" : "",
+                                    verifiedCount));
+                            SsOptResult v = scoreCombinationPro(
+                                    baseInp, r.bobYear, r.bobMonth, r.joYear, r.joMonth, single,
+                                    goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
+                                    fullPaths, fullFan, binIters, optSeed, optReal, /*verified=*/true);
+                            results.set(i, v);
+                            didAny = true;
+                        }
+                        rankOptResults(results, lambda, posDollars, noise);
+                        if (!didAny) break;
+                        if (verifiedCount >= maxVerify) break;
+                    }
+                }
+
+                // v11: final rank with the measured noise, so BORDERLINE rows are
+                // tiered rather than left scattered through the confident blocks. A
+                // row at +$30 against a $100 buffer is not really a pass, and it is
+                // not really a fail either.
+                rankOptResults(results, lambda, posDollars, noise);
+
+                optScoreStats = results.isEmpty() ? null
+                        : buildScoreStats(results, noise, lambda);
 
                 final java.util.List<SsOptResult> finalResults = results;
                 final int fMode = infeasMode;
@@ -4513,7 +4698,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
         ProResults pr;
         try {
-            pr = simulatePro(inp, seed, solvePaths, fanPaths, binIters);
+            // v11 item C: the optimizer never reads res.gkResults, so skip the
+            // Guyton-Klinger overlay entirely.
+            pr = simulatePro(inp, seed, solvePaths, fanPaths, binIters, /*withGk=*/false);
         } catch (Exception ex) {
             r.feasible = false; r.shortfall = Integer.MAX_VALUE; return r;
         }
@@ -4650,6 +4837,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // against it. Infeasible rows name the floor and the miss; feasible rows read
     // simply PASS (Bob's choice: the margin is in the dialog, not the column).
     private static String whyText(SsOptResult r) {
+        // v11: a row inside the measured noise floor is not honestly a pass or a
+        // fail -- the scan cannot tell. Say so rather than showing a side with
+        // full confidence.
+        if (r.borderline)
+            return "BORDERLINE " + CURRENCY.format((long) Math.abs(r.boundaryDist));
         if (r.feasible) return "PASS";
         if ("PoS".equals(r.bindFloor))
             return String.format("PoS -%.1f pp", Math.abs(r.marginPoS));
@@ -4659,31 +4851,229 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
     private static boolean approxEq(double a, double b) { return Math.abs(a - b) < 1e-6; }
 
-    // v9 Option 2: rank optimizer results. Feasible combinations always sort ahead
-    // of infeasible ones and, among feasible, by SURVIVOR FLOOR (descending) --
-    // the objective. Among infeasible, the fallback decides: frontier still sorts
-    // by survivor floor (so you see the trade), 'closest' sorts by smallest
-    // shortfall, 'relax' behaves like frontier (the table shows achieved headroom).
-    private void rankOptResults(java.util.List<SsOptResult> results, int infeasMode) {
+    /**
+     * v11 (final): CERTAINTY ORDERS THE TABLE -- PASS, then BORDERLINE, then FAIL,
+     * with a continuous order inside each block.
+     *
+     * The history matters. v9/v10 used the same hard gate, and it produced rank
+     * jumps of dozens of places between identical runs. The first v11 attempt
+     * removed the gate in favour of a pure penalty score, which was stable but
+     * wrong in a way Bob rightly rejected: a plan that does not fund its floors is
+     * categorically different from one that does, and no amount of survivor income
+     * should paper over that.
+     *
+     * The gate was never the defect. The defect was DECIDING the gate on a few
+     * hundred Monte Carlo paths, so rows sitting inside their own measurement error
+     * flipped sides at random. A genuine pass-to-fail flip SHOULD drop a row below
+     * every passing row; a spurious one should not happen at all. So the gate is
+     * back, and the instability is attacked at its source instead -- see the
+     * boundary verification and the BORDERLINE flag in runSsOptimizer.
+     *
+     *   Between blocks : PASS, then BORDERLINE, then FAIL -- see tierOf. A row the
+     *                    scan cannot call sits between the two confident blocks
+     *                    rather than being scattered through them.
+     *   Within PASS    : survivor floor, descending -- the original objective.
+     *   Within BORDER  : survivor floor, descending, for the same reason. The
+     *                    penalty score is meaningless here: these rows have no
+     *                    trustworthy shortfall to penalise.
+     *   Within FAIL    : the penalty score, which orders failures sensibly and
+     *                    replaces the old frontier / closest / relax modes.
+     *   Ties           : combined annual benefit, then the claim dates, so an
+     *                    identical scan always yields an identical table. The
+     *                    pre-v11 tie-break was minSurplus, a Monte Carlo figure,
+     *                    and survivor floor ties are common because max(his, hers)
+     *                    ignores the lower earner whenever the higher one dominates.
+     */
+    private static void rankOptResults(java.util.List<SsOptResult> results,
+                                       double lambda, int posDollars, double noise) {
+        for (SsOptResult r : results) {
+            r.shortfallDollars = shortfallDollars(r, posDollars);
+            r.boundaryDist     = boundaryDist(r, posDollars);
+            r.score            = r.survivorFloor - lambda * r.shortfallDollars;
+            // Computed HERE, before the sort, because the tier depends on it.
+            r.borderline       = (noise > 0) && (Math.abs(r.boundaryDist) <= noise);
+        }
         results.sort((a, b) -> {
-            if (a.feasible != b.feasible) return a.feasible ? -1 : 1;   // feasible first
-            if (a.feasible) {
-                int c = Double.compare(b.survivorFloor, a.survivorFloor);
-                if (c == 0) c = Integer.compare(b.minSurplus, a.minSurplus);
-                return c;
-            }
-            // both infeasible
-            if (infeasMode == 1) {   // Show closest: least shortfall first
-                int c = Integer.compare(a.shortfall, b.shortfall);
-                if (c == 0) c = Double.compare(b.survivorFloor, a.survivorFloor);
-                return c;
-            }
-            // frontier / relax: survivor floor, then least shortfall
-            int c = Double.compare(b.survivorFloor, a.survivorFloor);
-            if (c == 0) c = Integer.compare(a.shortfall, b.shortfall);
-            return c;
+            int ta = tierOf(a), tb = tierOf(b);
+            if (ta != tb) return Integer.compare(ta, tb);   // the hard gate, in three tiers
+            int c = (ta == 2)
+                    ? Double.compare(b.score, a.score)                  // within FAIL
+                    : Double.compare(b.survivorFloor, a.survivorFloor); // within PASS / BORDERLINE
+            if (c != 0) return c;
+            c = Double.compare(b.combinedAnnual, a.combinedAnnual);
+            if (c != 0) return c;
+            c = Integer.compare(a.bobYear * 12 + a.bobMonth, b.bobYear * 12 + b.bobMonth);
+            if (c != 0) return c;
+            return Integer.compare(a.joYear * 12 + a.joMonth, b.joYear * 12 + b.joMonth);
         });
     }
+
+    /**
+     * v11: the worst floor miss expressed in dollars.
+     *
+     * Mirrors the `shortfall` max in scoreCombinationPro -- the binding constraint
+     * the Why column names -- except that the PoS miss, measured in percentage
+     * points, is converted at the user's PoS-point rate so all four tests share a
+     * scale. A rate of 0 makes a PoS miss cost nothing in the ranking; it is still
+     * reported in the Why column and the dialog.
+     */
+    private static int shortfallDollars(SsOptResult r, int posDollars) {
+        int worst = 0;
+        if (r.marginGreen  != Integer.MAX_VALUE && r.marginGreen  < 0) worst = Math.max(worst, -r.marginGreen);
+        if (r.marginGoGo   != Integer.MAX_VALUE && r.marginGoGo   < 0) worst = Math.max(worst, -r.marginGoGo);
+        if (r.marginSlowGo != Integer.MAX_VALUE && r.marginSlowGo < 0) worst = Math.max(worst, -r.marginSlowGo);
+        if (r.marginPoS < 0) worst = Math.max(worst, (int) Math.round(-r.marginPoS * (double) posDollars));
+        return worst;
+    }
+
+    /**
+     * v11: which of the three certainty tiers a row belongs to.
+     *
+     * Two tiers were not enough. BORDERLINE began life as a label layered on top of
+     * a pass/fail verdict, which left amber rows scattered: one leaning pass sat
+     * among the confident passes, one leaning fail sat among the confident fails.
+     * Both are wrong for the same reason -- if the scan cannot tell, the row does
+     * not belong in either confident block.
+     *
+     *   0  PASS       -- confidently funds every floor
+     *   1  BORDERLINE -- inside the measured noise; the scan cannot tell
+     *   2  FAIL       -- confidently does not
+     *
+     * Certainty about funding the floors is what orders the table, so a row that
+     * MIGHT pass ranks above one that definitely does not, and below one that
+     * definitely does.
+     */
+    private static int tierOf(SsOptResult r) {
+        if (r.borderline) return 1;
+        return r.feasible ? 0 : 2;
+    }
+
+    /**
+     * v11: SIGNED distance to the pass/fail line, in dollars.
+     *
+     * Failing rows return the negated worst miss. Passing rows return the TIGHTEST
+     * remaining headroom -- how few dollars would have to move for this row to fail.
+     * That is the quantity whose measurement error decides whether the gate is
+     * trustworthy for a given row, so it, not the score, is what the noise probe
+     * measures and what the BORDERLINE test compares against.
+     */
+    private static int boundaryDist(SsOptResult r, int posDollars) {
+        if (!r.feasible) return -shortfallDollars(r, posDollars);
+        int tightest = Integer.MAX_VALUE;
+        if (r.marginGreen  != Integer.MAX_VALUE) tightest = Math.min(tightest, r.marginGreen);
+        if (r.marginGoGo   != Integer.MAX_VALUE) tightest = Math.min(tightest, r.marginGoGo);
+        if (r.marginSlowGo != Integer.MAX_VALUE) tightest = Math.min(tightest, r.marginSlowGo);
+        if (posDollars > 0)
+            tightest = Math.min(tightest, (int) Math.round(r.marginPoS * (double) posDollars));
+        return (tightest == Integer.MAX_VALUE) ? 0 : tightest;
+    }
+
+    /**
+     * v11: MEASURE the scan's noise floor, in dollars of distance to the pass/fail
+     * line.
+     *
+     * Up to five combinations spread across the ranked list are re-scored at a
+     * second seed and the same scan fidelity; the yardstick is the mean absolute
+     * change in boundaryDist. That is deliberately not the score: the score moves
+     * with survivor floor, which is exact arithmetic, whereas the gate turns
+     * entirely on how close a row sits to its floors. A row whose distance to the
+     * line is smaller than this figure cannot be classified reliably at this
+     * fidelity, which is what the boundary verification and the BORDERLINE flag
+     * both key off.
+     */
+    private double measureNoiseFloor(java.util.List<SsOptResult> results, SimInputs base,
+                                     boolean single, int goGoFloor, int slowGoFloor,
+                                     int greenBuf, int termGrace, int posTarget,
+                                     int scanPaths, int scanFan, int binIters,
+                                     long seed, boolean optReal, int posDollars) {
+        int n = results.size();
+        if (n == 0) return 0;
+        int probes = Math.min(5, n);
+        double sumAbs = 0; int got = 0;
+        for (int k = 0; k < probes && !optCancelRequested; k++) {
+            int idx = (probes == 1) ? 0
+                    : (int) Math.round(k * (n - 1) / (double) (probes - 1));
+            SsOptResult r = results.get(Math.max(0, Math.min(idx, n - 1)));
+            SsOptResult alt = scoreCombinationPro(base, r.bobYear, r.bobMonth, r.joYear, r.joMonth,
+                    single, goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
+                    scanPaths, scanFan, binIters, seed + 1L, optReal, /*verified=*/false);
+            sumAbs += Math.abs(boundaryDist(alt, posDollars) - boundaryDist(r, posDollars));
+            got++;
+        }
+        return (got > 0) ? sumAbs / got : 0;
+    }
+
+    /**
+     * v11: the Why-column header's spread report.
+     *
+     * Bob's requirement was to say how much the ranking quantity actually varies
+     * across the whole list, because a spread smaller than the measurement error is
+     * a meaningless ranking however confident the rank numbers look. Raw spread
+     * alone cannot answer that, so the measured noise floor is reported beside it
+     * and the verdict is the ratio.
+     */
+    private String buildScoreStats(java.util.List<SsOptResult> results,
+                                   double noise, double lambda) {
+        int n = results.size();
+        // v11: three tiers, so three counts -- "pass" here means the PASS block, not
+        // the raw feasible flag, which a borderline row may still carry either way.
+        int pass = 0, border = 0, fail = 0;
+        double[] sorted = new double[n];
+        for (int i = 0; i < n; i++) {
+            SsOptResult r = results.get(i);
+            sorted[i] = r.score;
+            switch (tierOf(r)) { case 0 -> pass++; case 1 -> border++; default -> fail++; }
+        }
+        java.util.Arrays.sort(sorted);
+        double lo = sorted[0], hi = sorted[n - 1], med = sorted[n / 2];
+        double p10 = sorted[(int) Math.floor(0.10 * (n - 1))];
+        double p90 = sorted[(int) Math.floor(0.90 * (n - 1))];
+        double spread = hi - lo;
+
+        StringBuilder sb = new StringBuilder("<hr><b>Across all ")
+                .append(n).append(" combinations</b><br><table cellpadding=2>");
+        sb.append("<tr><td>Blocks</td><td colspan=2><b>").append(pass)
+                .append("</b> pass &middot; <b>").append(border)
+                .append("</b> borderline &middot; <b>").append(fail)
+                .append("</b> fail, in that rank order</td></tr>");
+        sb.append("<tr><td>Score range</td><td>").append(CURRENCY.format((long) lo))
+                .append(" to ").append(CURRENCY.format((long) hi))
+                .append("</td><td>span <b>").append(CURRENCY.format((long) spread)).append("</b></td></tr>");
+        sb.append("<tr><td>p10 / median / p90</td><td colspan=2>")
+                .append(CURRENCY.format((long) p10)).append(" &middot; ")
+                .append(CURRENCY.format((long) med)).append(" &middot; ")
+                .append(CURRENCY.format((long) p90)).append("</td></tr>");
+        sb.append("<tr><td>Measured noise floor</td><td colspan=2>&plusmn;")
+                .append(CURRENCY.format((long) noise))
+                .append(" on the distance to the pass/fail line</td></tr>");
+        sb.append("<tr><td>Borderline block</td><td colspan=2><b>").append(border)
+                .append("</b> within that noise of the line, ranked between pass and fail</td></tr>");
+        sb.append("</table>");
+
+        if (noise <= 0.0001) {
+            sb.append("<b>Deterministic at this fidelity &mdash; nothing is borderline.</b>");
+        } else {
+            double ratio = spread / noise;
+            if (ratio >= 3.0)
+                sb.append(String.format("<b>Spread is %.1fx the noise floor &mdash; the ranking"
+                        + " is meaningful.</b>", ratio));
+            else if (ratio >= 1.5)
+                sb.append(String.format("<b>Spread is only %.1fx the noise floor &mdash; treat"
+                        + " close ranks as ties.</b>", ratio));
+            else
+                sb.append(String.format("<b>Spread is %.1fx the noise floor &mdash; THE RANKING"
+                        + " IS NOT MEANINGFUL.</b> Raise the scan paths/fan, or widen the floors"
+                        + " so the combinations differ by more than the measurement error.", ratio));
+            if (border > 0)
+                sb.append("<br>Rows marked <b>BORDERLINE</b> sit inside the noise: the scan"
+                        + " cannot tell whether they pass, even after a full-fidelity re-score."
+                        + " They rank as their own block, below every pass and above every fail.");
+        }
+        if (lambda <= 0.0001)
+            sb.append("<br><i>Penalty is 0, so the FAIL block is ordered by survivor floor alone.</i>");
+        return sb.toString();
+    }
+
 
 
     private java.util.List<int[]> buildSsRange(int birthYear, int birthMonth,
@@ -4726,6 +5116,13 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // decided this row and by how much. This is the number that sets the rank, and
     // pre-v11 it appeared nowhere in the UI.
     private static String verdictLine(SsOptResult r) {
+        if (r.borderline) {
+            return "<b>BORDERLINE</b> &mdash; this row sits <b>"
+                    + CURRENCY.format((long) Math.abs(r.boundaryDist))
+                    + "</b> from the pass/fail line, which is inside the scan's own measured"
+                    + " noise. It was re-scored at full fidelity and is still too close to"
+                    + " call. Treat it as neither a pass nor a fail.";
+        }
         if (r.feasible) {
             String near = r.bindFloor.isEmpty() ? ""
                     : " Tightest floor: " + r.bindFloor + ", "
@@ -4882,14 +5279,17 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private void showWhyDialog(SsOptResult r, int rank) {
         String unit = r.dollarsReal ? "today's $" : "future $";
         int total = optRowResults.size();
-        int feasCount = 0, minShort = Integer.MAX_VALUE, minShortRank = 0;
+        int minShort = Integer.MAX_VALUE, minShortRank = 0;
+        // v11: tier counts, not just feasible/not -- BORDERLINE is its own block now.
+        int passCount = 0, borderCount = 0, failCount = 0;
         double bestFloor = -1;
         for (int i = 0; i < total; i++) {
             SsOptResult o = optRowResults.get(i);
-            if (o.feasible) feasCount++;
-            if (!o.feasible && o.shortfall < minShort) { minShort = o.shortfall; minShortRank = i + 1; }
+            switch (tierOf(o)) { case 0 -> passCount++; case 1 -> borderCount++; default -> failCount++; }
+            if (!o.feasible && o.shortfallDollars < minShort) { minShort = o.shortfallDollars; minShortRank = i + 1; }
             if (o.survivorFloor > bestFloor) bestFloor = o.survivorFloor;
         }
+        int myTier = tierOf(r);
 
         StringBuilder sb = new StringBuilder();
         // v11: sizes in a <style> block, in PIXELS, and deliberately not points.
@@ -4951,44 +5351,79 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 .append(" (the Real/Nominal mode active when the scan was run).</p>");
 
         sb.append("<h3 style='margin-bottom:2px;'>WHY IT RANKS HERE</h3>");
-        sb.append("<p style='margin-top:0;'>Survivor floor: <b>")
-                .append(CURRENCY.format((long) r.survivorFloor)).append("</b>");
-        if (!r.feasible) sb.append(" &nbsp;&middot;&nbsp; Shortfall: <b>")
-                .append(CURRENCY.format((long) r.shortfall)).append("</b>");
-        sb.append("</p>");
-        if (feasCount > 0) {
-            if (r.feasible) {
-                sb.append("<p>").append(feasCount).append(" of ").append(total)
-                        .append(" combinations are feasible. Feasible rows rank by survivor floor,"
-                                + " highest first.</p>");
-            } else {
-                sb.append("<p>").append(feasCount).append(" of ").append(total)
-                        .append(" combinations are feasible, and <b>every one of them ranks above this"
-                                + " row</b> regardless of survivor floor or how close this row came"
-                                + " to passing.</p>");
-            }
-        } else {
-            String modeName = (lastOptInfeasMode == 1) ? "Show closest (min shortfall)"
-                    : (lastOptInfeasMode == 2) ? "Relax travel floor" : "Trade-off frontier";
-            sb.append("<p>No combination is feasible, so the fallback <b>").append(modeName)
-                    .append("</b> decides the order. ")
-                    .append(lastOptInfeasMode == 1
-                            ? "That ranks by smallest shortfall first."
-                            : "That ranks by survivor floor first, with smallest shortfall only as a tiebreak.")
-                    .append("</p>");
-        }
-        // The line that explains the surprise: nearest-to-passing sitting at the bottom.
-        if (!r.feasible && minShort != Integer.MAX_VALUE && r.shortfall == minShort
-                && rank > Math.max(3, total / 4)) {
+        sb.append("<p style='margin-top:0;'><b>Certainty about funding the floors decides the"
+                + " block; the block decides the rank.</b> The table is built in three blocks,"
+                + " in this order:</p>");
+        sb.append("<table cellpadding=4 border=1 cellspacing=0>");
+        sb.append("<tr bgcolor='#eeeeee'><td><b>Block</b></td><td><b>Meaning</b></td>")
+                .append("<td><b>Ordered within the block by</b></td><td><b>Rows</b></td></tr>");
+        sb.append("<tr").append(myTier == 0 ? " bgcolor='#eef6ee'" : "")
+                .append("><td><b>1. PASS</b></td><td>Confidently funds every floor</td>")
+                .append("<td>Survivor floor, highest first</td><td>").append(passCount).append("</td></tr>");
+        sb.append("<tr").append(myTier == 1 ? " bgcolor='#fff4c2'" : "")
+                .append("><td><b>2. BORDERLINE</b></td><td>Inside the scan's measured noise &mdash;"
+                        + " too close to call</td>")
+                .append("<td>Survivor floor, highest first</td><td>").append(borderCount).append("</td></tr>");
+        sb.append("<tr").append(myTier == 2 ? " bgcolor='#f8e4e4'" : "")
+                .append("><td><b>3. FAIL</b></td><td>Confidently does not fund a floor</td>")
+                .append("<td>Penalty score, highest first</td><td>").append(failCount).append("</td></tr>");
+        sb.append("</table>");
+        sb.append("<p>A row that <i>might</i> pass therefore sits above every row that"
+                + " definitely does not, and below every row that definitely does. Inside the"
+                + " FAIL block the order comes from:<br>"
+                + "&nbsp;&nbsp;<b>score = survivor floor &minus; penalty &times; worst miss</b></p>");
+        sb.append("<table cellpadding=4 border=1 cellspacing=0>");
+        sb.append("<tr bgcolor='#eeeeee'><td><b>Term</b></td><td><b>Value</b></td></tr>");
+        sb.append("<tr><td>Survivor floor</td><td>")
+                .append(CURRENCY.format((long) r.survivorFloor)).append("</td></tr>");
+        sb.append("<tr><td>Worst miss</td><td>")
+                .append(r.shortfallDollars > 0 ? CURRENCY.format((long) r.shortfallDollars)
+                        : "none &mdash; this row passes every floor")
+                .append("</td></tr>");
+        sb.append("<tr><td>Penalty (lambda)</td><td>")
+                .append(String.format("%.1f", lastOptLambda)).append("</td></tr>");
+        sb.append("<tr bgcolor='#eef6ee'><td><b>Score</b></td><td><b>")
+                .append(CURRENCY.format((long) r.score)).append("</b></td></tr>");
+        sb.append("</table>");
+        if (lastOptPosDollars > 0 && r.marginPoS < 0)
+            sb.append("<p style='color:#555;'>The PoS miss of ")
+                    .append(String.format("%.1f", Math.abs(r.marginPoS)))
+                    .append(" pp was converted at ").append(CURRENCY.format((long) lastOptPosDollars))
+                    .append(" per point to sit on the same scale as the dollar floors.</p>");
+        sb.append("<p>Of ").append(total).append(" combinations, ").append(passCount)
+                .append(" pass, ").append(borderCount).append(" are borderline and ").append(failCount)
+                .append(" fail. ")
+                .append(myTier == 0
+                        ? "This row is in the PASS block, so it is ranked by survivor floor and the"
+                        + " penalty setting does not affect its position."
+                        : myTier == 1
+                        ? "This row is in the BORDERLINE block. It is below every confident pass and"
+                        + " above every confident fail, ordered by survivor floor. The penalty"
+                        + " setting does not affect its position, because its miss (if any) is"
+                        + " smaller than the scan can measure."
+                        : "This row is in the FAIL block, so every passing and every borderline row"
+                        + " is above it regardless of its survivor floor. The penalty decides only"
+                        + " where it sits among the other failures.")
+                .append("</p>");
+        sb.append("<p style='color:#555;'>Rank stability comes from re-scoring every row near"
+                + " the pass/fail line at full fidelity, not from softening the line. Rows still"
+                + " inside the scan's measured noise afterwards go into the BORDERLINE block"
+                + " rather than being assigned a side.</p>");
+        if (lastOptLambda <= 0.0001) {
+            sb.append("<p style='background:#fff4c2;padding:6px;'><b>Penalty is 0</b>, so floor"
+                    + " misses cost nothing and even the FAIL block is ordered purely by"
+                    + " survivor floor. Raise <i>Penalty</i> on the SS Optimizer tab to make"
+                    + " near-misses matter.</p>");
+        } else if (myTier == 2 && minShort != Integer.MAX_VALUE
+                && r.shortfallDollars == minShort && rank > Math.max(3, total / 4)) {
             sb.append("<p style='background:#fff4c2;padding:6px;'><b>NOTE:</b> this row has the"
-                            + " smallest shortfall of all ").append(total).append(" rows &mdash; it is the"
+                            + " smallest miss of all ").append(total).append(" rows &mdash; it is the"
                             + " <b>closest to passing</b> &mdash; yet it ranks ").append(rank)
-                    .append(" because its survivor floor is low and the current fallback ranks survivor"
-                            + " floor first. Switch the fallback dropdown to <b>Show closest"
-                            + " (min shortfall)</b> to rank by nearness instead.</p>");
-        } else if (!r.feasible && minShortRank > 0 && minShortRank != rank) {
+                    .append(" because its survivor floor is low. Raise <i>Penalty</i> to weight"
+                            + " nearness more heavily, or pick the <i>Closest</i> preset.</p>");
+        } else if (myTier == 2 && minShortRank > 0 && minShortRank != rank) {
             sb.append("<p style='color:#555;'>The row closest to passing is rank ")
-                    .append(minShortRank).append(" (shortfall ")
+                    .append(minShortRank).append(" (miss ")
                     .append(CURRENCY.format((long) minShort)).append(").</p>");
         }
 
@@ -5058,13 +5493,18 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         lastOptWomanBY  = womanBY; lastOptWomanBM = womanBM;
         lastOptManPIA   = manPIA;  lastOptWomanPIA = womanPIA;
         lastOptInfeasMode = infeasMode;
+        lastOptLambda     = (spOptLambda != null)     ? dv(spOptLambda)     : 3.0;   // v11
+        lastOptPosDollars = (spOptPosDollars != null) ? iv(spOptPosDollars) : 1000;  // v11
 
         tblOptModel.setRowCount(0);
         optRowDates.clear();
         optRowResults.clear();
 
-        int feasibleCount = 0;
-        for (SsOptResult r : results) if (r.feasible) feasibleCount++;
+        // v11: counted by TIER, not by the raw feasible flag -- a borderline row is
+        // neither a pass nor a fail and is reported as its own block.
+        int passCount = 0, borderCount = 0, failCount = 0;
+        for (SsOptResult r : results)
+            switch (tierOf(r)) { case 0 -> passCount++; case 1 -> borderCount++; default -> failCount++; }
 
         int show = results.size();
         for (int rank = 0; rank < show; rank++) {
@@ -5090,20 +5530,13 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             optRowResults.add(r);
         }
 
-        String head;
-        if (feasibleCount > 0) {
-            head = String.format(
-                    "%,d of %,d combinations feasible (meet green + travel floors + PoS). "
-                            + "Ranked by survivor floor. Click the Why cell for the reason.",
-                    feasibleCount, show);
-        } else {
-            String modeName = (infeasMode == 1) ? "closest (least shortfall)"
-                    : (infeasMode == 2) ? "relaxed floors" : "trade-off frontier";
-            head = String.format(
-                    "No combination meets all floors. Showing %s. "
-                            + "Trade travel headroom against survivor floor; click the Why cell for the reason.",
-                    modeName);
-        }
+        // v11: one message, in the three tiers the table is actually built from.
+        String head = String.format(
+                "%,d combinations: %,d pass, %,d borderline, %,d fail. PASS ranks first (by "
+                        + "survivor floor), then BORDERLINE (by survivor floor), then FAIL (by "
+                        + "penalty %.1f). "
+                        + "Click the Why cell for the reason; hover the Why header for the spread.",
+                show, passCount, borderCount, failCount, lastOptLambda);
         lblOptStatus.setText(head);
     }
 
@@ -5170,6 +5603,17 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // dollar floor and bindMargin is positive. Empty only when nothing applies.
         String bindFloor  = "";     // "green" | "go-go" | "slow-go" | "PoS" | ""
         int    bindMargin = 0;      // signed dollars (0 when PoS binds -- see marginPoS)
+        // v11 (B1): the continuous ranking score and the dollar figure it penalises.
+        // shortfallDollars is `shortfall` with the PoS miss converted to dollars at
+        // the user's PoS-point rate, so all four tests are on one scale.
+        int    shortfallDollars = 0;
+        double score = 0;
+        // v11: signed distance to the pass/fail line, in dollars. Positive = the
+        // headroom before the tightest floor would fail; negative = the worst miss.
+        int    boundaryDist = 0;
+        // v11: true when |boundaryDist| is inside the scan's MEASURED noise floor,
+        // i.e. the tool genuinely cannot tell whether this row passes.
+        boolean borderline = false;
     }
 
     // v9: one floor miss (or graced dip) recorded for the SS Optimizer tooltip.
@@ -5870,6 +6314,13 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         if (spOptGreenBuffer!= null) props.setProperty("opt.greenBuffer", String.valueOf(iv(spOptGreenBuffer)));
         if (spOptTermGrace  != null) props.setProperty("opt.termGrace",   String.valueOf(iv(spOptTermGrace)));
         if (cmbOptInfeasible!= null) props.setProperty("opt.infeasMode",  String.valueOf(cmbOptInfeasible.getSelectedIndex()));
+        // v11: the ranking parameters are planning intent, so they persist. The
+        // grid is now a real choice (year/half/quarter/month) rather than a tuning
+        // detail, so it persists too.
+        if (spOptLambda     != null) props.setProperty("opt.lambda",      String.valueOf(dv(spOptLambda)));
+        if (spOptPosDollars != null) props.setProperty("opt.posDollars",  String.valueOf(iv(spOptPosDollars)));
+        if (cmbOptGrid      != null) props.setProperty("opt.grid",        String.valueOf(cmbOptGrid.getSelectedIndex()));
+        if (spOptVerifyTopN != null) props.setProperty("opt.verifyTopN",  String.valueOf(iv(spOptVerifyTopN)));
         try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
             props.store(fos, "IncomePoS_OptSocSec_v2 scenario -- " + desc);
             addRecentFile(file.getAbsolutePath());
@@ -6137,6 +6588,15 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 if (idx >= 0 && idx < cmbOptInfeasible.getItemCount()) cmbOptInfeasible.setSelectedIndex(idx);
             } catch (NumberFormatException ignore) { }
         }
+        // v11: ranking parameters and grid. Absent in pre-v11 files, in which case
+        // the preset selected just above sets lambda through its listener and the
+        // rest keep their defaults -- so an old scenario opens with the ranking it
+        // implied. opt.lambda is applied AFTER the preset so an explicit saved
+        // value wins over the preset's default.
+        setStreamComboIfPresent(cmbOptGrid, props, "opt.grid");
+        setStreamIntIfPresent(spOptVerifyTopN,  props, "opt.verifyTopN");
+        setStreamIntIfPresent(spOptPosDollars,  props, "opt.posDollars");
+        setStreamDblIfPresent(spOptLambda,      props, "opt.lambda");
         refreshTaxEngineEnabled();  // greying may change if loaded toggles differ
         refreshStateFieldsEnabled();  // v5: apply loaded state selection greying
         refreshDeathFieldsEnabled();  // v6: apply loaded death-event greying
@@ -6672,8 +7132,29 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     //  3. Guyton-Klinger guardrails (Option C) provide a separate
     //     dynamic-spending overlay.
     // ========================================================================
+    /**
+     * v11 (item C): the 5-argument form every existing caller uses. Runs the
+     * Guyton-Klinger overlay as it always has, so the Pro tab's GK results are
+     * unaffected.
+     */
     private ProResults simulatePro(SimInputs inp, long seed,
                                    int solvePaths, int fanPaths, int binIters) {
+        return simulatePro(inp, seed, solvePaths, fanPaths, binIters, /*withGk=*/true);
+    }
+
+    /**
+     * v11 (item C): withGk=false skips the Guyton-Klinger overlay.
+     *
+     * simulateGK runs as the last statement of this method purely so the GK tab
+     * has something to display after Run Simulation. The SS Optimizer reads only
+     * actualPoS and medianRows and never touches res.gkResults, so it was paying
+     * for a full GK simulation per combination and discarding every one -- 48 of
+     * them on a year grid, thousands on a monthly one. Passing false skips that
+     * work and changes no number the optimizer uses.
+     */
+    private ProResults simulatePro(SimInputs inp, long seed,
+                                   int solvePaths, int fanPaths, int binIters,
+                                   boolean withGk) {
         ProResults res   = new ProResults();
         res.inp          = inp;
         res.medianRows   = new ArrayList<>();
@@ -7264,7 +7745,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     + (int) (inflFactor > 0 ? wdActual / inflFactor : wdActual);   // v6
             res.medianRows.add(row);
         }
-        res.gkResults = simulateGK(inp);
+        if (withGk) res.gkResults = simulateGK(inp);   // v11 item C
         return res;
     }
 
