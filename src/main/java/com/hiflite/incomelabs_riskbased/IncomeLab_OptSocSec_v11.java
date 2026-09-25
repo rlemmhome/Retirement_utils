@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v11.java
-// Last modified: Monday, September 21, 2026 at 10:09 PM MST (UTC-7)
+// Last modified: Thursday, September 24, 2026 at 05:04 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v11";
-    private static final String BUILD_STAMP = "Monday, September 21, 2026 at 10:09 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Thursday, September 24, 2026 at 05:04 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -340,18 +340,8 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // engine's spending). Grid/fidelity controls for the two-stage scan, and the
     // infeasible-set fallback selector.
     private JSpinner spOptGoGoFloor, spOptSlowGoFloor, spOptGreenBuffer;
-    private JSpinner spOptScanPaths, spOptScanFan, spOptVerifyTopN;
     private JSpinner spOptTermGrace;             // v9: terminal-year grace window
     private JComboBox<String> cmbOptGrid;        // year / half-year granularity
-    private JComboBox<String> cmbOptInfeasible;  // v11: penalty preset (was: infeasible fallback)
-    private volatile String optScoreStats = null; // v11: Why-header spread report
-    private double lastOptLambda = 3.0;          // v11: lambda behind the shown table
-    private int    lastOptPosDollars = 1000;     // v11: PoS-point rate behind it
-    private JSpinner spOptLambda;                // v11: penalty weight (B1)
-    private JSpinner spOptPosDollars;            // v11: dollars per PoS point (B1)
-    private boolean  optPresetSyncing = false;   // v11: guards preset <-> spinner feedback
-    /** v11: lambda for each cmbOptInfeasible preset; index 3 = Custom (spinner wins). */
-    private static final double[] OPT_LAMBDA_PRESET = { 0.0, 50.0, 3.0, Double.NaN };
     private int lastOptManBY, lastOptManBM, lastOptWomanBY, lastOptWomanBM;
     private int lastOptManPIA, lastOptWomanPIA;
     private boolean optResultsStale = false;  // true if inputs changed after optimizer ran
@@ -3582,75 +3572,80 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "OFF; both the optimizer and the confirming Pro tab run will use seed 0 and agree within scan-"
                 + "fidelity noise.</p>"
 
-                + "<p><b>Ranking (v11).</b> <b>A combination that passes every floor always ranks above one "
-                + "that does not.</b> Feasibility is a gate, not a preference: a plan that funds your "
-                + "green buffer, both travel floors and your PoS target is categorically different "
-                + "from one that does not, and no amount of survivor income overrides that. The table "
-                + "is therefore built in <b>three blocks, ordered by how certain the scan is</b>:</p>"
-                + "<ol>"
-                + "<li><b>PASS</b> &mdash; confidently funds every floor.</li>"
-                + "<li><b>BORDERLINE</b> &mdash; inside the scan's own measured noise, so it cannot be "
-                + "called either way. A row that <i>might</i> pass belongs above every row that "
-                + "definitely does not, and below every row that definitely does.</li>"
-                + "<li><b>FAIL</b> &mdash; confidently misses at least one floor.</li>"
-                + "</ol>"
+                + "<p><b>What the optimizer maximizes (v12).</b> Through v11 the ranking metric was the "
+                + "<b>survivor's Social Security check</b> &mdash; <i>max(his, hers) &times; 12</i>. That is "
+                + "pure arithmetic on PIA and claim age, so it rises with every month of delay and ranked "
+                + "late claims first without exception. It is the wrong objective. <b>Delaying does not "
+                + "create money.</b> It buys a larger <i>guaranteed floor</i>, and it pays for that floor by "
+                + "draining the portfolio through the bridge years. Measured across a sample of claim pairs "
+                + "in this engine, the two rank in <b>opposite directions</b>: the pair with the largest "
+                + "survivor check left the survivor the <i>least</i> to spend.</p>"
+                + "<p>The delayed-retirement credit is also smaller than it looks. It is <b>simple on PIA, "
+                + "not compounded</b>: 67 to 70 gives 124% of PIA, not 1.08&sup3; = 126%, so the year-over-year "
+                + "raise decays &mdash; 8.0%, then 7.4%, then 6.9%. Against that, delaying forgoes the payments "
+                + "you would have drawn AND the market return on the portfolio dollars spent bridging the gap. "
+                + "Net of both, a nominal 8% credit is commonly worth nearer 4%.</p>"
+                + "<p>So v12 ranks on <b>spendable income</b>:</p>"
                 + "<ul>"
-                + "<li><b>Within PASS</b> &mdash; ordered by survivor floor, highest first. "
-                + "The penalty setting has no effect here.</li>"
-                + "<li><b>Within BORDERLINE</b> &mdash; also by survivor floor. The penalty score is "
-                + "meaningless for these rows: their miss, if there is one, is smaller than the scan "
-                + "can measure, so there is no trustworthy shortfall to penalise.</li>"
-                + "<li><b>Within FAIL</b> &mdash; ordered by "
-                + "<i>survivor floor &minus; penalty &times; worst miss</i>. This replaced the old "
-                + "frontier / closest / relax dropdown with one continuous knob.</li>"
-                + "<li><b>Ties</b> &mdash; broken on combined annual benefit, then the claim dates. "
-                + "Deterministic, so an identical scan always gives an identical table. The pre-v11 "
-                + "tie-break was minimum surplus, a Monte Carlo figure, and survivor-floor ties are "
-                + "common because max(his, hers) ignores the lower earner whenever the higher one "
-                + "dominates.</li>"
+                + "<li><b>Survivor spendable</b> &mdash; the leanest year of "
+                + "<i>total income &minus; tax &minus; medical</i> across the survivor years, i.e. the money "
+                + "left to live on after the two costs that are not discretionary. Worst year, matching every "
+                + "other floor in the optimizer.</li>"
+                + "<li>The survivor phase is whatever the <b>Death event</b> and <b>Year of death</b> inputs on "
+                + "the <i>Tax Engine (v3)</i> card define &mdash; every year after the death year. With no death "
+                + "event set there are no survivor years, and the same figure over the <b>couple</b> years "
+                + "stands in, so the column never changes units.</li>"
+                + "<li><b>Survivor SS</b> is still shown, in its own column. It is exactly what delay buys, and "
+                + "seeing it beside the spending it costs is the point &mdash; anyone who wants the larger "
+                + "guaranteed floor can see what they are paying for it.</li>"
                 + "</ul>"
-                + "<p>The <i>worst miss</i> is the largest of the four shortfalls &mdash; the binding "
-                + "constraint the <i>Why</i> column names. Three are dollars of surplus; a PoS miss is "
-                + "percentage points, converted at the <i>PoS pt = $</i> rate so all four share a "
-                + "scale. Set that rate to 0 to leave PoS out of the ordering entirely.</p>"
-                + "<p><b>Why ranks used to jump, and what actually fixed it.</b> The gate is the same "
-                + "one v9 and v10 used, and ranks still moved dozens of places between identical runs. "
-                + "The gate was never the defect &mdash; <b>deciding it on a few hundred Monte Carlo "
-                + "paths was</b>. Rows sitting within their own measurement error flipped sides at "
-                + "random, and each flip moved a row past the entire passing block. An early v11 build "
-                + "removed the gate in favour of a pure penalty score; that was stable but wrong, "
-                + "because it let failing plans outrank passing ones. The shipping fix attacks the "
-                + "measurement instead:</p>"
-                + "<ul>"
-                + "<li><b>The scan measures its own noise.</b> A handful of spread-out combinations "
-                + "are re-scored at a second seed and the mean change in <i>distance to the pass/fail "
-                + "line</i> becomes the yardstick.</li>"
-                + "<li><b>Every row within 3x that noise of the line is re-scored at full fidelity</b>, "
-                + "iterating until stable &mdash; not just the top N. Those are exactly the rows that "
-                + "flip, so they are the ones worth the time.</li>"
-                + "<li><b>Rows still within 1x the noise become their own BORDERLINE block</b>, shaded "
-                + "amber, sitting between the confident passes and the confident fails. The scan "
-                + "cannot tell whether they pass. A row at +$30 against a $100 buffer is not honestly "
-                + "a pass, and the table now says so instead of showing a confident verdict it cannot "
-                + "support &mdash; nor does it scatter such rows through both blocks the way an "
-                + "amber label on a pass/fail verdict did.</li>"
-                + "</ul>"
-                + "<p><b>Penalty presets.</b> <b>Frontier</b> (0) orders failures by survivor floor "
-                + "alone. <b>Balanced</b> (3, default) costs $3 of apparent survivor floor per $1 "
-                + "missed. <b>Closest</b> (50) makes nearness to passing dominate the failures. "
-                + "<b>Custom</b> takes whatever you type. None of them can lift a failing row above a "
-                + "passing one.</p>"
+                + "<p><b>Survivor spendable</b> is still computed and shown in its own column &mdash; the "
+                + "leanest year of <i>income &minus; tax &minus; medical</i> across the survivor phase. It is "
+                + "not what ranks the table; the final-years draw is. Both are there so the trade-off reads "
+                + "without opening a dialog.</p>"
+                + "<p><b>Ranking (v13).</b> <b>A combination that passes every floor always ranks above one "
+                + "that does not.</b> Feasibility is a gate, not a preference. Within each block the order "
+                + "is <b>total portfolio withdrawals across the final 5 years</b>, highest first, with the "
+                + "ending balance, then combined annual benefit, then the claim dates as tie-breaks.</p>"
+                + "<p><b>Why that measure.</b> The SS bridge replaces a delayed benefit dollar for dollar "
+                + "(see <i>SS bridge</i> above), so Surplus/gap lands in nearly the same place whatever the "
+                + "claim dates and the entire cost of delaying surfaces as a smaller portfolio. The question "
+                + "that actually separates claim dates is therefore <i>how much can this plan still pay out "
+                + "at the far end of life</i> &mdash; not what is left unspent at the horizon, and not a "
+                + "lifetime total the bridge flattens.</p>"
+                + "<p><b>What was removed in v13, and why.</b> v9 through v12 scored each combination on a "
+                + "few hundred Monte Carlo paths so a scan would finish quickly. Everything else was a patch "
+                + "on the noise that created: a measured noise floor, a borderline tier for rows the scan "
+                + "could not call, a two-stage re-verification of the top rows at full fidelity, a penalty "
+                + "weight so a flip could not move a row dozens of places, and finally a K-seed ensemble. "
+                + "Each patch cost time. A 4,636-combination monthly grid reached nearly two hours &mdash; "
+                + "roughly five times the honest cost of simply running the engine properly.</p>"
+                + "<p>So the original decision was reversed. <b>Each combination now gets one run of the real "
+                + "Pro engine at the full Pro-tab fidelity</b>, and the verdict is read straight off the "
+                + "resulting Surplus/gap column &mdash; the same column, the same stochastic median, that the "
+                + "Pro PoS tab puts on screen. There is nothing left to compensate for, so the compensation "
+                + "is gone along with the Scan paths, fan, Verify top, MC runs and Penalty controls.</p>"
+                + "<p><b>What it costs.</b> About 9 hours for 4,636 combinations; a quarterly grid is far "
+                + "quicker. Every finished combination is appended to <tt>incomelab_ssbatch.csv</tt> the "
+                + "moment it completes, tagged with a fingerprint of the inputs and floors, so an interrupted "
+                + "batch costs one run rather than the whole night &mdash; press Run again and it resumes. "
+                + "Change any input that would alter a result and the fingerprint changes, so a stale file is "
+                + "never silently reused.</p>"
+                + "<p><b>Isolation from the Pro PoS tab.</b> The batch calls <tt>simulatePro</tt> directly. It "
+                + "never enters the Pro tab's run path, never writes its cached results or table model, and "
+                + "does not feed the \"~N simulations\" counter &mdash; otherwise that readout would jump "
+                + "around for hours while a batch ran behind it. The Pro PoS tab behaves exactly as it did "
+                + "before this change.</p>"
+                + "<p><b>Headless.</b> The same jar runs the batch with no GUI: "
+                + "<tt>java -jar IncomeLab.jar --batch scenario.properties</tt>. One codebase and one engine "
+                + "&mdash; deliberately not a second application, because a second copy of the engine would "
+                + "drift from this one, which is the failure mode the zero-diff gate exists to prevent.</p>"
                 + "<p><b>Scan granularity.</b> Year, half-year, quarterly or monthly steps from today "
                 + "to each person's age 70, with the exact age-70 date always included. Combinations "
                 + "are the PRODUCT of the two date lists, so the count rises steeply &mdash; a monthly "
-                + "grid is roughly 144 times a yearly one and takes minutes rather than seconds. Note "
-                + "that at fine grids adjacent dates differ by far less than the scan's noise floor, "
-                + "so read the spread verdict before trusting a monthly ranking.</p>"
-                + "<p><b>Spread report.</b> Hover the <i>Why</i> column header after a scan: the pass "
-                + "and fail counts, the score range, p10 / median / p90, the measured noise floor, how "
-                + "many rows are borderline, and a verdict comparing the spread to the noise. A list "
-                + "whose whole spread is smaller than its own measurement error is not a meaningful "
-                + "ranking however confident the rank numbers look, and the tooltip says so.</p>"
+                + "grid is roughly 144 times a yearly one. At full fidelity that is the difference "
+                + "between minutes and most of a day, so start on a yearly or quarterly grid and go "
+                + "finer only once you know which region of claim dates matters.</p>"
                 + "<p><b>Feasibility-min column and its tooltip.</b> The color-coded <i>Feasibility min</i> column "
                 + "shows the worst counted year (after terminal-grace exemption), green when feasible, red when "
                 + "not. Hover any cell for a per-row tooltip that opens with the verdict, then lists the failing "
@@ -3761,6 +3756,14 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // reference goes through these constants instead of a literal.
     /** v11: months per step for each entry of cmbOptGrid (year/half/quarter/month). */
     private static final int[] OPT_GRID_STEP = { 12, 6, 3, 1 };
+    /**
+     * v13: how many years at the END of the horizon the rank metric sums.
+     *
+     * Five. The claim decision is a bet on longevity, so the honest scoreboard is
+     * what the portfolio can still pay out at the far end of life -- not what is
+     * left over unspent, and not a lifetime total that the SS bridge flattens.
+     */
+    private static final int OPT_SCORE_YEARS = 5;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -3771,9 +3774,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private static final int OCOL_MINSURP   = 6;
     private static final int OCOL_GOGO      = 7;
     private static final int OCOL_SLOWGO    = 8;
-    private static final int OCOL_SURVFLOOR = 9;
-    private static final int OCOL_SSFULL    = 10;
-    private static final int OCOL_VERIFIED  = 11;
+    private static final int OCOL_FINALDRAW = 9;    // v13: THE RANK METRIC
+    private static final int OCOL_ENDBAL     = 10;  // v13: left unspent, the tie-break
+    private static final int OCOL_SURVSPEND  = 11;  // v12: leanest survivor year
+    private static final int OCOL_SURVSS     = 12;  // v12: what delay actually buys
+    private static final int OCOL_SSFULL     = 13;
 
     private JPanel buildSsOptimizerPanel() {
         JPanel p = new JPanel(new BorderLayout(0, 6));
@@ -3918,83 +3923,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "The status line shows the real count before the scan starts, and Cancel<br>"
                 + "stops it at any time.</html>");
 
-        spOptScanPaths = spinI(200, 50, 1000, 50, "#,###");
-        spOptScanPaths.setToolTipText("<html><b>Scan solve paths (reduced fidelity)</b><br>"
-                + "Monte Carlo paths per combination during the fast ranking scan.<br>"
-                + "Lower = faster, noisier ranking. The winners are re-verified at<br>"
-                + "your full Pro-tab path count, so the final numbers are precise.</html>");
-        spOptScanFan   = spinI(100, 20, 500, 20, "#,###");
-        spOptScanFan.setToolTipText("<html><b>Scan fan paths (reduced fidelity)</b><br>"
-                + "Fan paths per combination during the scan. Same trade-off as<br>"
-                + "solve paths -- fast ranking now, full re-verify later.</html>");
-        spOptVerifyTopN= spinI(5, 1, 25, 1, "#");
-        spOptVerifyTopN.setToolTipText("<html><b>Re-verify top N</b><br>"
-                + "After the coarse scan ranks the combinations, the best N are<br>"
-                + "re-run at your full Pro-tab fidelity so their PoS, surplus and<br>"
-                + "survivor-floor numbers are exact.</html>");
-
-        // v11 (B1): the three old fallback modes become PENALTY PRESETS. Index order
-        // is preserved so pre-v11 scenarios keep loading, but they now set lambda
-        // rather than selecting a separate sort. Index 3 (Custom) is new.
-        cmbOptInfeasible = new JComboBox<>(new String[]{
-                "Frontier (penalty 0)", "Closest (penalty 50)",
-                "Balanced (penalty 3)", "Custom (use Penalty)" });
-        cmbOptInfeasible.setSelectedIndex(2);   // Balanced
-        cmbOptInfeasible.setToolTipText("<html><b>Ranking preset</b><br>"
-                + "Sets the <b>Penalty</b> weight to the right of this control.<br><br>"
-                + "<b>This only orders the FAILING rows.</b> A row that passes every floor always<br>"
-                + "ranks above every row that does not, whatever the penalty; passing rows are<br>"
-                + "ordered by survivor floor alone. The penalty decides how the failures are<br>"
-                + "sorted among themselves:<br>"
-                + "<table cellpadding=2>"
-                + "<tr><td><b>Frontier</b></td><td>penalty 0</td>"
-                + "<td>failures ordered by survivor floor alone</td></tr>"
-                + "<tr><td><b>Balanced</b></td><td>penalty 3</td>"
-                + "<td>a $1 miss costs $3 of apparent survivor floor</td></tr>"
-                + "<tr><td><b>Closest</b></td><td>penalty 50</td>"
-                + "<td>nearness to passing dominates</td></tr>"
-                + "<tr><td><b>Custom</b></td><td>&mdash;</td><td>type your own weight</td></tr>"
-                + "</table></html>");
-        cmbOptInfeasible.addActionListener(e -> {
-            if (optPresetSyncing) return;
-            int k = cmbOptInfeasible.getSelectedIndex();
-            if (k >= 0 && k < OPT_LAMBDA_PRESET.length && !Double.isNaN(OPT_LAMBDA_PRESET[k])) {
-                optPresetSyncing = true;
-                spOptLambda.setValue(OPT_LAMBDA_PRESET[k]);
-                optPresetSyncing = false;
-            }
-        });
-
-        spOptLambda = spinD(3.0, 0.0, 200.0, 0.5, "0.0");
-        spOptLambda.setToolTipText("<html><b>Penalty weight (lambda)</b><br>"
-                + "Dollars of apparent survivor floor given up per dollar the worst floor is<br>"
-                + "missed by. The rank score is:<br><br>"
-                + "&nbsp;&nbsp;<b>score = survivor floor &minus; penalty x worst miss</b><br><br>"
-                + "This replaced the old feasible-then-survivor-floor sort, where crossing the<br>"
-                + "feasibility line jumped a row past EVERY feasible row at once. A row that<br>"
-                + "misses a floor by $50 now drops a little; one that misses by $20,000 drops a<br>"
-                + "lot. Rank moves in proportion to the miss.<br><br>"
-                + "<b>0</b> = ignore misses entirely. <b>Large</b> = rank purely by nearness to<br>"
-                + "passing. Editing this switches the preset to Custom.</html>");
-        spOptLambda.addChangeListener(e -> {
-            if (optPresetSyncing) return;
-            double v = dv(spOptLambda);
-            int match = -1;
-            for (int k = 0; k < OPT_LAMBDA_PRESET.length; k++)
-                if (!Double.isNaN(OPT_LAMBDA_PRESET[k]) && Math.abs(OPT_LAMBDA_PRESET[k] - v) < 1e-9) match = k;
-            optPresetSyncing = true;
-            cmbOptInfeasible.setSelectedIndex(match >= 0 ? match : 3);
-            optPresetSyncing = false;
-        });
-
-        spOptPosDollars = spinI(1000, 0, 50_000, 100, "#,###");
-        spOptPosDollars.setToolTipText("<html><b>PoS point = $ (commensurability)</b><br>"
-                + "Three of the four floors are measured in dollars of surplus; the PoS target is<br>"
-                + "measured in percentage points. To put a PoS miss on the same scale as a dollar<br>"
-                + "miss, one percentage point of PoS shortfall is treated as this many dollars.<br><br>"
-                + "<b>Default $1,000.</b> It is a judgment knob, not a derived figure:<br>"
-                + "set <b>0</b> to make a PoS miss cost nothing in the ranking; raise it to make<br>"
-                + "PoS dominate. A PoS miss is still reported in the Why column either way.</html>");
+        // v13: the scan-fidelity, re-verify, MC-runs and penalty controls are GONE.
+        // Every combination is now scored once at the full Pro-tab fidelity set on
+        // the Portfolio panel, so there is no reduced fidelity to tune, nothing to
+        // re-verify, no ensemble to size and no penalty weight to order failures
+        // with. See runSsOptimizer for why the whole apparatus was removed.
 
         JPanel objRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
         objRow.setBackground(new Color(245, 245, 242));
@@ -4003,12 +3936,6 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         objRow.add(new JLabel("Green buffer $:"));   objRow.add(spOptGreenBuffer);
         objRow.add(new JLabel("Term grace yr:"));    objRow.add(spOptTermGrace);
         objRow.add(new JLabel("   Grid:"));          objRow.add(cmbOptGrid);
-        objRow.add(new JLabel("Scan paths:"));       objRow.add(spOptScanPaths);
-        objRow.add(new JLabel("fan:"));              objRow.add(spOptScanFan);
-        objRow.add(new JLabel("Verify top:"));       objRow.add(spOptVerifyTopN);
-        objRow.add(new JLabel("   Preset:"));       objRow.add(cmbOptInfeasible);
-        objRow.add(new JLabel("Penalty:"));         objRow.add(spOptLambda);
-        objRow.add(new JLabel("PoS pt = $:"));      objRow.add(spOptPosDollars);
 
         // == Results table ==================================================
         // v9 Option 2: columns show the real Pro-engine metrics for each claim
@@ -4018,8 +3945,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         String[] optCols = {
                 "Rank", "User SS Start", "Spouse SS Start",
                 "PoS %", "Feasibility min", "Why", "Min surplus",
-                "Go-go headroom", "Slow-go headroom", "Survivor Floor",
-                "SS at full claim", "Verified"
+                "Go-go headroom", "Slow-go headroom",
+                "Final 5yr draws", "Ending balance",
+                "Survivor spendable", "Survivor SS", "SS at full claim"
         };
         tblOptModel = new javax.swing.table.DefaultTableModel(optCols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -4040,7 +3968,6 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                                     + " explanation of that row's rank.</b><br>"
                                     + "Feasible rows read PASS; the margin is shown"
                                     + " in the dialog."
-                                    + (optScoreStats != null ? optScoreStats : "")
                                     + "</html>";
                         }
                         return super.getToolTipText(e);
@@ -4072,7 +3999,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
         // v11: 130 for "Why" inserted at OCOL_WHY -- wide enough for
         // "slow-go -$10,778" without truncation.
-        int[] optWidths = {40, 110, 110, 60, 100, 150, 100, 110, 110, 110, 110, 70};
+        // v12: one more column -- Survivor spendable (the rank metric) now sits beside
+        // Survivor SS (what delay buys), so the trade-off reads without a dialog.
+        // v13: "Verified" is gone -- every row is full fidelity. Two new columns
+        // carry the rank metric and its tie-break.
+        int[] optWidths = {40, 110, 110, 60, 100, 150, 100, 110, 110, 120, 110, 130, 110, 110};
         for (int i = 0; i < optWidths.length && i < tblOpt.getColumnCount(); i++)
             tblOpt.getColumnModel().getColumn(i).setPreferredWidth(optWidths[i]);
 
@@ -4097,11 +4028,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     Object ro = tblOptModel.getValueAt(row, OCOL_RANK);
                     int rank = ro instanceof Integer ? (Integer)ro : 9999;
                     if (col == OCOL_FEASMIN || col == OCOL_WHY) {
-                        // Feasibility-min and Why cells: green if the plan passes,
-                        // red if it fails, AMBER when the row is inside the scan's
-                        // measured noise floor and the verdict is not trustworthy.
-                        boolean bl = row < optRowResults.size() && optRowResults.get(row).borderline;
-                        c.setBackground(bl ? FEAS_AMBER : (feas ? FEAS_GREEN : FEAS_RED));
+                        // v13: green if the plan passes, red if it fails. The amber
+                        // "cannot tell" state is gone -- every row is scored at full
+                        // fidelity, so there is no third verdict to shade.
+                        c.setBackground(feas ? FEAS_GREEN : FEAS_RED);
                     } else if (rank == 1) c.setBackground(GOLD);
                     else if (rank == 2) c.setBackground(SILVER);
                     else if (rank == 3) c.setBackground(BRONZE);
@@ -4458,7 +4388,38 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     }
 
 
-    // == SS Optimizer scan engine ============================================
+    // == SS batch runner =====================================================
+    //
+    // v13: THIS IS NO LONGER AN OPTIMIZER. It is a batch runner plus a scoreboard.
+    //
+    // The whole v9-v12 apparatus -- reduced-fidelity scanning, two-stage
+    // re-verification, a measured noise floor, BORDERLINE tiers, a K-seed
+    // ensemble, penalty presets -- existed to compensate for ONE decision: scoring
+    // each combination on a few hundred Monte Carlo paths so the scan would finish
+    // quickly. Every layer was a patch on the noise that decision introduced, and
+    // each patch cost more time than it saved. A 4,636-combination monthly grid
+    // reached nearly two hours: five times the honest cost of simply running the
+    // engine properly.
+    //
+    // So the decision is reversed. Each combination now gets ONE run of the real
+    // Pro engine at the user's FULL Pro-tab fidelity -- the same stochastic median
+    // the Pro PoS tab shows -- and the verdict is read straight off the resulting
+    // Surplus/gap column, exactly as a person would read it off the screen. There
+    // is nothing left to compensate for, so the compensation is gone.
+    //
+    // It costs about 9 hours for 4,636 combinations. That is the real price of the
+    // answer, it runs unattended, and every row is exact.
+    //
+    // ISOLATION FROM THE PRO POS TAB (deliberate, and load-bearing):
+    //   * simulatePro is called DIRECTLY. The batch never enters runSimulation(),
+    //     never writes lastResults / lastRunActualWd / tblProModel, and never
+    //     touches any lastOpt* cache the Pro tab reads.
+    //   * simulatePro itself writes no instance fields -- verified by scoring 16
+    //     combinations concurrently and getting identical results.
+    //   * the "~N simulations" counter is NOT fed by the batch, and the batch does
+    //     not fire simProgressCallback. Otherwise the Pro tab's readout would jump
+    //     around for hours while a batch ran behind it.
+    // The Pro PoS tab therefore behaves exactly as it did before this change.
     private void runSsOptimizer() {
         btnRunOpt.setEnabled(false);
         btnCancelOpt.setEnabled(true);
@@ -4467,173 +4428,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         tblOptModel.setRowCount(0);
         lblOptStatus.setText("Building candidate grid...");
 
-        // v9 Option 2: the optimizer now SCORES EACH CLAIM COMBINATION BY RUNNING
-        // THE REAL PRO ENGINE (simulatePro) read-only. Two stages:
-        //   1) coarse scan on a YEAR (or half-year) grid at REDUCED fidelity --
-        //      fast, noisy ranking;
-        //   2) RE-VERIFY the top N at the user's FULL Pro-tab fidelity so the
-        //      reported numbers are exact.
-        // Feasibility = stays green every year (>= green buffer), meets the go-go
-        // and slow-go travel floors, and holds the PoS target. Among feasible
-        // combos we rank by SURVIVOR FLOOR. If none is feasible, the chosen
-        // fallback decides what to show. NONE of this touches the Pro engine's
-        // own inputs or table -- it clones the current inputs per combination.
-        final SimInputs baseInp = readInputs();
-        final int manBY    = baseInp.manBirthYear,   manBM    = baseInp.manBirthMonth;
-        final int womanBY  = baseInp.womanBirthYear, womanBM  = baseInp.womanBirthMonth;
-        final int manPIA   = baseInp.manPIA,          womanPIA = baseInp.womanPIA;
-        final boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
-
-        // Objective inputs (this tab only).
-        final int goGoFloor   = iv(spOptGoGoFloor);
-        final int slowGoFloor = iv(spOptSlowGoFloor);
-        final int greenBuf    = iv(spOptGreenBuffer);
-        final int termGrace   = iv(spOptTermGrace);   // v9: terminal-year grace window
-        final int posTarget   = iv(spTargetPoS);
-        final int gridStepMo  = OPT_GRID_STEP[(cmbOptGrid != null)
-                ? Math.max(0, Math.min(cmbOptGrid.getSelectedIndex(), OPT_GRID_STEP.length - 1))
-                : 0];
-        final int scanPaths   = iv(spOptScanPaths);
-        final int scanFan     = iv(spOptScanFan);
-        final int verifyTopN  = iv(spOptVerifyTopN);
-        final int fullPaths   = iv(spMcSolvePaths);
-        final int fullFan     = iv(spMcFanPaths);
-        final int binIters    = iv(spBinaryIters);
-        final int infeasMode  = (cmbOptInfeasible != null) ? cmbOptInfeasible.getSelectedIndex() : 2;
-        // v11 (B1): the continuous-score parameters.
-        final double lambda     = (spOptLambda != null)     ? dv(spOptLambda)     : 3.0;
-        final int    posDollars = (spOptPosDollars != null) ? iv(spOptPosDollars) : 1000;
-        // v9: ONE seed for the whole scan so every combination faces the identical
-        // random future and the ranking is fair. Honor the "Re-randomize each run"
-        // checkbox exactly as the Pro tab does (line ~5115): a fresh System.nanoTime()
-        // when randomize is on, else the deterministic 0. Because randomize draws a
-        // new future each press, the optimizer's numbers are a valid self-consistent
-        // SAMPLE -- applying a winner and re-running with randomize ON gives another
-        // sample that will not match exactly; run the Pro tab with randomize OFF to
-        // reproduce an optimizer row precisely.
-        runSeedOffset = (chkRandomize != null && chkRandomize.isSelected())
-                ? System.nanoTime() : 0L;
-        final long optSeed    = runSeedOffset;
-        // v9: capture the display-dollar mode so the optimizer's floors and columns
-        // follow the Real/Nominal toggle -- floors are compared, and headroom/min
-        // surplus shown, in the SAME units the Pro table is currently showing.
-        final boolean optReal = showRealDollars;
-
+        final BatchCfg cfg = readBatchCfg();
         SwingWorker<Void, String> worker = new SwingWorker<>() {
             @Override protected Void doInBackground() {
-                java.time.LocalDate today = java.time.LocalDate.now();
-                int sy = today.getYear(), sm = today.getMonthValue();
-
-                // Coarse candidate months on the chosen grid step.
-                java.util.List<int[]> bobMonths = buildSsRangeStep(manBY, manBM, sy, sm, gridStepMo);
-                java.util.List<int[]> joMonths;
-                if (single) { joMonths = new java.util.ArrayList<>(); joMonths.add(new int[]{0,0}); }
-                else joMonths = buildSsRangeStep(womanBY, womanBM, sy, sm, gridStepMo);
-
-                int total = bobMonths.size() * joMonths.size();
-                publish(String.format("Stage 1: scanning %,d combinations at reduced fidelity...", total));
-
-                java.util.List<SsOptResult> results = new java.util.ArrayList<>();
-                int done = 0;
-                long t0 = System.currentTimeMillis();
-                for (int[] bob : bobMonths) {
-                    for (int[] jo : joMonths) {
-                        if (optCancelRequested) break;
-                        SsOptResult r = scoreCombinationPro(
-                                baseInp, bob[0], bob[1], jo[0], jo[1], single,
-                                goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
-                                scanPaths, scanFan, binIters, optSeed, optReal, /*verified=*/false);
-                        results.add(r);
-                        done++;
-                        if (done % 2 == 0 || done == total) {
-                            long el = System.currentTimeMillis() - t0;
-                            double per = el / (double) done;
-                            long etaMs = (long)(per * (total - done));
-                            publish(String.format("Stage 1: %,d / %,d  (%.0f%%)  ~%ds left",
-                                    done, total, done*100.0/total, etaMs/1000));
-                        }
-                    }
-                    if (optCancelRequested) break;
-                }
-
-                rankOptResults(results, lambda, posDollars, 0);
-
-                // v11: MEASURE the scan's own noise BEFORE deciding anything with it.
-                //
-                // The pass/fail gate is a hard one -- a failing plan never outranks a
-                // passing one -- and that is only trustworthy if the gate is decided
-                // on a reliable number. It is not, at scan fidelity: a few hundred
-                // Monte Carlo paths put rows near a floor inside their own error
-                // bars, and those rows flipped sides between identical runs, which is
-                // what produced the dozens-of-places rank jumps. So the noise is
-                // measured, by re-scoring a handful of spread-out combinations at a
-                // second seed and taking the mean absolute change in DISTANCE TO THE
-                // BOUNDARY -- the quantity the gate actually turns on.
-                double noiseFloor = 0;
-                if (!optCancelRequested && !results.isEmpty()) {
-                    publish("Measuring the scan's noise floor...");
-                    noiseFloor = measureNoiseFloor(results, baseInp, single,
-                            goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
-                            scanPaths, scanFan, binIters, optSeed, optReal, posDollars);
-                }
-                final double noise = noiseFloor;
-
-                // v11: verify the TOP N *and* every row sitting within 3x the noise
-                // floor of the pass/fail line, iterating until stable.
-                //
-                // Those boundary rows are precisely the ones that flip, so they are
-                // the ones worth spending full fidelity on. Re-scored there, the gate
-                // stops flickering for reasons that have nothing to do with the plan.
-                // Pre-v11 verified the top N once and then re-ranked everything,
-                // comparing a few accurate scores against dozens of noisy ones.
-                if (!optCancelRequested) {
-                    final int n = Math.min(verifyTopN, results.size());
-                    final int MAX_ROUNDS = 4;
-                    final int maxVerify  = Math.min(results.size(), Math.max(n, n * 4));
-                    final double band    = 3.0 * noise;
-                    int round = 0, verifiedCount = 0;
-                    while (round < MAX_ROUNDS && !optCancelRequested) {
-                        round++;
-                        boolean didAny = false;
-                        for (int i = 0; i < results.size() && !optCancelRequested; i++) {
-                            SsOptResult r = results.get(i);
-                            if (r.verified) continue;
-                            boolean inTop      = (i < n);
-                            boolean nearLine   = (band > 0) && (Math.abs(r.boundaryDist) <= band);
-                            if (!inTop && !nearLine) continue;
-                            if (verifiedCount >= maxVerify) break;
-                            verifiedCount++;
-                            publish(String.format(
-                                    "Stage 2 (pass %d): full-fidelity re-score of rank %d%s"
-                                            + "  [%d done]", round, i + 1,
-                                    nearLine && !inTop ? " (near the pass/fail line)" : "",
-                                    verifiedCount));
-                            SsOptResult v = scoreCombinationPro(
-                                    baseInp, r.bobYear, r.bobMonth, r.joYear, r.joMonth, single,
-                                    goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
-                                    fullPaths, fullFan, binIters, optSeed, optReal, /*verified=*/true);
-                            results.set(i, v);
-                            didAny = true;
-                        }
-                        rankOptResults(results, lambda, posDollars, noise);
-                        if (!didAny) break;
-                        if (verifiedCount >= maxVerify) break;
-                    }
-                }
-
-                // v11: final rank with the measured noise, so BORDERLINE rows are
-                // tiered rather than left scattered through the confident blocks. A
-                // row at +$30 against a $100 buffer is not really a pass, and it is
-                // not really a fail either.
-                rankOptResults(results, lambda, posDollars, noise);
-
-                optScoreStats = results.isEmpty() ? null
-                        : buildScoreStats(results, noise, lambda);
-
-                final java.util.List<SsOptResult> finalResults = results;
-                final int fMode = infeasMode;
-                SwingUtilities.invokeLater(() ->
-                        populateOptTable(finalResults, manBY, manBM, womanBY, womanBM, manPIA, womanPIA, fMode));
+                runSsOptimizerCore(cfg, this::publish);
                 return null;
             }
             @Override protected void process(java.util.List<String> msgs) {
@@ -4643,10 +4441,234 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 btnRunOpt.setEnabled(true);
                 btnCancelOpt.setEnabled(false);
                 if (optCancelRequested)
-                    lblOptStatus.setText("Cancelled. Partial results shown.");
+                    lblOptStatus.setText("Cancelled. Finished combinations are saved -- "
+                            + "press Run to resume.");
             }
         };
         worker.execute();
+    }
+
+    /**
+     * v13: everything the batch needs, read ON THE EDT before any worker starts.
+     *
+     * Swing components must not be read off the event thread, so the snapshot is
+     * taken here and the batch never touches a control again. It is also what lets
+     * the headless path reuse the identical code with no GUI running.
+     */
+    private static final class BatchCfg {
+        SimInputs base;
+        int manBY, manBM, womanBY, womanBM, manPIA, womanPIA;
+        boolean single;
+        int goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget, gridStepMo;
+        int fullPaths, fullFan, binIters;
+        long seed;
+        boolean real;
+    }
+
+    private BatchCfg readBatchCfg() {
+        BatchCfg c = new BatchCfg();
+        c.base        = readInputs();
+        c.manBY       = c.base.manBirthYear;   c.manBM   = c.base.manBirthMonth;
+        c.womanBY     = c.base.womanBirthYear; c.womanBM = c.base.womanBirthMonth;
+        c.manPIA      = c.base.manPIA;         c.womanPIA = c.base.womanPIA;
+        c.single      = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
+        c.goGoFloor   = iv(spOptGoGoFloor);
+        c.slowGoFloor = iv(spOptSlowGoFloor);
+        c.greenBuf    = iv(spOptGreenBuffer);
+        c.termGrace   = iv(spOptTermGrace);
+        c.posTarget   = iv(spTargetPoS);
+        c.gridStepMo  = OPT_GRID_STEP[(cmbOptGrid != null)
+                ? Math.max(0, Math.min(cmbOptGrid.getSelectedIndex(), OPT_GRID_STEP.length - 1))
+                : 0];
+        // v13: the ONLY fidelity now -- the same spinners the Pro tab uses, so the
+        // batch's numbers are the Pro tab's numbers.
+        c.fullPaths   = iv(spMcSolvePaths);
+        c.fullFan     = iv(spMcFanPaths);
+        c.binIters    = iv(spBinaryIters);
+        // One seed for the whole batch so every combination faces the identical
+        // market future -- that is what makes comparing claim dates fair. Honors
+        // "Re-randomize each run" exactly as the Pro tab does.
+        runSeedOffset = (chkRandomize != null && chkRandomize.isSelected())
+                ? System.nanoTime() : 0L;
+        c.seed        = runSeedOffset;
+        c.real        = showRealDollars;
+        return c;
+    }
+
+    /** v13: the batch itself. Shared verbatim by the GUI worker and headless mode. */
+    private void runSsOptimizerCore(BatchCfg c, java.util.function.Consumer<String> publish) {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        int sy = today.getYear(), sm = today.getMonthValue();
+
+        java.util.List<int[]> bobMonths = buildSsRangeStep(c.manBY, c.manBM, sy, sm, c.gridStepMo);
+        java.util.List<int[]> joMonths;
+        if (c.single) { joMonths = new java.util.ArrayList<>(); joMonths.add(new int[]{0,0}); }
+        else joMonths = buildSsRangeStep(c.womanBY, c.womanBM, sy, sm, c.gridStepMo);
+
+        int total = bobMonths.size() * joMonths.size();
+
+        // v13: resume. Each finished combination is appended to disk the moment it
+        // completes, tagged with a fingerprint of the inputs and floors. A batch
+        // interrupted at hour 8 costs one run, not eight hours, and pressing Run
+        // again picks up where it stopped.
+        String fp = batchFingerprint(c);
+        java.util.Map<String, SsOptResult> onDisk = loadBatchResults(fp);
+        if (!onDisk.isEmpty())
+            publish.accept(String.format("Resuming: %,d of %,d already on disk.", onDisk.size(), total));
+
+        java.util.List<SsOptResult> results = new java.util.ArrayList<>();
+        int done = 0, ran = 0;
+        long t0 = System.currentTimeMillis();
+        for (int[] bob : bobMonths) {
+            for (int[] jo : joMonths) {
+                if (optCancelRequested) break;
+                String key = bob[0] + "/" + bob[1] + "-" + jo[0] + "/" + jo[1];
+                SsOptResult r = onDisk.get(key);
+                if (r == null) {
+                    r = scoreCombinationPro(
+                            c.base, bob[0], bob[1], jo[0], jo[1], c.single,
+                            c.goGoFloor, c.slowGoFloor, c.greenBuf, c.termGrace, c.posTarget,
+                            c.fullPaths, c.fullFan, c.binIters, c.seed, c.real, OPT_SCORE_YEARS);
+                    appendBatchResult(fp, key, r);
+                    ran++;
+                }
+                results.add(r);
+                done++;
+                long el = System.currentTimeMillis() - t0;
+                double per = (ran > 0) ? el / (double) ran : 0;
+                long etaMs = (long) (per * (total - done));
+                publish.accept(String.format("%,d / %,d  (%.0f%%)   %s %s   %s remaining",
+                        done, total, done * 100.0 / total,
+                        key, r.feasible ? "PASS" : "fail", humanDuration(etaMs)));
+            }
+            if (optCancelRequested) break;
+        }
+
+        rankOptResults(results);
+
+        if (headlessBatch) {
+            int pass = 0;
+            for (SsOptResult r : results) if (r.feasible) pass++;
+            System.out.printf("%n%,d combinations: %,d pass, %,d fail.%n",
+                    results.size(), pass, results.size() - pass);
+            int n = Math.min(10, results.size());
+            System.out.println("Top " + n + " by final-" + OPT_SCORE_YEARS + "-year portfolio draws:");
+            for (int i = 0; i < n; i++) {
+                SsOptResult r = results.get(i);
+                System.out.printf("  %2d. user %02d/%d  spouse %02d/%d   draws %,12.0f   end bal %,12.0f   %s%n",
+                        i + 1, r.bobMonth, r.bobYear, r.joMonth, r.joYear,
+                        r.finalYearsDraw, r.endingBalance, r.feasible ? "PASS" : "fail");
+            }
+        } else {
+            final java.util.List<SsOptResult> fin = results;
+            final BatchCfg cc = c;
+            SwingUtilities.invokeLater(() -> populateOptTable(
+                    fin, cc.manBY, cc.manBM, cc.womanBY, cc.womanBM, cc.manPIA, cc.womanPIA, 0));
+        }
+    }
+
+    /**
+     * v13: the batch, run to completion on the calling thread.
+     *
+     * The GUI path wraps the same work in a SwingWorker so the window stays alive;
+     * headless has no window to keep alive and must not return before the work is
+     * done, so it calls this. Progress goes to stdout instead of the status label.
+     */
+    void runSsOptimizerBlocking() {
+        headlessBatch = true;
+        try { runSsOptimizerCore(readBatchCfg(), msg -> System.out.println(msg)); }
+        finally { headlessBatch = false; }
+    }
+    private boolean headlessBatch = false;
+
+    /** v13: "2h 14m" / "6m 30s" / "45s" -- an ETA a person can act on. */
+    private static String humanDuration(long ms) {
+        if (ms < 0) ms = 0;
+        long s = ms / 1000, h = s / 3600, m = (s % 3600) / 60, ss = s % 60;
+        if (h > 0) return h + "h " + m + "m";
+        if (m > 0) return m + "m " + ss + "s";
+        return ss + "s";
+    }
+
+    // ------------------------------------------------------------------------
+    // v13: batch persistence. Plain CSV next to the app, one line per finished
+    // combination. The fingerprint is a hash of every input that would change a
+    // result, so a stale file from different assumptions is never reused.
+    // ------------------------------------------------------------------------
+    private static final String BATCH_FILE = "incomelab_ssbatch.csv";
+
+    private String batchFingerprint(BatchCfg c) {
+        SimInputs in = c.base;
+        StringBuilder sb = new StringBuilder();
+        try {
+            for (java.lang.reflect.Field f : SimInputs.class.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                f.setAccessible(true);
+                // The claim dates are what the batch VARIES, so they must not enter
+                // the fingerprint or every combination would hash differently.
+                String n = f.getName();
+                if (n.startsWith("manSSStart") || n.startsWith("womanSSStart")) continue;
+                sb.append(n).append('=').append(f.get(in)).append(';');
+            }
+        } catch (Exception ex) { return "nofp"; }
+        sb.append(c.goGoFloor).append(';').append(c.slowGoFloor).append(';')
+                .append(c.greenBuf).append(';').append(c.termGrace).append(';')
+                .append(c.posTarget).append(';').append(c.gridStepMo).append(';')
+                .append(c.fullPaths).append(';').append(c.fullFan).append(';')
+                .append(c.binIters).append(';').append(c.seed).append(';')
+                .append(c.real).append(';').append(c.single).append(';').append(OPT_SCORE_YEARS);
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] d = md.digest(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (int i = 0; i < 8; i++) hex.append(String.format("%02x", d[i]));
+            return hex.toString();
+        } catch (Exception ex) { return "nofp"; }
+    }
+
+    /** Reads back any rows already recorded under this fingerprint. */
+    private java.util.Map<String, SsOptResult> loadBatchResults(String fp) {
+        java.util.Map<String, SsOptResult> out = new java.util.LinkedHashMap<>();
+        java.io.File f = new java.io.File(BATCH_FILE);
+        if (!f.exists()) return out;
+        try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] p = line.split(",", -1);
+                if (p.length < 16 || !p[0].equals(fp)) continue;
+                SsOptResult r = new SsOptResult();
+                r.bobYear  = Integer.parseInt(p[2]);  r.bobMonth = Integer.parseInt(p[3]);
+                r.joYear   = Integer.parseInt(p[4]);  r.joMonth  = Integer.parseInt(p[5]);
+                r.feasible = Boolean.parseBoolean(p[6]);
+                r.actualPoS        = Double.parseDouble(p[7]);
+                r.feasMin          = Integer.parseInt(p[8]);
+                r.minSurplus       = Integer.parseInt(p[9]);
+                r.minGoGoSurplus   = Integer.parseInt(p[10]);
+                r.minSlowGoSurplus = Integer.parseInt(p[11]);
+                r.finalYearsDraw   = Double.parseDouble(p[12]);
+                r.endingBalance    = Double.parseDouble(p[13]);
+                r.survivorSpendable= Double.parseDouble(p[14]);
+                r.survivorSS       = Double.parseDouble(p[15]);
+                if (p.length > 16) r.combinedAnnual = Double.parseDouble(p[16]);
+                if (p.length > 17) r.bindFloor      = p[17];
+                if (p.length > 18) r.shortfall      = Integer.parseInt(p[18]);
+                r.fromDisk = true;
+                out.put(p[1], r);
+            }
+        } catch (Exception ex) { /* a corrupt line just means that row re-runs */ }
+        return out;
+    }
+
+    /** Appends one finished combination. Flushed per row so a kill loses nothing. */
+    private void appendBatchResult(String fp, String key, SsOptResult r) {
+        try (java.io.PrintWriter pw = new java.io.PrintWriter(
+                new java.io.FileWriter(BATCH_FILE, true))) {
+            pw.printf("%s,%s,%d,%d,%d,%d,%b,%.6f,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d%n",
+                    fp, key, r.bobYear, r.bobMonth, r.joYear, r.joMonth, r.feasible,
+                    r.actualPoS, r.feasMin, r.minSurplus, r.minGoGoSurplus, r.minSlowGoSurplus,
+                    r.finalYearsDraw, r.endingBalance, r.survivorSpendable, r.survivorSS,
+                    r.combinedAnnual, r.bindFloor == null ? "" : r.bindFloor, r.shortfall);
+        } catch (Exception ex) { /* disk trouble must not kill a 9-hour run */ }
     }
 
     // v9: candidate claim months from (startY,startM) to age 70, stepping by
@@ -4669,19 +4691,24 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         return result;
     }
 
-    // v9 Option 2: score ONE claim combination by running the real Pro engine.
+    // v9 Option 2 / v13: score ONE claim combination by running the real Pro engine.
     // Clones the base inputs, sets this combination's SS start dates, runs
-    // simulatePro at the given fidelity, and reads back PoS + per-year surplus to
-    // test feasibility against the travel/green floors. Read-only w.r.t. the Pro
-    // engine and its table.
+    // simulatePro ONCE at full Pro-tab fidelity, and reads the verdict straight off
+    // the resulting Surplus/gap column -- the same column, the same numbers, that
+    // the Pro PoS tab puts on screen.
+    //
+    // v13 removed the `verified` flag and the reduced-fidelity path it existed for.
+    // There is only one fidelity now, so every row is exact and nothing needs a
+    // second pass. Read-only with respect to the Pro engine and its table: this
+    // calls simulatePro directly and touches no display or cache state.
     private SsOptResult scoreCombinationPro(
             SimInputs base, int bobY, int bobM, int joY, int joM, boolean single,
             int goGoFloor, int slowGoFloor, int greenBuf, int termGrace, int posTarget,
-            int solvePaths, int fanPaths, int binIters, long seed, boolean realDollars, boolean verified) {
+            int solvePaths, int fanPaths, int binIters, long seed, boolean realDollars,
+            int scoreYears) {
 
         SsOptResult r = new SsOptResult();
         r.bobYear = bobY; r.bobMonth = bobM; r.joYear = joY; r.joMonth = joM;
-        r.verified = verified;
 
         // Clone inputs and set this combination's claim dates.
         SimInputs inp = base.copy();
@@ -4694,7 +4721,13 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         r.joMonthly  = single ? 0
                 : calcSSMonthlyBenefit(inp.womanPIA, inp.womanBirthYear, inp.womanBirthMonth, joY, joM);
         r.combinedAnnual = (r.bobMonthly + r.joMonthly) * 12.0;
-        r.survivorFloor  = Math.max(r.bobMonthly, r.joMonthly) * 12.0;
+        // v12: the survivor's Social Security check. THIS WAS THE RANK METRIC through
+        // v11 and it is not any more -- see survivorSpendable below. It is retained
+        // and displayed because it is exactly what delaying a claim buys: a larger
+        // guaranteed income floor. That is longevity insurance, not more money, and
+        // the table should show the insurance next to the spending so the trade is
+        // visible rather than assumed.
+        r.survivorSS     = Math.max(r.bobMonthly, r.joMonthly) * 12.0;
 
         ProResults pr;
         try {
@@ -4717,7 +4750,23 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         boolean sawGo = false, sawSlow = false;
         int minGreenTest = Integer.MAX_VALUE;   // drives feasibility
         int minGreenTestYear = 0;               // calendar year of that worst counted year
+        // v12: the floor THAT year was actually judged against -- greenBuf normally,
+        // 0 inside the terminal window. Tracked because the shortfall and the binding
+        // capture below must measure against the floor that applied, not the buffer.
+        int minGreenTestFloor = greenBuf;
         int minRawSurplus = Integer.MAX_VALUE;  // shown in the Min surplus column
+        // v12: THE RANK METRIC. Spendable income is what is left after the two costs
+        // that are not discretionary -- tax and medical -- so it is the money the
+        // household actually has to live on:
+        //
+        //     spendable = totalIncome - tax - medical
+        //
+        // Tracked separately for the two phases the death event splits the horizon
+        // into, and reduced to the WORST year of each, matching every other floor in
+        // the optimizer. The survivor figure is what ranks; the couple figure is the
+        // fallback when no death event is set, so the column always means dollars.
+        double minSurvSpend = Double.MAX_VALUE; int survYears = 0;
+        double minCoupSpend = Double.MAX_VALUE; int coupYears = 0;
         r.violations.clear();
         r.gracedDips.clear();
         r.dollarsReal = realDollars;
@@ -4731,17 +4780,41 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 int calY        = row.calYear;
                 if (surplusDisp < minRawSurplus) minRawSurplus = surplusDisp;
 
-                // Is this a graced terminal year whose dip the balance can cover?
+                // v12: a year BEFORE the withdrawal start year has no spending and no
+                // draw, so its surplus is a structural 0 -- not a miss. Pre-v12 it was
+                // scored against the green buffer and every such year registered a
+                // phantom shortfall of the whole buffer. Only bites when the simulation
+                // starts before withdrawals do, which is why it went unnoticed.
+                if (!row.drawing) continue;
+
+                // v12: this year's spendable income, deflated with the same factor
+                // every other figure on the row uses, so the whole table is in one
+                // unit and follows the Real/Nominal toggle.
+                double spendable = (row.totalIncome - row.tax - row.medical) / d;
+                if (row.survivorYear) { survYears++; minSurvSpend = Math.min(minSurvSpend, spendable); }
+                else                  { coupYears++; minCoupSpend = Math.min(minCoupSpend, spendable); }
+
+                // v12: inside the terminal window the green floor is ZERO, not the
+                // buffer. At 92 with three years left and the portfolio able to cover
+                // the gap, there is no reason to fail a plan for missing a comfort
+                // margin -- the money is right there. Outside the window the floor is
+                // the user's green buffer, unchanged. The coverage test is per-year by
+                // design: each year is judged against its own balance.
                 boolean inTerminalWindow = (i >= nRows - termGrace);
-                int shortfallHere = greenBuf - surplusDisp;         // >0 means below buffer
-                boolean covered = (shortfallHere <= 0) ||           // not below buffer, or
-                        (inTerminalWindow && balanceDisp >= shortfallHere);  // covered terminal dip
+                int effFloor      = inTerminalWindow ? 0 : greenBuf;
+                int shortfallHere = effFloor - surplusDisp;         // >0 means below the floor
+                boolean covered = (shortfallHere <= 0)              // at or above the floor, or
+                        || (inTerminalWindow && balanceDisp >= shortfallHere);  // portfolio covers it
                 if (!covered) {
-                    if (surplusDisp < minGreenTest) { minGreenTest = surplusDisp; minGreenTestYear = calY; }
-                    // Record the green-buffer violation for the tooltip.
-                    r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "green", greenBuf));
-                } else if (shortfallHere > 0 && inTerminalWindow) {
-                    // Below buffer but forgiven by terminal grace (balance covers it).
+                    if (surplusDisp < minGreenTest) {
+                        minGreenTest = surplusDisp; minGreenTestYear = calY; minGreenTestFloor = effFloor;
+                    }
+                    // Record the green violation for the tooltip, against the floor that
+                    // actually applied to this year.
+                    r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "green", effFloor));
+                } else if (inTerminalWindow && surplusDisp < greenBuf) {
+                    // Inside the window and below the NORMAL buffer: still reported as
+                    // forgiven so the Why dialog shows what grace covered.
                     r.gracedDips.add(new FloorMiss(calY, surplusDisp, balanceDisp, "green", greenBuf));
                 }
 
@@ -4757,6 +4830,43 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             }
         }
         // Min surplus SHOWN is the raw worst year (so the user still sees the dip).
+        // v12: reduce the two phases to the rank metric. Survivor years decide it when
+        // a death event is set; with no death event there are no survivor years at all
+        // and the couple figure stands in, so the column never goes blank or changes
+        // units. deathYear is a single global input, so every row in one scan uses the
+        // same definition and the comparison stays apples-to-apples.
+        r.survivorYears     = survYears;
+        r.spendableIsCouple = (survYears == 0);
+        r.coupleSpendable   = (coupYears > 0) ? minCoupSpend : 0;
+        r.survivorSpendable = (survYears > 0) ? minSurvSpend : r.coupleSpendable;
+
+        // v13: THE RANK METRIC -- total portfolio withdrawals across the final
+        // `scoreYears` years of the horizon.
+        //
+        // This is what the claim decision actually buys. Spending is held roughly
+        // constant across combinations by the SS bridge (see buildSsBridgeSchedule:
+        // the bridge replaces a delayed benefit dollar for dollar, so "Surplus/gap
+        // lands where the no-delay run would put it and the entire cost of delaying
+        // shows up as a lower portfolio balance"). The difference between claim
+        // dates therefore surfaces as how much the portfolio can still pay out at
+        // the far end of life -- which is precisely this number.
+        //
+        // No bridge is active this late (bridges end at the claim date, by age 70),
+        // so wdActual here is pure portfolio draw.
+        if (pr.medianRows != null && !pr.medianRows.isEmpty()) {
+            int n = pr.medianRows.size();
+            double sum = 0;
+            for (int i = Math.max(0, n - scoreYears); i < n; i++) {
+                EnhRow row = pr.medianRows.get(i);
+                double d = (realDollars && row.inflFactor > 0) ? row.inflFactor : 1.0;
+                sum += row.wdActual / d;
+            }
+            r.finalYearsDraw = sum;
+            EnhRow lastRow = pr.medianRows.get(n - 1);
+            double dl = (realDollars && lastRow.inflFactor > 0) ? lastRow.inflFactor : 1.0;
+            r.endingBalance = lastRow.balance / dl;
+        }
+
         r.minSurplus       = (minRawSurplus == Integer.MAX_VALUE) ? 0 : minRawSurplus;
         r.minGoGoSurplus   = sawGo   ? minGo   : Integer.MAX_VALUE;   // no go-go years -> not binding
         r.minSlowGoSurplus = sawSlow ? minSlow : Integer.MAX_VALUE;   // no slow-go years -> not binding
@@ -4773,8 +4883,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // Feasibility test + worst shortfall (how far the worst floor is missed).
         int shortfall = 0;
         boolean feas = true;
-        if (greenTestMin != Integer.MAX_VALUE && greenTestMin < greenBuf)
-        { feas = false; shortfall = Math.max(shortfall, greenBuf - greenTestMin); }
+        // v12: measured against the floor THAT year carried (0 in the terminal window).
+        if (greenTestMin != Integer.MAX_VALUE && greenTestMin < minGreenTestFloor)
+        { feas = false; shortfall = Math.max(shortfall, minGreenTestFloor - greenTestMin); }
         if (sawGo && r.minGoGoSurplus < goGoFloor)     { feas = false; shortfall = Math.max(shortfall, goGoFloor - r.minGoGoSurplus); }
         if (sawSlow && r.minSlowGoSurplus < slowGoFloor){ feas = false; shortfall = Math.max(shortfall, slowGoFloor - r.minSlowGoSurplus); }
         if (r.actualPoS < posTarget)      { feas = false; shortfall = Math.max(shortfall, 1); }  // PoS miss flagged
@@ -4783,7 +4894,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // v11: record the floors in force, this row's signed margin against each,
         // and WHICH test produced `shortfall`. Purely additive -- the feas/shortfall
         // arithmetic above is byte-for-byte the v10 logic.
-        captureBinding(r, greenTestMin, greenBuf, sawGo, goGoFloor,
+        captureBinding(r, greenTestMin, minGreenTestFloor, sawGo, goGoFloor,
                 sawSlow, slowGoFloor, posTarget);
         return r;
     }
@@ -4837,11 +4948,6 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // against it. Infeasible rows name the floor and the miss; feasible rows read
     // simply PASS (Bob's choice: the margin is in the dialog, not the column).
     private static String whyText(SsOptResult r) {
-        // v11: a row inside the measured noise floor is not honestly a pass or a
-        // fail -- the scan cannot tell. Say so rather than showing a side with
-        // full confidence.
-        if (r.borderline)
-            return "BORDERLINE " + CURRENCY.format((long) Math.abs(r.boundaryDist));
         if (r.feasible) return "PASS";
         if ("PoS".equals(r.bindFloor))
             return String.format("PoS -%.1f pp", Math.abs(r.marginPoS));
@@ -4852,229 +4958,44 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private static boolean approxEq(double a, double b) { return Math.abs(a - b) < 1e-6; }
 
     /**
-     * v11 (final): CERTAINTY ORDERS THE TABLE -- PASS, then BORDERLINE, then FAIL,
-     * with a continuous order inside each block.
+     * v13: PASS ALWAYS OUTRANKS FAIL, then most portfolio dollars paid out late.
      *
-     * The history matters. v9/v10 used the same hard gate, and it produced rank
-     * jumps of dozens of places between identical runs. The first v11 attempt
-     * removed the gate in favour of a pure penalty score, which was stable but
-     * wrong in a way Bob rightly rejected: a plan that does not fund its floors is
-     * categorically different from one that does, and no amount of survivor income
-     * should paper over that.
+     * The v11/v12 comparator carried three tiers, a penalty score and a measured
+     * noise floor. All of that existed because the verdict was decided on a few
+     * hundred Monte Carlo paths and could not be trusted -- rows sitting inside
+     * their own measurement error flipped sides between identical runs, so the
+     * table needed a BORDERLINE block to hold the ones it could not call and a
+     * continuous score to stop those flips moving rows dozens of places.
      *
-     * The gate was never the defect. The defect was DECIDING the gate on a few
-     * hundred Monte Carlo paths, so rows sitting inside their own measurement error
-     * flipped sides at random. A genuine pass-to-fail flip SHOULD drop a row below
-     * every passing row; a spurious one should not happen at all. So the gate is
-     * back, and the instability is attacked at its source instead -- see the
-     * boundary verification and the BORDERLINE flag in runSsOptimizer.
+     * v13 scores every combination once at full Pro-tab fidelity. The verdict is
+     * as trustworthy as the Pro PoS tab's own numbers, so there is nothing left to
+     * hedge: a row either funds the floors or it does not.
      *
-     *   Between blocks : PASS, then BORDERLINE, then FAIL -- see tierOf. A row the
-     *                    scan cannot call sits between the two confident blocks
-     *                    rather than being scattered through them.
-     *   Within PASS    : survivor floor, descending -- the original objective.
-     *   Within BORDER  : survivor floor, descending, for the same reason. The
-     *                    penalty score is meaningless here: these rows have no
-     *                    trustworthy shortfall to penalise.
-     *   Within FAIL    : the penalty score, which orders failures sensibly and
-     *                    replaces the old frontier / closest / relax modes.
-     *   Ties           : combined annual benefit, then the claim dates, so an
-     *                    identical scan always yields an identical table. The
-     *                    pre-v11 tie-break was minSurplus, a Monte Carlo figure,
-     *                    and survivor floor ties are common because max(his, hers)
-     *                    ignores the lower earner whenever the higher one dominates.
+     *   Between blocks : feasible first, always. A plan that misses a floor is
+     *                    categorically different from one that does not.
+     *   Within each    : finalYearsDraw, descending -- total portfolio withdrawals
+     *                    across the final years of the horizon. With the SS bridge
+     *                    holding spending roughly constant across claim dates, this
+     *                    is where the difference between them actually lands.
+     *   Ties           : ending balance, then combined annual benefit, then the
+     *                    claim dates, so an identical batch always yields an
+     *                    identical table.
      */
-    private static void rankOptResults(java.util.List<SsOptResult> results,
-                                       double lambda, int posDollars, double noise) {
-        for (SsOptResult r : results) {
-            r.shortfallDollars = shortfallDollars(r, posDollars);
-            r.boundaryDist     = boundaryDist(r, posDollars);
-            r.score            = r.survivorFloor - lambda * r.shortfallDollars;
-            // Computed HERE, before the sort, because the tier depends on it.
-            r.borderline       = (noise > 0) && (Math.abs(r.boundaryDist) <= noise);
-        }
-        results.sort((a, b) -> {
-            int ta = tierOf(a), tb = tierOf(b);
-            if (ta != tb) return Integer.compare(ta, tb);   // the hard gate, in three tiers
-            int c = (ta == 2)
-                    ? Double.compare(b.score, a.score)                  // within FAIL
-                    : Double.compare(b.survivorFloor, a.survivorFloor); // within PASS / BORDERLINE
+    private static void rankOptResults(java.util.List<SsOptResult> results) {
+        for (SsOptResult r : results) r.shortfallDollars = r.shortfall;
+        results.sort((x, y) -> {
+            if (x.feasible != y.feasible) return x.feasible ? -1 : 1;   // the gate
+            int c = Double.compare(y.finalYearsDraw, x.finalYearsDraw);
             if (c != 0) return c;
-            c = Double.compare(b.combinedAnnual, a.combinedAnnual);
+            c = Double.compare(y.endingBalance, x.endingBalance);
             if (c != 0) return c;
-            c = Integer.compare(a.bobYear * 12 + a.bobMonth, b.bobYear * 12 + b.bobMonth);
+            c = Double.compare(y.combinedAnnual, x.combinedAnnual);
             if (c != 0) return c;
-            return Integer.compare(a.joYear * 12 + a.joMonth, b.joYear * 12 + b.joMonth);
+            c = Integer.compare(x.bobYear * 12 + x.bobMonth, y.bobYear * 12 + y.bobMonth);
+            if (c != 0) return c;
+            return Integer.compare(x.joYear * 12 + x.joMonth, y.joYear * 12 + y.joMonth);
         });
     }
-
-    /**
-     * v11: the worst floor miss expressed in dollars.
-     *
-     * Mirrors the `shortfall` max in scoreCombinationPro -- the binding constraint
-     * the Why column names -- except that the PoS miss, measured in percentage
-     * points, is converted at the user's PoS-point rate so all four tests share a
-     * scale. A rate of 0 makes a PoS miss cost nothing in the ranking; it is still
-     * reported in the Why column and the dialog.
-     */
-    private static int shortfallDollars(SsOptResult r, int posDollars) {
-        int worst = 0;
-        if (r.marginGreen  != Integer.MAX_VALUE && r.marginGreen  < 0) worst = Math.max(worst, -r.marginGreen);
-        if (r.marginGoGo   != Integer.MAX_VALUE && r.marginGoGo   < 0) worst = Math.max(worst, -r.marginGoGo);
-        if (r.marginSlowGo != Integer.MAX_VALUE && r.marginSlowGo < 0) worst = Math.max(worst, -r.marginSlowGo);
-        if (r.marginPoS < 0) worst = Math.max(worst, (int) Math.round(-r.marginPoS * (double) posDollars));
-        return worst;
-    }
-
-    /**
-     * v11: which of the three certainty tiers a row belongs to.
-     *
-     * Two tiers were not enough. BORDERLINE began life as a label layered on top of
-     * a pass/fail verdict, which left amber rows scattered: one leaning pass sat
-     * among the confident passes, one leaning fail sat among the confident fails.
-     * Both are wrong for the same reason -- if the scan cannot tell, the row does
-     * not belong in either confident block.
-     *
-     *   0  PASS       -- confidently funds every floor
-     *   1  BORDERLINE -- inside the measured noise; the scan cannot tell
-     *   2  FAIL       -- confidently does not
-     *
-     * Certainty about funding the floors is what orders the table, so a row that
-     * MIGHT pass ranks above one that definitely does not, and below one that
-     * definitely does.
-     */
-    private static int tierOf(SsOptResult r) {
-        if (r.borderline) return 1;
-        return r.feasible ? 0 : 2;
-    }
-
-    /**
-     * v11: SIGNED distance to the pass/fail line, in dollars.
-     *
-     * Failing rows return the negated worst miss. Passing rows return the TIGHTEST
-     * remaining headroom -- how few dollars would have to move for this row to fail.
-     * That is the quantity whose measurement error decides whether the gate is
-     * trustworthy for a given row, so it, not the score, is what the noise probe
-     * measures and what the BORDERLINE test compares against.
-     */
-    private static int boundaryDist(SsOptResult r, int posDollars) {
-        if (!r.feasible) return -shortfallDollars(r, posDollars);
-        int tightest = Integer.MAX_VALUE;
-        if (r.marginGreen  != Integer.MAX_VALUE) tightest = Math.min(tightest, r.marginGreen);
-        if (r.marginGoGo   != Integer.MAX_VALUE) tightest = Math.min(tightest, r.marginGoGo);
-        if (r.marginSlowGo != Integer.MAX_VALUE) tightest = Math.min(tightest, r.marginSlowGo);
-        if (posDollars > 0)
-            tightest = Math.min(tightest, (int) Math.round(r.marginPoS * (double) posDollars));
-        return (tightest == Integer.MAX_VALUE) ? 0 : tightest;
-    }
-
-    /**
-     * v11: MEASURE the scan's noise floor, in dollars of distance to the pass/fail
-     * line.
-     *
-     * Up to five combinations spread across the ranked list are re-scored at a
-     * second seed and the same scan fidelity; the yardstick is the mean absolute
-     * change in boundaryDist. That is deliberately not the score: the score moves
-     * with survivor floor, which is exact arithmetic, whereas the gate turns
-     * entirely on how close a row sits to its floors. A row whose distance to the
-     * line is smaller than this figure cannot be classified reliably at this
-     * fidelity, which is what the boundary verification and the BORDERLINE flag
-     * both key off.
-     */
-    private double measureNoiseFloor(java.util.List<SsOptResult> results, SimInputs base,
-                                     boolean single, int goGoFloor, int slowGoFloor,
-                                     int greenBuf, int termGrace, int posTarget,
-                                     int scanPaths, int scanFan, int binIters,
-                                     long seed, boolean optReal, int posDollars) {
-        int n = results.size();
-        if (n == 0) return 0;
-        int probes = Math.min(5, n);
-        double sumAbs = 0; int got = 0;
-        for (int k = 0; k < probes && !optCancelRequested; k++) {
-            int idx = (probes == 1) ? 0
-                    : (int) Math.round(k * (n - 1) / (double) (probes - 1));
-            SsOptResult r = results.get(Math.max(0, Math.min(idx, n - 1)));
-            SsOptResult alt = scoreCombinationPro(base, r.bobYear, r.bobMonth, r.joYear, r.joMonth,
-                    single, goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget,
-                    scanPaths, scanFan, binIters, seed + 1L, optReal, /*verified=*/false);
-            sumAbs += Math.abs(boundaryDist(alt, posDollars) - boundaryDist(r, posDollars));
-            got++;
-        }
-        return (got > 0) ? sumAbs / got : 0;
-    }
-
-    /**
-     * v11: the Why-column header's spread report.
-     *
-     * Bob's requirement was to say how much the ranking quantity actually varies
-     * across the whole list, because a spread smaller than the measurement error is
-     * a meaningless ranking however confident the rank numbers look. Raw spread
-     * alone cannot answer that, so the measured noise floor is reported beside it
-     * and the verdict is the ratio.
-     */
-    private String buildScoreStats(java.util.List<SsOptResult> results,
-                                   double noise, double lambda) {
-        int n = results.size();
-        // v11: three tiers, so three counts -- "pass" here means the PASS block, not
-        // the raw feasible flag, which a borderline row may still carry either way.
-        int pass = 0, border = 0, fail = 0;
-        double[] sorted = new double[n];
-        for (int i = 0; i < n; i++) {
-            SsOptResult r = results.get(i);
-            sorted[i] = r.score;
-            switch (tierOf(r)) { case 0 -> pass++; case 1 -> border++; default -> fail++; }
-        }
-        java.util.Arrays.sort(sorted);
-        double lo = sorted[0], hi = sorted[n - 1], med = sorted[n / 2];
-        double p10 = sorted[(int) Math.floor(0.10 * (n - 1))];
-        double p90 = sorted[(int) Math.floor(0.90 * (n - 1))];
-        double spread = hi - lo;
-
-        StringBuilder sb = new StringBuilder("<hr><b>Across all ")
-                .append(n).append(" combinations</b><br><table cellpadding=2>");
-        sb.append("<tr><td>Blocks</td><td colspan=2><b>").append(pass)
-                .append("</b> pass &middot; <b>").append(border)
-                .append("</b> borderline &middot; <b>").append(fail)
-                .append("</b> fail, in that rank order</td></tr>");
-        sb.append("<tr><td>Score range</td><td>").append(CURRENCY.format((long) lo))
-                .append(" to ").append(CURRENCY.format((long) hi))
-                .append("</td><td>span <b>").append(CURRENCY.format((long) spread)).append("</b></td></tr>");
-        sb.append("<tr><td>p10 / median / p90</td><td colspan=2>")
-                .append(CURRENCY.format((long) p10)).append(" &middot; ")
-                .append(CURRENCY.format((long) med)).append(" &middot; ")
-                .append(CURRENCY.format((long) p90)).append("</td></tr>");
-        sb.append("<tr><td>Measured noise floor</td><td colspan=2>&plusmn;")
-                .append(CURRENCY.format((long) noise))
-                .append(" on the distance to the pass/fail line</td></tr>");
-        sb.append("<tr><td>Borderline block</td><td colspan=2><b>").append(border)
-                .append("</b> within that noise of the line, ranked between pass and fail</td></tr>");
-        sb.append("</table>");
-
-        if (noise <= 0.0001) {
-            sb.append("<b>Deterministic at this fidelity &mdash; nothing is borderline.</b>");
-        } else {
-            double ratio = spread / noise;
-            if (ratio >= 3.0)
-                sb.append(String.format("<b>Spread is %.1fx the noise floor &mdash; the ranking"
-                        + " is meaningful.</b>", ratio));
-            else if (ratio >= 1.5)
-                sb.append(String.format("<b>Spread is only %.1fx the noise floor &mdash; treat"
-                        + " close ranks as ties.</b>", ratio));
-            else
-                sb.append(String.format("<b>Spread is %.1fx the noise floor &mdash; THE RANKING"
-                        + " IS NOT MEANINGFUL.</b> Raise the scan paths/fan, or widen the floors"
-                        + " so the combinations differ by more than the measurement error.", ratio));
-            if (border > 0)
-                sb.append("<br>Rows marked <b>BORDERLINE</b> sit inside the noise: the scan"
-                        + " cannot tell whether they pass, even after a full-fidelity re-score."
-                        + " They rank as their own block, below every pass and above every fail.");
-        }
-        if (lambda <= 0.0001)
-            sb.append("<br><i>Penalty is 0, so the FAIL block is ordered by survivor floor alone.</i>");
-        return sb.toString();
-    }
-
-
 
     private java.util.List<int[]> buildSsRange(int birthYear, int birthMonth,
                                                int startYear, int startMonth) {
@@ -5116,13 +5037,6 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // decided this row and by how much. This is the number that sets the rank, and
     // pre-v11 it appeared nowhere in the UI.
     private static String verdictLine(SsOptResult r) {
-        if (r.borderline) {
-            return "<b>BORDERLINE</b> &mdash; this row sits <b>"
-                    + CURRENCY.format((long) Math.abs(r.boundaryDist))
-                    + "</b> from the pass/fail line, which is inside the scan's own measured"
-                    + " noise. It was re-scored at full fidelity and is still too close to"
-                    + " call. Treat it as neither a pass nor a fail.";
-        }
         if (r.feasible) {
             String near = r.bindFloor.isEmpty() ? ""
                     : " Tightest floor: " + r.bindFloor + ", "
@@ -5280,16 +5194,15 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         String unit = r.dollarsReal ? "today's $" : "future $";
         int total = optRowResults.size();
         int minShort = Integer.MAX_VALUE, minShortRank = 0;
-        // v11: tier counts, not just feasible/not -- BORDERLINE is its own block now.
-        int passCount = 0, borderCount = 0, failCount = 0;
-        double bestFloor = -1;
+        // v13: two blocks. Every row is full fidelity, so there is no third state.
+        int passCount = 0, failCount = 0;
+        double bestDraw = -1;
         for (int i = 0; i < total; i++) {
             SsOptResult o = optRowResults.get(i);
-            switch (tierOf(o)) { case 0 -> passCount++; case 1 -> borderCount++; default -> failCount++; }
+            if (o.feasible) passCount++; else failCount++;
             if (!o.feasible && o.shortfallDollars < minShort) { minShort = o.shortfallDollars; minShortRank = i + 1; }
-            if (o.survivorFloor > bestFloor) bestFloor = o.survivorFloor;
+            if (o.finalYearsDraw > bestDraw) bestDraw = o.finalYearsDraw;
         }
-        int myTier = tierOf(r);
 
         StringBuilder sb = new StringBuilder();
         // v11: sizes in a <style> block, in PIXELS, and deliberately not points.
@@ -5316,7 +5229,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         if (r.joYear > 0) sb.append(" &nbsp;&middot;&nbsp; Spouse SS <b>")
                 .append(String.format("%02d/%d", r.joMonth, r.joYear)).append("</b>");
         sb.append(" &nbsp;&middot;&nbsp; Rank <b>").append(rank).append(" of ").append(total)
-                .append("</b> &nbsp;&middot;&nbsp; ").append(r.verified ? "full fidelity" : "scan fidelity")
+                .append("</b> &nbsp;&middot;&nbsp; full fidelity")
                 .append("</p>");
 
         sb.append("<h3 style='margin-bottom:2px;'>VERDICT</h3>");
@@ -5351,81 +5264,61 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 .append(" (the Real/Nominal mode active when the scan was run).</p>");
 
         sb.append("<h3 style='margin-bottom:2px;'>WHY IT RANKS HERE</h3>");
-        sb.append("<p style='margin-top:0;'><b>Certainty about funding the floors decides the"
-                + " block; the block decides the rank.</b> The table is built in three blocks,"
-                + " in this order:</p>");
+        sb.append("<p style='margin-top:0;'><b>Two blocks. Funding the floors decides which"
+                + " block; portfolio dollars paid out late decides the position inside it.</b></p>");
         sb.append("<table cellpadding=4 border=1 cellspacing=0>");
         sb.append("<tr bgcolor='#eeeeee'><td><b>Block</b></td><td><b>Meaning</b></td>")
                 .append("<td><b>Ordered within the block by</b></td><td><b>Rows</b></td></tr>");
-        sb.append("<tr").append(myTier == 0 ? " bgcolor='#eef6ee'" : "")
-                .append("><td><b>1. PASS</b></td><td>Confidently funds every floor</td>")
-                .append("<td>Survivor floor, highest first</td><td>").append(passCount).append("</td></tr>");
-        sb.append("<tr").append(myTier == 1 ? " bgcolor='#fff4c2'" : "")
-                .append("><td><b>2. BORDERLINE</b></td><td>Inside the scan's measured noise &mdash;"
-                        + " too close to call</td>")
-                .append("<td>Survivor floor, highest first</td><td>").append(borderCount).append("</td></tr>");
-        sb.append("<tr").append(myTier == 2 ? " bgcolor='#f8e4e4'" : "")
-                .append("><td><b>3. FAIL</b></td><td>Confidently does not fund a floor</td>")
-                .append("<td>Penalty score, highest first</td><td>").append(failCount).append("</td></tr>");
+        sb.append("<tr").append(r.feasible ? " bgcolor='#eef6ee'" : "")
+                .append("><td><b>1. PASS</b></td><td>Funds the green buffer, both travel floors"
+                        + " and the PoS target</td>")
+                .append("<td>Final-").append(OPT_SCORE_YEARS).append("-year draws, highest first</td><td>")
+                .append(passCount).append("</td></tr>");
+        sb.append("<tr").append(!r.feasible ? " bgcolor='#f8e4e4'" : "")
+                .append("><td><b>2. FAIL</b></td><td>Misses at least one floor</td>")
+                .append("<td>Same measure</td><td>").append(failCount).append("</td></tr>");
         sb.append("</table>");
-        sb.append("<p>A row that <i>might</i> pass therefore sits above every row that"
-                + " definitely does not, and below every row that definitely does. Inside the"
-                + " FAIL block the order comes from:<br>"
-                + "&nbsp;&nbsp;<b>score = survivor floor &minus; penalty &times; worst miss</b></p>");
+        sb.append("<p style='color:#555;'>Every combination is scored by one full-fidelity run"
+                + " of the Pro engine &mdash; the same stochastic median the Pro PoS tab shows"
+                + " &mdash; so there is no borderline block and no penalty weight. A row either"
+                + " funds the floors or it does not.</p>");
+
+        sb.append("<h3 style='margin-bottom:2px;'>WHAT IS BEING MAXIMIZED</h3>");
+        sb.append("<p style='margin-top:0;'><b>Total portfolio withdrawals across the final ")
+                .append(OPT_SCORE_YEARS).append(" years</b> &mdash; what this plan can still pay out"
+                        + " at the far end of life.</p>");
         sb.append("<table cellpadding=4 border=1 cellspacing=0>");
-        sb.append("<tr bgcolor='#eeeeee'><td><b>Term</b></td><td><b>Value</b></td></tr>");
-        sb.append("<tr><td>Survivor floor</td><td>")
-                .append(CURRENCY.format((long) r.survivorFloor)).append("</td></tr>");
-        sb.append("<tr><td>Worst miss</td><td>")
-                .append(r.shortfallDollars > 0 ? CURRENCY.format((long) r.shortfallDollars)
-                        : "none &mdash; this row passes every floor")
-                .append("</td></tr>");
-        sb.append("<tr><td>Penalty (lambda)</td><td>")
-                .append(String.format("%.1f", lastOptLambda)).append("</td></tr>");
-        sb.append("<tr bgcolor='#eef6ee'><td><b>Score</b></td><td><b>")
-                .append(CURRENCY.format((long) r.score)).append("</b></td></tr>");
+        sb.append("<tr bgcolor='#eeeeee'><td><b>Measure</b></td><td><b>This row</b></td>"
+                + "<td><b>What it means</b></td></tr>");
+        sb.append("<tr bgcolor='#eef6ee'><td><b>Final-").append(OPT_SCORE_YEARS)
+                .append("-year draws</b></td><td><b>")
+                .append(CURRENCY.format((long) r.finalYearsDraw))
+                .append("</b></td><td><b>The ranking.</b> The SS bridge holds spending roughly"
+                        + " constant across claim dates, so the difference between them lands here.</td></tr>");
+        sb.append("<tr><td>Ending balance</td><td>")
+                .append(CURRENCY.format((long) r.endingBalance))
+                .append("</td><td>What is left unspent at the horizon. The tie-break.</td></tr>");
+        sb.append("<tr><td>").append(r.spendableIsCouple ? "Couple spendable" : "Survivor spendable")
+                .append("</td><td>").append(CURRENCY.format((long) r.survivorSpendable))
+                .append("</td><td>Leanest year of <tt>income &minus; tax &minus; medical</tt>");
+        if (r.spendableIsCouple) sb.append(" (no death event set, so the couple years stand in)");
+        else sb.append(" across the ").append(r.survivorYears).append(" survivor years");
+        sb.append(".</td></tr>");
+        sb.append("<tr><td>Survivor SS</td><td>")
+                .append(CURRENCY.format((long) r.survivorSS))
+                .append("</td><td>What delaying buys: a larger guaranteed floor. It moves"
+                        + " <i>opposite</i> to spendable income &mdash; the claim pair with the biggest"
+                        + " check tends to leave the least to spend, because the bridge years are funded"
+                        + " by draining the portfolio.</td></tr>");
         sb.append("</table>");
-        if (lastOptPosDollars > 0 && r.marginPoS < 0)
-            sb.append("<p style='color:#555;'>The PoS miss of ")
-                    .append(String.format("%.1f", Math.abs(r.marginPoS)))
-                    .append(" pp was converted at ").append(CURRENCY.format((long) lastOptPosDollars))
-                    .append(" per point to sit on the same scale as the dollar floors.</p>");
         sb.append("<p>Of ").append(total).append(" combinations, ").append(passCount)
-                .append(" pass, ").append(borderCount).append(" are borderline and ").append(failCount)
-                .append(" fail. ")
-                .append(myTier == 0
-                        ? "This row is in the PASS block, so it is ranked by survivor floor and the"
-                        + " penalty setting does not affect its position."
-                        : myTier == 1
-                        ? "This row is in the BORDERLINE block. It is below every confident pass and"
-                        + " above every confident fail, ordered by survivor floor. The penalty"
-                        + " setting does not affect its position, because its miss (if any) is"
-                        + " smaller than the scan can measure."
-                        : "This row is in the FAIL block, so every passing and every borderline row"
-                        + " is above it regardless of its survivor floor. The penalty decides only"
-                        + " where it sits among the other failures.")
+                .append(" pass and ").append(failCount).append(" fail. ")
+                .append(r.feasible
+                        ? "This row is in the PASS block."
+                        : "This row is in the FAIL block, so every passing row is above it no matter"
+                        + " how much it would have paid out.")
+                .append(r.fromDisk ? " (Resumed from a previous batch on disk.)" : "")
                 .append("</p>");
-        sb.append("<p style='color:#555;'>Rank stability comes from re-scoring every row near"
-                + " the pass/fail line at full fidelity, not from softening the line. Rows still"
-                + " inside the scan's measured noise afterwards go into the BORDERLINE block"
-                + " rather than being assigned a side.</p>");
-        if (lastOptLambda <= 0.0001) {
-            sb.append("<p style='background:#fff4c2;padding:6px;'><b>Penalty is 0</b>, so floor"
-                    + " misses cost nothing and even the FAIL block is ordered purely by"
-                    + " survivor floor. Raise <i>Penalty</i> on the SS Optimizer tab to make"
-                    + " near-misses matter.</p>");
-        } else if (myTier == 2 && minShort != Integer.MAX_VALUE
-                && r.shortfallDollars == minShort && rank > Math.max(3, total / 4)) {
-            sb.append("<p style='background:#fff4c2;padding:6px;'><b>NOTE:</b> this row has the"
-                            + " smallest miss of all ").append(total).append(" rows &mdash; it is the"
-                            + " <b>closest to passing</b> &mdash; yet it ranks ").append(rank)
-                    .append(" because its survivor floor is low. Raise <i>Penalty</i> to weight"
-                            + " nearness more heavily, or pick the <i>Closest</i> preset.</p>");
-        } else if (myTier == 2 && minShortRank > 0 && minShortRank != rank) {
-            sb.append("<p style='color:#555;'>The row closest to passing is rank ")
-                    .append(minShortRank).append(" (miss ")
-                    .append(CURRENCY.format((long) minShort)).append(").</p>");
-        }
 
         java.util.LinkedHashMap<Integer, java.util.List<FloorMiss>> byYear = violationsByYear(r);
         if (!byYear.isEmpty()) {
@@ -5493,18 +5386,14 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         lastOptWomanBY  = womanBY; lastOptWomanBM = womanBM;
         lastOptManPIA   = manPIA;  lastOptWomanPIA = womanPIA;
         lastOptInfeasMode = infeasMode;
-        lastOptLambda     = (spOptLambda != null)     ? dv(spOptLambda)     : 3.0;   // v11
-        lastOptPosDollars = (spOptPosDollars != null) ? iv(spOptPosDollars) : 1000;  // v11
 
         tblOptModel.setRowCount(0);
         optRowDates.clear();
         optRowResults.clear();
 
-        // v11: counted by TIER, not by the raw feasible flag -- a borderline row is
-        // neither a pass nor a fail and is reported as its own block.
-        int passCount = 0, borderCount = 0, failCount = 0;
-        for (SsOptResult r : results)
-            switch (tierOf(r)) { case 0 -> passCount++; case 1 -> borderCount++; default -> failCount++; }
+        // v13: two blocks. Every row is full fidelity, so there is no third state.
+        int passCount = 0, failCount = 0;
+        for (SsOptResult r : results) { if (r.feasible) passCount++; else failCount++; }
 
         int show = results.size();
         for (int rank = 0; rank < show; rank++) {
@@ -5522,21 +5411,22 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     CURRENCY.format((long) r.minSurplus),
                     goHead,
                     slowHead,
-                    CURRENCY.format((long) r.survivorFloor),
+                    CURRENCY.format((long) r.finalYearsDraw),
+                    CURRENCY.format((long) r.endingBalance),
+                    CURRENCY.format((long) r.survivorSpendable),
+                    CURRENCY.format((long) r.survivorSS),
                     CURRENCY.format((long) r.combinedAnnual),
-                    r.verified ? "full" : "scan",
             });
             optRowDates.add(new int[]{r.bobYear, r.bobMonth, r.joYear, r.joMonth});
             optRowResults.add(r);
         }
 
-        // v11: one message, in the three tiers the table is actually built from.
+        // v13: one message. Full fidelity everywhere, two blocks, one measure.
         String head = String.format(
-                "%,d combinations: %,d pass, %,d borderline, %,d fail. PASS ranks first (by "
-                        + "survivor floor), then BORDERLINE (by survivor floor), then FAIL (by "
-                        + "penalty %.1f). "
-                        + "Click the Why cell for the reason; hover the Why header for the spread.",
-                show, passCount, borderCount, failCount, lastOptLambda);
+                "%,d combinations at full Pro fidelity: %,d pass, %,d fail. "
+                        + "PASS ranks first; within each block, most portfolio dollars drawn "
+                        + "in the final %d years. Click the Why cell for the reason.",
+                show, passCount, failCount, OPT_SCORE_YEARS);
         lblOptStatus.setText(head);
     }
 
@@ -5557,12 +5447,33 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         double bobMonthly, joMonthly, combinedAnnual;
         double totalIncomeYr1, portWdYr1, projFinalBal;
         double goGoTotalIncome;  // sum of guaranteed income across all go-go years
-        // v6: the SURVIVOR INCOME FLOOR for this combination -- the annual
-        // benefit the surviving spouse keeps after the first death, which is
-        // the LARGER of the two claimed benefits. Delaying the higher earner
-        // raises this floor permanently; the go-go objective cannot see that,
-        // because a delayed benefit pays nothing during the go-go window.
-        double survivorFloor;
+        // v6/v12: the survivor's Social Security check -- the annual benefit the
+        // surviving spouse keeps after the first death, the LARGER of the two claimed
+        // benefits. Through v11 this WAS the rank metric. It no longer is.
+        //
+        // Why it was replaced: it is pure arithmetic on PIA and claim age, so it rises
+        // monotonically with delay and ranked late claims first without exception. But
+        // delaying does not create money -- it buys a larger GUARANTEED FLOOR, paid for
+        // by draining the portfolio through the bridge years. Measured across a sample
+        // of claim pairs, this figure and actual spendable income rank in OPPOSITE
+        // directions: the pair with the biggest check left the survivor the least to
+        // spend. Kept and displayed, because the insurance delay buys is real and the
+        // user should see it next to the spending it costs.
+        double survivorSS;
+        // v12: THE RANK METRIC. Worst year of (totalIncome - tax - medical) across the
+        // survivor phase, or across the couple phase when no death event is set. Unlike
+        // survivorSS this is read off the simulated median path, so it carries Monte
+        // Carlo noise -- which is why the K-seed ensemble exists. See runSsOptimizer.
+        double survivorSpendable;
+        double coupleSpendable;      // same figure over the couple phase, always computed
+        int     survivorYears;       // how many drawing survivor years the horizon holds
+        boolean spendableIsCouple;   // true when the couple figure stood in (no death event)
+        // v13: THE RANK METRIC -- total portfolio withdrawals across the final
+        // OPT_SCORE_YEARS years of the horizon, in the scan's dollar mode. See
+        // rankOptResults for why this and not the ending balance.
+        double finalYearsDraw;
+        double endingBalance;        // portfolio left at the horizon, shown beside it
+        boolean fromDisk = false;    // true when this row was resumed from the CSV
         double inflAccYr1   = 1.0;   // inflation factor at withdrawal start year (default 1=nominal)
         double inflAccFinal = 1.0;   // inflation factor at end of horizon (default 1=nominal)
         // v9 Option 2: metrics read back from a real Pro-engine run of this
@@ -5603,17 +5514,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // dollar floor and bindMargin is positive. Empty only when nothing applies.
         String bindFloor  = "";     // "green" | "go-go" | "slow-go" | "PoS" | ""
         int    bindMargin = 0;      // signed dollars (0 when PoS binds -- see marginPoS)
-        // v11 (B1): the continuous ranking score and the dollar figure it penalises.
-        // shortfallDollars is `shortfall` with the PoS miss converted to dollars at
-        // the user's PoS-point rate, so all four tests are on one scale.
+        // v13: the worst floor miss in dollars, kept for the Why dialog. The v11
+        // score / boundaryDist / borderline fields are gone with the machinery that
+        // needed them.
         int    shortfallDollars = 0;
-        double score = 0;
-        // v11: signed distance to the pass/fail line, in dollars. Positive = the
-        // headroom before the tightest floor would fail; negative = the worst miss.
-        int    boundaryDist = 0;
-        // v11: true when |boundaryDist| is inside the scan's MEASURED noise floor,
-        // i.e. the tool genuinely cannot tell whether this row passes.
-        boolean borderline = false;
     }
 
     // v9: one floor miss (or graced dip) recorded for the SS Optimizer tooltip.
@@ -6313,14 +6217,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         if (spOptSlowGoFloor!= null) props.setProperty("opt.slowGoFloor", String.valueOf(iv(spOptSlowGoFloor)));
         if (spOptGreenBuffer!= null) props.setProperty("opt.greenBuffer", String.valueOf(iv(spOptGreenBuffer)));
         if (spOptTermGrace  != null) props.setProperty("opt.termGrace",   String.valueOf(iv(spOptTermGrace)));
-        if (cmbOptInfeasible!= null) props.setProperty("opt.infeasMode",  String.valueOf(cmbOptInfeasible.getSelectedIndex()));
-        // v11: the ranking parameters are planning intent, so they persist. The
-        // grid is now a real choice (year/half/quarter/month) rather than a tuning
-        // detail, so it persists too.
-        if (spOptLambda     != null) props.setProperty("opt.lambda",      String.valueOf(dv(spOptLambda)));
-        if (spOptPosDollars != null) props.setProperty("opt.posDollars",  String.valueOf(iv(spOptPosDollars)));
+        // v13: the grid is a real planning choice (year/half/quarter/month), so it
+        // persists. The scan-fidelity, re-verify, MC-runs and penalty keys are no
+        // longer written -- the controls they mirrored are gone. Old scenario files
+        // still carrying them load fine; the keys are simply ignored.
         if (cmbOptGrid      != null) props.setProperty("opt.grid",        String.valueOf(cmbOptGrid.getSelectedIndex()));
-        if (spOptVerifyTopN != null) props.setProperty("opt.verifyTopN",  String.valueOf(iv(spOptVerifyTopN)));
         try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
             props.store(fos, "IncomePoS_OptSocSec_v2 scenario -- " + desc);
             addRecentFile(file.getAbsolutePath());
@@ -6582,21 +6483,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         setSpinnerIfPresent(spOptSlowGoFloor, props, "opt.slowGoFloor");
         setSpinnerIfPresent(spOptGreenBuffer, props, "opt.greenBuffer");
         setSpinnerIfPresent(spOptTermGrace,   props, "opt.termGrace");
-        if (cmbOptInfeasible != null && props.getProperty("opt.infeasMode") != null) {
-            try {
-                int idx = Integer.parseInt(props.getProperty("opt.infeasMode").trim());
-                if (idx >= 0 && idx < cmbOptInfeasible.getItemCount()) cmbOptInfeasible.setSelectedIndex(idx);
-            } catch (NumberFormatException ignore) { }
-        }
-        // v11: ranking parameters and grid. Absent in pre-v11 files, in which case
-        // the preset selected just above sets lambda through its listener and the
-        // rest keep their defaults -- so an old scenario opens with the ranking it
-        // implied. opt.lambda is applied AFTER the preset so an explicit saved
-        // value wins over the preset's default.
+        // v13: only the grid survives from the old optimizer keys. opt.infeasMode,
+        // opt.lambda, opt.posDollars, opt.verifyTopN and opt.seeds are ignored --
+        // the controls they drove no longer exist. A pre-v13 scenario therefore
+        // opens cleanly, minus tuning that no longer has anything to tune.
         setStreamComboIfPresent(cmbOptGrid, props, "opt.grid");
-        setStreamIntIfPresent(spOptVerifyTopN,  props, "opt.verifyTopN");
-        setStreamIntIfPresent(spOptPosDollars,  props, "opt.posDollars");
-        setStreamDblIfPresent(spOptLambda,      props, "opt.lambda");
         refreshTaxEngineEnabled();  // greying may change if loaded toggles differ
         refreshStateFieldsEnabled();  // v5: apply loaded state selection greying
         refreshDeathFieldsEnabled();  // v6: apply loaded death-event greying
@@ -10878,7 +10769,58 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // ========================================================================
     //  MAIN
     // ========================================================================
+    /**
+     * v13: run the SS batch with no GUI. Returns a process exit code.
+     *
+     * Builds the frame off-screen so every input control exists and the scenario
+     * loader can populate it exactly as it would interactively, then drives the
+     * same batch the tab drives. Nothing here duplicates engine logic.
+     */
+    private static int runHeadlessBatch(String scenarioPath) {
+        try {
+            java.io.File f = new java.io.File(scenarioPath);
+            if (!f.exists()) {
+                System.err.println("scenario not found: " + f.getAbsolutePath());
+                return 2;
+            }
+            System.out.println("IncomeLab " + APP_VERSION + " headless batch");
+            System.out.println("scenario : " + f.getAbsolutePath());
+            final IncomeLab_OptSocSec_v11[] holder = new IncomeLab_OptSocSec_v11[1];
+            final Exception[] boom = new Exception[1];
+            Runnable build = () -> {
+                try { holder[0] = new IncomeLab_OptSocSec_v11(); }
+                catch (Exception ex) { boom[0] = ex; }
+            };
+            if (SwingUtilities.isEventDispatchThread()) build.run();
+            else SwingUtilities.invokeAndWait(build);
+            if (boom[0] != null) throw boom[0];
+            IncomeLab_OptSocSec_v11 app = holder[0];
+            app.loadScenarioFromFile(f, null, null);
+            System.out.println("results  : " + new java.io.File(BATCH_FILE).getAbsolutePath());
+            System.out.println("running -- interrupt at any time; finished rows are kept.");
+            app.runSsOptimizerBlocking();
+            System.out.println("done.");
+            return 0;
+        } catch (Exception ex) {
+            System.err.println("batch failed: " + ex);
+            ex.printStackTrace();
+            return 1;
+        }
+    }
+
     public static void main(String[] args) {
+        // v13: headless batch. `--batch <scenario.properties>` loads a saved
+        // scenario, runs the SS batch against it with no GUI, and writes the same
+        // incremental CSV the tab reads. One jar, one engine -- deliberately NOT a
+        // second application, because a second copy of simulatePro would drift from
+        // this one and the zero-diff gate exists precisely to stop that.
+        for (int i = 0; i < args.length; i++) {
+            if ("--batch".equals(args[i]) && i + 1 < args.length) {
+                System.setProperty("java.awt.headless", "true");
+                int rc = runHeadlessBatch(args[i + 1]);
+                System.exit(rc);
+            }
+        }
         SwingUtilities.invokeLater(() -> {
             // Use Nimbus so custom button/table background colors render reliably
             // across platforms and packaging (uber-jar, WiX executable). The native
