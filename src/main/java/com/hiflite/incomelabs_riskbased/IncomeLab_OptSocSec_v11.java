@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v11.java
-// Last modified: Thursday, September 24, 2026 at 10:26 PM MST (UTC-7)
+// Last modified: Friday, September 25, 2026 at 02:20 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v11";
-    private static final String BUILD_STAMP = "Thursday, September 24, 2026 at 10:26 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Friday, September 25, 2026 at 02:20 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -334,7 +334,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private boolean    showRealDollars = false;
     // Cache for SS Optimizer results -- repopulated when real/nominal toggle fires
     private java.util.List<SsOptResult> lastOptResults = null;
-    // v9: Option-2 optimizer inputs. Travel-headroom floors and stay-green buffer
+    // v9: Option-2 optimizer inputs. Travel-headroom floors and the Green Surplus/Gap
     // (SS Optimizer tab ONLY -- they feed the feasibility test, never the Pro
     // engine's spending). Grid/fidelity controls for the two-stage scan, and the
     // infeasible-set fallback selector.
@@ -3531,7 +3531,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "<p><b>Objective &mdash; feasibility, then survivor floor.</b> A combination is <i>feasible</i> when "
                 + "it satisfies all of these:</p>"
                 + "<ul>"
-                + "<li><b>Stays green</b> every year at or above the <i>Green buffer</i> (subject to terminal grace, "
+                + "<li><b>Stays green</b> every year at or above the <i>Green Surplus/Gap</i> (subject to terminal grace, "
                 + "below).</li>"
                 + "<li><b>Go-go headroom</b> in every go-go year at or above the <i>Go-go floor</i>.</li>"
                 + "<li><b>Slow-go headroom</b> in every slow-go year at or above the <i>Slow-go floor</i>.</li>"
@@ -3626,7 +3626,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "is gone along with the Scan paths, fan, Verify top, MC runs and Penalty controls.</p>"
                 + "<p><b>What it costs.</b> About 9 hours for 4,636 combinations; a quarterly grid is far "
                 + "quicker. Every finished combination is appended to <tt>incomelab_ssbatch.csv</tt> the "
-                + "moment it completes, tagged with a SHA-256 fingerprint of the plan, so an interrupted batch "
+                + "moment it completes in <tt>~/.retirement_utils/.incomelab/</tt> &mdash; a fixed location, not "
+                + "wherever the app happened to be launched from &mdash; tagged with a SHA-256 fingerprint of "
+                + "the plan, so an interrupted batch "
                 + "costs one run rather than the whole night &mdash; press Run again and it resumes. Change any "
                 + "input that would alter a result and the fingerprint changes, so a stale file is never "
                 + "silently reused. Each row stores its full working as well as its results &mdash; every "
@@ -3674,7 +3676,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
                 + "<p><b>Why dialog (v11).</b> <b>Left-click the Why cell, or right-click any column</b> on a row, "
                 + "to open the full explanation: the verdict, an <i>all four tests</i> table showing value, floor, "
-                + "margin and result for the green buffer, both travel floors and PoS with the binding one "
+                + "margin and result for the Green Surplus/Gap, both travel floors and PoS with the binding one "
                 + "highlighted, a <i>why it ranks here</i> section, every failing year, and any terminal-grace "
                 + "forgiveness. The <i>why it ranks here</i> section shows the score arithmetic term by term "
                 + "&mdash; survivor floor, worst miss, penalty, resulting score &mdash; so a row's position is "
@@ -3895,9 +3897,13 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "Minimum surplus/gap required in each slow-go year. Your closer-to-<br>"
                 + "home travel budget. SS Optimizer only.</html>");
         spOptGreenBuffer = spinI(0, 0, 100000, 500, "#,###");
-        spOptGreenBuffer.setToolTipText("<html><b>Stay-green buffer ($/yr, real)</b><br>"
-                + "Minimum surplus/gap required in EVERY year (including non-travel<br>"
-                + "years). 0 means 'never go red'. Raise it for a safety cushion.<br>"
+        spOptGreenBuffer.setToolTipText("<html><b>Green Surplus/Gap ($/yr, real)</b><br>"
+                + "The minimum <i>Surplus/gap</i> required in EVERY year, including<br>"
+                + "non-travel years. It is read against the <b>Surplus/gap</b> column on<br>"
+                + "the Pro PoS tab, which is where the name comes from.<br><br>"
+                + "0 means 'never go red'. Raise it for a safety cushion.<br><br>"
+                + "Inside the terminal-grace window this floor drops to 0, and a year<br>"
+                + "below it is forgiven when that year's portfolio can cover the gap.<br>"
                 + "SS Optimizer only.</html>");
 
         spOptTermGrace = spinI(1, 0, 5, 1, "#");
@@ -3944,7 +3950,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         objRow.setBackground(new Color(245, 245, 242));
         objRow.add(new JLabel("Go-go floor $:"));    objRow.add(spOptGoGoFloor);
         objRow.add(new JLabel("Slow-go floor $:"));  objRow.add(spOptSlowGoFloor);
-        objRow.add(new JLabel("Green buffer $:"));   objRow.add(spOptGreenBuffer);
+        objRow.add(new JLabel("Green Surplus/Gap $:")); objRow.add(spOptGreenBuffer);
         objRow.add(new JLabel("Term grace yr:"));    objRow.add(spOptTermGrace);
         objRow.add(new JLabel("   Grid:"));          objRow.add(cmbOptGrid);
 
@@ -4533,9 +4539,15 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // interrupted at hour 8 costs one run, not eight hours, and pressing Run
         // again picks up where it stopped.
         String fp = batchFingerprint(c);
+        batchWriteError = null;
+        java.io.File resultsFile = batchFile();
+        // v15: say WHERE the results go, before nine hours start. A path the user can
+        // see is a path they can check.
+        publish.accept("Results file: " + resultsFile.getAbsolutePath());
         java.util.Map<String, SsOptResult> onDisk = loadBatchResults(fp);
         if (!onDisk.isEmpty())
-            publish.accept(String.format("Resuming: %,d of %,d already on disk.", onDisk.size(), total));
+            publish.accept(String.format("Resuming: %,d of %,d already on disk (%s)",
+                    onDisk.size(), total, resultsFile.getAbsolutePath()));
 
         java.util.List<SsOptResult> results = new java.util.ArrayList<>();
         int done = 0, ran = 0;
@@ -4566,6 +4578,20 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         }
 
         rankOptResults(results);
+
+        // v15: a batch that could not write must say so, loudly, once. Silence here
+        // is how nine hours of work disappears.
+        if (batchWriteError != null) {
+            String warn = "WARNING: results could NOT be saved to "
+                    + resultsFile.getAbsolutePath() + " (" + batchWriteError
+                    + "). This batch cannot be resumed or re-read.";
+            publish.accept(warn);
+            if (!headlessBatch) {
+                final String w = warn;
+                SwingUtilities.invokeLater(() -> javax.swing.JOptionPane.showMessageDialog(
+                        this, w, "SS batch not saved", javax.swing.JOptionPane.WARNING_MESSAGE));
+            }
+        }
 
         if (headlessBatch) {
             int pass = 0;
@@ -4616,7 +4642,30 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // combination. The fingerprint is a hash of every input that would change a
     // result, so a stale file from different assumptions is never reused.
     // ------------------------------------------------------------------------
-    private static final String BATCH_FILE = "incomelab_ssbatch.csv";
+    /**
+     * v15: the batch results live in a FIXED location, not the working directory.
+     *
+     * The old bare filename resolved against user.dir, so where a nine-hour batch
+     * landed depended on how the app was launched -- the project root from an IDE,
+     * the terminal's cwd from a shell, the home directory or / from a desktop
+     * launcher. A batch run one way could not find a batch run another way, and a
+     * launcher whose cwd was not writable produced NOTHING while reporting success,
+     * because the append swallowed the exception.
+     *
+     * Both halves are fixed here: one path regardless of launch, and a write failure
+     * that is surfaced instead of hidden.
+     */
+    private static final String BATCH_DIR_REL  = ".retirement_utils/.incomelab";
+    private static final String BATCH_FILE_NAME = "incomelab_ssbatch.csv";
+    /** First write failure of the current batch, or null. Reported, never swallowed. */
+    private volatile String batchWriteError = null;
+
+    /** The results file, creating its directory if needed. */
+    private static java.io.File batchFile() {
+        java.io.File dir = new java.io.File(System.getProperty("user.home"), BATCH_DIR_REL);
+        if (!dir.exists()) dir.mkdirs();
+        return new java.io.File(dir, BATCH_FILE_NAME);
+    }
 
     private String batchFingerprint(BatchCfg c) {
         SimInputs in = c.base;
@@ -4694,7 +4743,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
      */
     private java.util.Map<String, SsOptResult> loadBatchResults(String fp) {
         java.util.Map<String, SsOptResult> out = new java.util.LinkedHashMap<>();
-        java.io.File f = new java.io.File(BATCH_FILE);
+        java.io.File f = batchFile();
         if (!f.exists()) return out;
         try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
             String line;
@@ -4751,7 +4800,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     /** Appends one finished combination. Written and closed per row so a kill loses nothing. */
     private void appendBatchResult(String fp, String key, SsOptResult r) {
         try (java.io.PrintWriter pw = new java.io.PrintWriter(
-                new java.io.FileWriter(BATCH_FILE, true))) {
+                new java.io.FileWriter(batchFile(), true))) {
             pw.printf("%s,%s,%d,%d,%d,%d,%b,%.6f,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,"
                             + "%.4f,%.4f,%d,%b,%d,%b,%.2f,%d,%d,%d,%d,%d,%d,%d,%.4f,%d,%s,%s%n",
                     fp, key, r.bobYear, r.bobMonth, r.joYear, r.joMonth, r.feasible,
@@ -4763,7 +4812,15 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     r.floorGreen, r.floorGoGo, r.floorSlowGo, r.floorPoS,
                     r.marginGreen, r.marginGoGo, r.marginSlowGo, r.marginPoS, r.bindMargin,
                     encodeMisses(r.violations), encodeMisses(r.gracedDips));
-        } catch (Exception ex) { /* disk trouble must not kill a nine-hour run */ }
+        } catch (Exception ex) {
+            // v15: disk trouble must not kill a nine-hour run -- but it must not be
+            // invisible either. Pre-v15 this was swallowed silently, so an unwritable
+            // directory produced a full batch and an empty file with no warning. The
+            // first failure is recorded and reported when the batch ends.
+            if (batchWriteError == null)
+                batchWriteError = ex.getClass().getSimpleName()
+                        + (ex.getMessage() == null ? "" : ": " + ex.getMessage());
+        }
     }
 
     // v9: candidate claim months from (startY,startM) to age 70, stepping by
@@ -4877,7 +4934,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
                 // v12: a year BEFORE the withdrawal start year has no spending and no
                 // draw, so its surplus is a structural 0 -- not a miss. Pre-v12 it was
-                // scored against the green buffer and every such year registered a
+                // scored against the Green Surplus/Gap and every such year registered a
                 // phantom shortfall of the whole buffer. Only bites when the simulation
                 // starts before withdrawals do, which is why it went unnoticed.
                 if (!row.drawing) continue;
@@ -4893,7 +4950,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 // buffer. At 92 with three years left and the portfolio able to cover
                 // the gap, there is no reason to fail a plan for missing a comfort
                 // margin -- the money is right there. Outside the window the floor is
-                // the user's green buffer, unchanged. The coverage test is per-year by
+                // the user's Green Surplus/Gap, unchanged. The coverage test is per-year by
                 // design: each year is judged against its own balance.
                 boolean inTerminalWindow = (i >= nRows - termGrace);
                 int effFloor      = inTerminalWindow ? 0 : greenBuf;
@@ -5136,7 +5193,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             String near = r.bindFloor.isEmpty() ? ""
                     : " Tightest floor: " + r.bindFloor + ", "
                     + CURRENCY.format((long) r.bindMargin) + " of headroom.";
-            return "<b>FEASIBLE</b> &mdash; meets the green buffer, both travel floors,"
+            return "<b>FEASIBLE</b> &mdash; meets the Green Surplus/Gap, both travel floors,"
                     + " and the PoS target." + near;
         }
         if ("PoS".equals(r.bindFloor)) {
@@ -5334,7 +5391,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         sb.append("<table cellpadding=4 border=1 cellspacing=0>");
         sb.append("<tr bgcolor='#eeeeee'><td><b>Test</b></td><td><b>Value</b></td>")
                 .append("<td><b>Floor</b></td><td><b>Margin</b></td><td><b>Result</b></td></tr>");
-        sb.append(testRow("Green buffer", r.marginGreen == Integer.MAX_VALUE ? null
+        sb.append(testRow("Green Surplus/Gap", r.marginGreen == Integer.MAX_VALUE ? null
                         : CURRENCY.format((long) (r.marginGreen + r.floorGreen)),
                 CURRENCY.format((long) r.floorGreen), r.marginGreen, "green".equals(r.bindFloor),
                 "not binding -- no counted year fell below the buffer"
@@ -5365,7 +5422,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         sb.append("<tr bgcolor='#eeeeee'><td><b>Block</b></td><td><b>Meaning</b></td>")
                 .append("<td><b>Ordered within the block by</b></td><td><b>Rows</b></td></tr>");
         sb.append("<tr").append(r.feasible ? " bgcolor='#eef6ee'" : "")
-                .append("><td><b>1. PASS</b></td><td>Funds the green buffer, both travel floors"
+                .append("><td><b>1. PASS</b></td><td>Funds the Green Surplus/Gap, both travel floors"
                         + " and the PoS target</td>")
                 .append("<td>Final-").append(OPT_SCORE_YEARS).append("-year draws, highest first</td><td>")
                 .append(passCount).append("</td></tr>");
@@ -10890,7 +10947,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             if (boom[0] != null) throw boom[0];
             IncomeLab_OptSocSec_v11 app = holder[0];
             app.loadScenarioFromFile(f, null, null);
-            System.out.println("results  : " + new java.io.File(BATCH_FILE).getAbsolutePath());
+            System.out.println("results  : " + batchFile().getAbsolutePath());
             System.out.println("running -- interrupt at any time; finished rows are kept.");
             app.runSsOptimizerBlocking();
             System.out.println("done.");
