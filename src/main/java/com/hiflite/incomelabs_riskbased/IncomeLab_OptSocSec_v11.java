@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v11.java
-// Last modified: Thursday, September 24, 2026 at 05:04 PM MST (UTC-7)
+// Last modified: Thursday, September 24, 2026 at 10:26 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v11";
-    private static final String BUILD_STAMP = "Thursday, September 24, 2026 at 05:04 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Thursday, September 24, 2026 at 10:26 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -334,7 +334,6 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private boolean    showRealDollars = false;
     // Cache for SS Optimizer results -- repopulated when real/nominal toggle fires
     private java.util.List<SsOptResult> lastOptResults = null;
-    private int lastOptInfeasMode = 0;   // v9: remembered for toggle refresh
     // v9: Option-2 optimizer inputs. Travel-headroom floors and stay-green buffer
     // (SS Optimizer tab ONLY -- they feed the feasibility test, never the Pro
     // engine's spending). Grid/fidelity controls for the two-stage scan, and the
@@ -3627,10 +3626,22 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "is gone along with the Scan paths, fan, Verify top, MC runs and Penalty controls.</p>"
                 + "<p><b>What it costs.</b> About 9 hours for 4,636 combinations; a quarterly grid is far "
                 + "quicker. Every finished combination is appended to <tt>incomelab_ssbatch.csv</tt> the "
-                + "moment it completes, tagged with a fingerprint of the inputs and floors, so an interrupted "
-                + "batch costs one run rather than the whole night &mdash; press Run again and it resumes. "
-                + "Change any input that would alter a result and the fingerprint changes, so a stale file is "
-                + "never silently reused.</p>"
+                + "moment it completes, tagged with a SHA-256 fingerprint of the plan, so an interrupted batch "
+                + "costs one run rather than the whole night &mdash; press Run again and it resumes. Change any "
+                + "input that would alter a result and the fingerprint changes, so a stale file is never "
+                + "silently reused. Each row stores its full working as well as its results &mdash; every "
+                + "per-year violation, every graced dip, the floors it was judged against and its margin to "
+                + "each &mdash; so a batch read back off disk explains its verdicts exactly as a fresh one "
+                + "does. Delete the file for a clean slate; it costs only the resume.</p>"
+                + "<p><b>The batch seed is always 0, and <i>Re-randomize each run</i> does not apply to it.</b> "
+                + "The batch is a <i>comparison</i>, not a forecast: its job is to judge thousands of claim "
+                + "dates against one another, which needs a future they all share, not a random one. "
+                + "Forecasting is what the Pro PoS and GK tabs are for, and there the checkbox works exactly "
+                + "as it always has &mdash; a fresh future costs seconds.</p>"
+                + "<p>This also makes a finished batch permanently re-readable. Click any row to apply its "
+                + "claim dates and run the Pro tab; tick <i>Re-randomize each run</i> first and you get that "
+                + "same claim pair under a different future, which is the cheap way to ask whether your top "
+                + "pick holds up. The batch on disk is untouched by any of it.</p>"
                 + "<p><b>Isolation from the Pro PoS tab.</b> The batch calls <tt>simulatePro</tt> directly. It "
                 + "never enters the Pro tab's run path, never writes its cached results or table model, and "
                 + "does not feed the \"~N simulations\" counter &mdash; otherwise that readout would jump "
@@ -4019,7 +4030,6 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             final Color INFEAS = new Color(250, 232, 232);   // faint red row tint for not-feasible
             final Color FEAS_GREEN = new Color(198, 239, 206); // pass cell (col 4)
             final Color FEAS_RED   = new Color(255, 199, 199); // fail cell (col 4)
-            final Color FEAS_AMBER = new Color(255, 232, 178); // v11: undecidable at this fidelity
             @Override public java.awt.Component getTableCellRendererComponent(
                     JTable t, Object v, boolean sel, boolean foc, int row, int col) {
                 java.awt.Component c = super.getTableCellRendererComponent(t,v,sel,foc,row,col);
@@ -4485,12 +4495,23 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         c.fullPaths   = iv(spMcSolvePaths);
         c.fullFan     = iv(spMcFanPaths);
         c.binIters    = iv(spBinaryIters);
-        // One seed for the whole batch so every combination faces the identical
-        // market future -- that is what makes comparing claim dates fair. Honors
-        // "Re-randomize each run" exactly as the Pro tab does.
-        runSeedOffset = (chkRandomize != null && chkRandomize.isSelected())
-                ? System.nanoTime() : 0L;
-        c.seed        = runSeedOffset;
+        // v14: THE BATCH SEED IS ALWAYS 0, and "Re-randomize each run" is not
+        // consulted here at all.
+        //
+        // The batch is a COMPARISON, not a forecast. Its job is to judge thousands
+        // of claim dates against one another, which requires a future they all
+        // share -- it does not require that future to be random. Forecasting, where
+        // exploring different futures earns its cost, is what the Pro PoS and GK
+        // tabs are for, and there a fresh future costs seconds rather than hours.
+        //
+        // v13 honored the checkbox, inherited from the old seconds-long scan where
+        // a fresh seed per press was harmless. At nine hours it is not: the seed fed
+        // the fingerprint, so with the box checked no batch could ever be resumed or
+        // re-read, and a night's work was stranded the moment it finished.
+        //
+        // Fixing the seed also means the batch no longer writes runSeedOffset --
+        // one less piece of state shared with the Pro tab.
+        c.seed        = 0L;
         c.real        = showRealDollars;
         return c;
     }
@@ -4563,7 +4584,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             final java.util.List<SsOptResult> fin = results;
             final BatchCfg cc = c;
             SwingUtilities.invokeLater(() -> populateOptTable(
-                    fin, cc.manBY, cc.manBM, cc.womanBY, cc.womanBM, cc.manPIA, cc.womanPIA, 0));
+                    fin, cc.manBY, cc.manBM, cc.womanBY, cc.womanBM, cc.manPIA, cc.womanPIA));
         }
     }
 
@@ -4615,7 +4636,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 .append(c.greenBuf).append(';').append(c.termGrace).append(';')
                 .append(c.posTarget).append(';').append(c.gridStepMo).append(';')
                 .append(c.fullPaths).append(';').append(c.fullFan).append(';')
-                .append(c.binIters).append(';').append(c.seed).append(';')
+                .append(c.binIters).append(';')
+                // v14: no seed here -- the batch seed is fixed at 0, so the hash identifies
+                // the PLAN and nothing else. Two runs of the same plan always match.
                 .append(c.real).append(';').append(c.single).append(';').append(OPT_SCORE_YEARS);
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
@@ -4626,7 +4649,49 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         } catch (Exception ex) { return "nofp"; }
     }
 
-    /** Reads back any rows already recorded under this fingerprint. */
+    /**
+     * v14: encode one FloorMiss list for a CSV cell.
+     *
+     * Commas are the record separator, so entries use '|' and fields ':'. FloorMiss
+     * carries only ints and a short floor name ("green" / "go-go" / "slow-go"), none
+     * of which can contain either character.
+     */
+    private static String encodeMisses(java.util.List<FloorMiss> list) {
+        if (list == null || list.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (FloorMiss m : list) {
+            if (sb.length() > 0) sb.append('|');
+            sb.append(m.calYear).append(':').append(m.surplus).append(':')
+                    .append(m.balance).append(':').append(m.floor == null ? "" : m.floor)
+                    .append(':').append(m.floorLevel);
+        }
+        return sb.toString();
+    }
+
+    private static void decodeMisses(String cell, java.util.List<FloorMiss> into) {
+        if (cell == null || cell.isEmpty()) return;
+        for (String e : cell.split("\\|")) {
+            String[] f = e.split(":", -1);
+            if (f.length < 5) continue;
+            try {
+                into.add(new FloorMiss(Integer.parseInt(f[0]), Integer.parseInt(f[1]),
+                        Integer.parseInt(f[2]), f[3], Integer.parseInt(f[4])));
+            } catch (NumberFormatException ignore) { }
+        }
+    }
+
+    /**
+     * Reads back any rows already recorded under this fingerprint.
+     *
+     * v14: restores the row's WORKING as well as its results -- the per-year
+     * violations, the graced dips, the floor levels it was judged against and its
+     * margin to each. Without those a resumed row ranked and displayed correctly
+     * but its Why dialog was hollow: no failing years, every floor reading zero.
+     * A nine-hour batch should not come back missing the reason for its verdicts.
+     *
+     * Columns are read defensively by position, so a file written by an earlier
+     * build still loads -- it simply restores less.
+     */
     private java.util.Map<String, SsOptResult> loadBatchResults(String fp) {
         java.util.Map<String, SsOptResult> out = new java.util.LinkedHashMap<>();
         java.io.File f = new java.io.File(BATCH_FILE);
@@ -4636,39 +4701,69 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             while ((line = br.readLine()) != null) {
                 String[] p = line.split(",", -1);
                 if (p.length < 16 || !p[0].equals(fp)) continue;
-                SsOptResult r = new SsOptResult();
-                r.bobYear  = Integer.parseInt(p[2]);  r.bobMonth = Integer.parseInt(p[3]);
-                r.joYear   = Integer.parseInt(p[4]);  r.joMonth  = Integer.parseInt(p[5]);
-                r.feasible = Boolean.parseBoolean(p[6]);
-                r.actualPoS        = Double.parseDouble(p[7]);
-                r.feasMin          = Integer.parseInt(p[8]);
-                r.minSurplus       = Integer.parseInt(p[9]);
-                r.minGoGoSurplus   = Integer.parseInt(p[10]);
-                r.minSlowGoSurplus = Integer.parseInt(p[11]);
-                r.finalYearsDraw   = Double.parseDouble(p[12]);
-                r.endingBalance    = Double.parseDouble(p[13]);
-                r.survivorSpendable= Double.parseDouble(p[14]);
-                r.survivorSS       = Double.parseDouble(p[15]);
-                if (p.length > 16) r.combinedAnnual = Double.parseDouble(p[16]);
-                if (p.length > 17) r.bindFloor      = p[17];
-                if (p.length > 18) r.shortfall      = Integer.parseInt(p[18]);
-                r.fromDisk = true;
-                out.put(p[1], r);
+                try {
+                    SsOptResult r = new SsOptResult();
+                    r.bobYear  = Integer.parseInt(p[2]);  r.bobMonth = Integer.parseInt(p[3]);
+                    r.joYear   = Integer.parseInt(p[4]);  r.joMonth  = Integer.parseInt(p[5]);
+                    r.feasible = Boolean.parseBoolean(p[6]);
+                    r.actualPoS        = Double.parseDouble(p[7]);
+                    r.feasMin          = Integer.parseInt(p[8]);
+                    r.minSurplus       = Integer.parseInt(p[9]);
+                    r.minGoGoSurplus   = Integer.parseInt(p[10]);
+                    r.minSlowGoSurplus = Integer.parseInt(p[11]);
+                    r.finalYearsDraw   = Double.parseDouble(p[12]);
+                    r.endingBalance    = Double.parseDouble(p[13]);
+                    r.survivorSpendable= Double.parseDouble(p[14]);
+                    r.survivorSS       = Double.parseDouble(p[15]);
+                    if (p.length > 16) r.combinedAnnual = Double.parseDouble(p[16]);
+                    if (p.length > 17) r.bindFloor      = p[17];
+                    if (p.length > 18) r.shortfall      = Integer.parseInt(p[18]);
+                    // v14 detail -- everything the Why dialog needs.
+                    if (p.length > 19) r.bobMonthly        = Double.parseDouble(p[19]);
+                    if (p.length > 20) r.joMonthly         = Double.parseDouble(p[20]);
+                    if (p.length > 21) r.feasMinYear       = Integer.parseInt(p[21]);
+                    if (p.length > 22) r.dollarsReal       = Boolean.parseBoolean(p[22]);
+                    if (p.length > 23) r.survivorYears     = Integer.parseInt(p[23]);
+                    if (p.length > 24) r.spendableIsCouple = Boolean.parseBoolean(p[24]);
+                    if (p.length > 25) r.coupleSpendable   = Double.parseDouble(p[25]);
+                    if (p.length > 26) r.floorGreen        = Integer.parseInt(p[26]);
+                    if (p.length > 27) r.floorGoGo         = Integer.parseInt(p[27]);
+                    if (p.length > 28) r.floorSlowGo       = Integer.parseInt(p[28]);
+                    if (p.length > 29) r.floorPoS          = Integer.parseInt(p[29]);
+                    if (p.length > 30) r.marginGreen       = Integer.parseInt(p[30]);
+                    if (p.length > 31) r.marginGoGo        = Integer.parseInt(p[31]);
+                    if (p.length > 32) r.marginSlowGo      = Integer.parseInt(p[32]);
+                    if (p.length > 33) r.marginPoS         = Double.parseDouble(p[33]);
+                    if (p.length > 34) r.bindMargin        = Integer.parseInt(p[34]);
+                    if (p.length > 35) decodeMisses(p[35], r.violations);
+                    if (p.length > 36) decodeMisses(p[36], r.gracedDips);
+                    r.fromDisk = true;
+                    out.put(p[1], r);
+                } catch (RuntimeException bad) {
+                    // One unreadable row just means that combination re-runs; a
+                    // half-written final line after a kill must not cost the rest.
+                }
             }
-        } catch (Exception ex) { /* a corrupt line just means that row re-runs */ }
+        } catch (Exception ex) { /* unreadable file -> run everything */ }
         return out;
     }
 
-    /** Appends one finished combination. Flushed per row so a kill loses nothing. */
+    /** Appends one finished combination. Written and closed per row so a kill loses nothing. */
     private void appendBatchResult(String fp, String key, SsOptResult r) {
         try (java.io.PrintWriter pw = new java.io.PrintWriter(
                 new java.io.FileWriter(BATCH_FILE, true))) {
-            pw.printf("%s,%s,%d,%d,%d,%d,%b,%.6f,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d%n",
+            pw.printf("%s,%s,%d,%d,%d,%d,%b,%.6f,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,"
+                            + "%.4f,%.4f,%d,%b,%d,%b,%.2f,%d,%d,%d,%d,%d,%d,%d,%.4f,%d,%s,%s%n",
                     fp, key, r.bobYear, r.bobMonth, r.joYear, r.joMonth, r.feasible,
                     r.actualPoS, r.feasMin, r.minSurplus, r.minGoGoSurplus, r.minSlowGoSurplus,
                     r.finalYearsDraw, r.endingBalance, r.survivorSpendable, r.survivorSS,
-                    r.combinedAnnual, r.bindFloor == null ? "" : r.bindFloor, r.shortfall);
-        } catch (Exception ex) { /* disk trouble must not kill a 9-hour run */ }
+                    r.combinedAnnual, r.bindFloor == null ? "" : r.bindFloor, r.shortfall,
+                    r.bobMonthly, r.joMonthly, r.feasMinYear, r.dollarsReal,
+                    r.survivorYears, r.spendableIsCouple, r.coupleSpendable,
+                    r.floorGreen, r.floorGoGo, r.floorSlowGo, r.floorPoS,
+                    r.marginGreen, r.marginGoGo, r.marginSlowGo, r.marginPoS, r.bindMargin,
+                    encodeMisses(r.violations), encodeMisses(r.gracedDips));
+        } catch (Exception ex) { /* disk trouble must not kill a nine-hour run */ }
     }
 
     // v9: candidate claim months from (startY,startM) to age 70, stepping by
@@ -5379,13 +5474,12 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
     private void populateOptTable(java.util.List<SsOptResult> results,
                                   int manBY, int manBM, int womanBY, int womanBM,
-                                  int manPIA, int womanPIA, int infeasMode) {
+                                  int manPIA, int womanPIA) {
         // Cache for real/nominal toggle refresh
         lastOptResults  = results;
         lastOptManBY    = manBY;  lastOptManBM   = manBM;
         lastOptWomanBY  = womanBY; lastOptWomanBM = womanBM;
         lastOptManPIA   = manPIA;  lastOptWomanPIA = womanPIA;
-        lastOptInfeasMode = infeasMode;
 
         tblOptModel.setRowCount(0);
         optRowDates.clear();
