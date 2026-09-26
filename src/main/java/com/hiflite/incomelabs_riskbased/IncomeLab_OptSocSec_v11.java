@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v11.java
-// Last modified: Friday, September 25, 2026 at 02:20 PM MST (UTC-7)
+// Last modified: Friday, September 25, 2026 at 09:25 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v11";
-    private static final String BUILD_STAMP = "Friday, September 25, 2026 at 02:20 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Friday, September 25, 2026 at 09:25 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -281,6 +281,16 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // == SS Optimizer fields ================================================
     private JCheckBox  chkOptimize;                  // true = scan, false = manual
     private JLabel     lblOptStatus;
+    /**
+     * v18: the plan fingerprint, in a control you can SELECT and copy.
+     *
+     * It was published to lblOptStatus, which is (a) a JLabel, whose text no mouse
+     * can highlight, and (b) overwritten by the progress line on the very next
+     * combination -- so it was gone a fraction of a second after it appeared. The
+     * one number needed to diagnose a batch that will not resume was, in practice,
+     * unreadable. It gets its own persistent, copyable field.
+     */
+    private javax.swing.JTextField tfOptFingerprint;
     private JButton    btnRunOpt;
     // Stress Test tab (v3)
     private JButton    btnRunStress;
@@ -3628,7 +3638,14 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "quicker. Every finished combination is appended to <tt>incomelab_ssbatch.csv</tt> the "
                 + "moment it completes in <tt>~/.retirement_utils/.incomelab/</tt> &mdash; a fixed location, not "
                 + "wherever the app happened to be launched from &mdash; tagged with a SHA-256 fingerprint of "
-                + "the plan, so an interrupted batch "
+                + "the plan. The claim dates the batch varies are excluded from that hash, as are the four SS "
+                + "figures derived from them (monthly benefit and annual amount for each spouse) &mdash; "
+                + "otherwise the hash would move whenever the SS spinners did, and a finished batch would "
+                + "stop matching after a restart or after clicking a row. The file path is shown in the status line when a batch "
+                + "starts, and the fingerprint sits in its own selectable field beside Run SS Optimizer "
+                + "&mdash; click and drag to copy it. It stays put while the progress line scrolls, so a file that fails to match can be diagnosed without picking the hash "
+                + "out of the file. The first line of a new file is a CSV header naming all 37 columns. "
+                + "An interrupted batch "
                 + "costs one run rather than the whole night &mdash; press Run again and it resumes. Change any "
                 + "input that would alter a result and the fingerprint changes, so a stale file is never "
                 + "silently reused. Each row stores its full working as well as its results &mdash; every "
@@ -3880,8 +3897,30 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     : "Manual mode: enter SS start dates in the input panel.");
         });
 
+        // v18: read-only but SELECTABLE. A JTextField with no border and no fill
+        // reads as a label and behaves as text: click, drag, Ctrl-C.
+        tfOptFingerprint = new javax.swing.JTextField("--", 18);
+        tfOptFingerprint.setEditable(false);
+        tfOptFingerprint.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 2, 0, 2));
+        tfOptFingerprint.setOpaque(false);
+        tfOptFingerprint.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        tfOptFingerprint.setForeground(new Color(60, 60, 60));
+        tfOptFingerprint.setToolTipText("<html><b>Plan fingerprint</b><br>"
+                + "The tag every saved row is filed and matched under. Select it and copy<br>"
+                + "if you want a record of which batch a results file belongs to.<br><br>"
+                + "It is a hash of every input that would change a result &mdash; but NOT the<br>"
+                + "SS claim dates (those are what the batch varies) and NOT the figures<br>"
+                + "derived from them. Change a floor, the grid, a balance, the fidelity or<br>"
+                + "the Real/Nominal toggle and it changes, and a saved batch stops matching.<br><br>"
+                + "Set when a batch starts; it stays put while progress scrolls below.</html>");
+        JLabel lblFpCaption = new JLabel("Fingerprint:");
+        lblFpCaption.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        lblFpCaption.setForeground(new Color(60, 60, 60));
+
         ctrlRow.add(btnRunOpt);
         ctrlRow.add(btnCancelOpt);
+        ctrlRow.add(lblFpCaption);
+        ctrlRow.add(tfOptFingerprint);
         ctrlRow.add(lblOptStatus);
 
         // == v9 Option-2 objective controls: travel floors, buffer, grid, fidelity,
@@ -4543,11 +4582,31 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         java.io.File resultsFile = batchFile();
         // v15: say WHERE the results go, before nine hours start. A path the user can
         // see is a path they can check.
-        publish.accept("Results file: " + resultsFile.getAbsolutePath());
+        // v16: and say WHAT the fingerprint is. It is the tag every row is filed and
+        // matched under, and without it on screen a file that fails to match can only
+        // be diagnosed by reverse-engineering the hash out of the file itself. That
+        // cost a nine-hour monthly batch once; it should not cost another.
+        // v18: the fingerprint goes to its own persistent field, not into the status
+        // line the progress messages overwrite.
+        final String fpShown = fp;
+        if (tfOptFingerprint != null)
+            SwingUtilities.invokeLater(() -> tfOptFingerprint.setText(fpShown));
+        // Still published as text as well, so the headless run prints it to stdout.
+        publish.accept("Results file: " + resultsFile.getAbsolutePath()
+                + "   |   fingerprint: " + fp);
         java.util.Map<String, SsOptResult> onDisk = loadBatchResults(fp);
-        if (!onDisk.isEmpty())
-            publish.accept(String.format("Resuming: %,d of %,d already on disk (%s)",
-                    onDisk.size(), total, resultsFile.getAbsolutePath()));
+        int rowsInFile = countBatchRows(resultsFile);
+        if (!onDisk.isEmpty()) {
+            publish.accept(String.format("Resuming: %,d of %,d already on disk.", onDisk.size(), total));
+        } else if (rowsInFile > 0) {
+            // v16: the file has results, but none of them are THIS plan's. Say so
+            // plainly instead of silently starting from zero -- it usually means an
+            // input moved, and it is the one moment the user can still stop and check.
+            publish.accept(String.format(
+                    "NOTE: the results file holds %,d row(s), but NONE carry this plan's "
+                            + "fingerprint (%s) -- an input differs, so all %,d combinations "
+                            + "will be run from scratch.", rowsInFile, fp, total));
+        }
 
         java.util.List<SsOptResult> results = new java.util.ArrayList<>();
         int done = 0, ran = 0;
@@ -4657,6 +4716,24 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
      */
     private static final String BATCH_DIR_REL  = ".retirement_utils/.incomelab";
     private static final String BATCH_FILE_NAME = "incomelab_ssbatch.csv";
+    /**
+     * v16: the column names, written once as the first line of a new results file.
+     *
+     * The reader needs no special case for it: every data line is matched on its
+     * fingerprint in column 1, and "fingerprint" is never a 16-hex hash, so the
+     * header is skipped by the same test that skips another batch's rows.
+     *
+     * violations and graced_dips are sub-encoded -- '|' between years, ':' within,
+     * as year:surplus:balance:floor:floor_level.
+     */
+    private static final String BATCH_HEADER =
+            "fingerprint,key,user_ss_year,user_ss_month,spouse_ss_year,spouse_ss_month,"
+                    + "feasible,actual_pos,feasibility_min,min_surplus,min_gogo_surplus,min_slowgo_surplus,"
+                    + "final_years_draw,ending_balance,survivor_spendable,survivor_ss,combined_annual,"
+                    + "binding_floor,shortfall,user_monthly_ss,spouse_monthly_ss,feas_min_year,dollars_real,"
+                    + "survivor_years,spendable_is_couple,couple_spendable,floor_green,floor_gogo,"
+                    + "floor_slowgo,floor_pos,margin_green,margin_gogo,margin_slowgo,margin_pos,"
+                    + "bind_margin,violations,graced_dips";
     /** First write failure of the current batch, or null. Reported, never swallowed. */
     private volatile String batchWriteError = null;
 
@@ -4667,17 +4744,65 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         return new java.io.File(dir, BATCH_FILE_NAME);
     }
 
+    /** v16: write the column names, but only into a file that has none yet. */
+    private static void ensureBatchHeader(java.io.File f) {
+        if (f.exists() && f.length() > 0) return;
+        try (java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter(f, true))) {
+            pw.println(BATCH_HEADER);
+        } catch (Exception ignore) { /* the append that follows reports any real trouble */ }
+    }
+
+    /** v16: how many DATA rows the file holds, across every batch in it. */
+    private static int countBatchRows(java.io.File f) {
+        if (!f.exists()) return 0;
+        int n = 0;
+        try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
+            String line;
+            while ((line = br.readLine()) != null)
+                if (!line.isEmpty() && !line.startsWith("fingerprint,")) n++;
+        } catch (Exception ignore) { }
+        return n;
+    }
+
+    /**
+     * v17: fields kept OUT of the fingerprint.
+     *
+     * The first four are the claim dates the batch varies -- hashing them would give
+     * every combination its own fingerprint and make resume impossible.
+     *
+     * The last four are the bug this list exists to close. readInputs DERIVES them
+     * from the claim dates:
+     *
+     *     manSSMonthly = calcSSMonthlyBenefit(manPIA, birth..., manSSStartYear, manSSStartMonth)
+     *     manSSAmount  = round(manSSMonthly * 12)                  (and the spouse pair)
+     *
+     * so the hash silently depended on whatever dates happened to be sitting in the
+     * SS spinners when Run was pressed. Restart the app, load a scenario, or click an
+     * optimizer row -- the spinners move, the derived amounts move, the fingerprint
+     * moves, and a finished batch stops matching. It cost a nine-hour monthly run.
+     *
+     * Excluding them loses nothing: they are a pure function of PIA, birth date and
+     * claim date, and PIA and birth date are both hashed.
+     */
+    private static final java.util.Set<String> FP_EXCLUDE = java.util.Set.of(
+            "manSSStartYear", "manSSStartMonth", "womanSSStartYear", "womanSSStartMonth",
+            "manSSMonthly",   "womanSSMonthly",  "manSSAmount",      "womanSSAmount");
+
     private String batchFingerprint(BatchCfg c) {
         SimInputs in = c.base;
         StringBuilder sb = new StringBuilder();
         try {
-            for (java.lang.reflect.Field f : SimInputs.class.getDeclaredFields()) {
+            // v17: sorted by NAME, not left in getDeclaredFields() order. That order is
+            // not guaranteed by the JVM spec, and a hash whose input order could shift
+            // between runs is a resume that fails for no visible reason.
+            java.util.List<java.lang.reflect.Field> fields =
+                    new java.util.ArrayList<>(java.util.Arrays.asList(SimInputs.class.getDeclaredFields()));
+            fields.sort(java.util.Comparator.comparing(java.lang.reflect.Field::getName));
+            for (java.lang.reflect.Field f : fields) {
                 if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
-                f.setAccessible(true);
-                // The claim dates are what the batch VARIES, so they must not enter
-                // the fingerprint or every combination would hash differently.
                 String n = f.getName();
-                if (n.startsWith("manSSStart") || n.startsWith("womanSSStart")) continue;
+                if (FP_EXCLUDE.contains(n)) continue;
+                f.setAccessible(true);
                 sb.append(n).append('=').append(f.get(in)).append(';');
             }
         } catch (Exception ex) { return "nofp"; }
@@ -4799,8 +4924,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
     /** Appends one finished combination. Written and closed per row so a kill loses nothing. */
     private void appendBatchResult(String fp, String key, SsOptResult r) {
+        java.io.File out = batchFile();
+        ensureBatchHeader(out);
         try (java.io.PrintWriter pw = new java.io.PrintWriter(
-                new java.io.FileWriter(batchFile(), true))) {
+                new java.io.FileWriter(out, true))) {
             pw.printf("%s,%s,%d,%d,%d,%d,%b,%.6f,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,"
                             + "%.4f,%.4f,%d,%b,%d,%b,%.2f,%d,%d,%d,%d,%d,%d,%d,%.4f,%d,%s,%s%n",
                     fp, key, r.bobYear, r.bobMonth, r.joYear, r.joMonth, r.feasible,
@@ -10948,6 +11075,8 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             IncomeLab_OptSocSec_v11 app = holder[0];
             app.loadScenarioFromFile(f, null, null);
             System.out.println("results  : " + batchFile().getAbsolutePath());
+            System.out.println("           (the plan fingerprint is printed when the batch starts)");
+            System.out.println("           the GUI shows it in a copyable field beside Run SS Optimizer");
             System.out.println("running -- interrupt at any time; finished rows are kept.");
             app.runSsOptimizerBlocking();
             System.out.println("done.");
