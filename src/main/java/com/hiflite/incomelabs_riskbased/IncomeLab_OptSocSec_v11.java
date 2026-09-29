@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v11.java
-// Last modified: Friday, September 25, 2026 at 09:25 PM MST (UTC-7)
+// Last modified: Sunday, September 27, 2026 at 07:29 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v11";
-    private static final String BUILD_STAMP = "Friday, September 25, 2026 at 09:25 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, September 27, 2026 at 07:29 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -282,7 +282,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private JCheckBox  chkOptimize;                  // true = scan, false = manual
     private JLabel     lblOptStatus;
     /**
-     * v18: the plan fingerprint, in a control you can SELECT and copy.
+     * v11 2026-09-27: the plan fingerprint, in a control you can SELECT and copy.
      *
      * It was published to lblOptStatus, which is (a) a JLabel, whose text no mouse
      * can highlight, and (b) overwritten by the progress line on the very next
@@ -322,8 +322,14 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private JLabel            lblActualPoS, lblMedianFinal, lblYr10Wd, lblInitRate;
     private JTable            tblPro;
     private DefaultTableModel tblProModel;
-    // v9: Pro PoS column picker state. Model-column indices the user has hidden,
-    // and indices marked non-hideable (protected). Model index 6 (Rate drift) is
+    // v9/v19: Pro PoS column picker state. Model-column indices the user has hidden,
+    // and indices whose SHOW STATE IS LOCKED (protected).
+    //
+    // v19 changed what Protect means. It used to mean "cannot be hidden", so ticking
+    // Protect on a column you had just unchecked silently re-checked it -- the one
+    // thing you had asked it to preserve was the one thing it undid. It now means
+    // "lock this column's current choice", in BOTH directions: a protected shown
+    // column stays shown, a protected hidden column stays hidden. Model index 6 (Rate drift) is
     // permanently hidden by the engine and is never offered in the picker. The
     // picker, apply helper, and per-scenario save/load all key on MODEL indices,
     // matching the tooltip switches (which use convertColumnIndexToModel), so the
@@ -332,6 +338,29 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private final java.util.Set<Integer> proProtectedCols =
             new java.util.TreeSet<>(java.util.Arrays.asList(0, 1)); // User Age, Cal yr
     private static final int PRO_RATE_DRIFT_COL = 6;   // engine-hidden, never in picker
+
+    /**
+     * v11 2026-09-27: the ONE rule for normalising the column sets, shared by the picker's OK
+     * handler and the scenario loader.
+     *
+     * It exists because the wrong rule used to be written out twice -- once in each
+     * of those places -- and both said "a protected column can never be hidden":
+     *
+     *     proHiddenCols.removeAll(proProtectedCols);
+     *
+     * which meant ticking Protect on a column you had just hidden immediately
+     * un-hid it, and every scenario load un-hid it again. Protect now locks a
+     * column's choice in both directions, so the only normalisation left is the
+     * engine-hidden Rate drift column, which the user never manages.
+     *
+     * Static and free of Swing so the harness can exercise it directly.
+     */
+    static void normaliseColumnSets(java.util.Set<Integer> hidden,
+                                    java.util.Set<Integer> protectedCols) {
+        hidden.remove(PRO_RATE_DRIFT_COL);
+        protectedCols.remove(PRO_RATE_DRIFT_COL);
+        // Deliberately nothing else: a protected column keeps whatever it was set to.
+    }
     private String[] proColNames;                      // model-index -> header text
     private ProChartPanel     chartPanel;
     private JComboBox<String> cmbChartType;
@@ -660,21 +689,21 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         spMcSolvePaths.setToolTipText("<html><b>Monte Carlo solve paths</b><br>"
                 + "Number of simulation paths per binary-search iteration<br>"
                 + "used to find the target PoS withdrawal amount.<br><br>"
-                + "<b>Default: 800</b> -- high accuracy.<br>"
+                + "<b>Default: 1,000</b> -- high accuracy.<br>"
                 + "200 = ~4x faster, ~$500 variance. 100 = ~8x faster, ~$1,000 variance.<br>"
                 + "Biggest single driver of total runtime.</html>");
         spBinaryIters  = spinI(25, 8, 30, 1, "#");
         spBinaryIters.setToolTipText("<html><b>Binary search iterations</b><br>"
                 + "Number of iterations to narrow the withdrawal amount that<br>"
                 + "achieves the target probability of success.<br><br>"
-                + "<b>Default: 22</b> -- converges to within ~$1.<br>"
+                + "<b>Default: 25</b> -- converges to within ~$1.<br>"
                 + "16 = within ~$50. 12 = within ~$500.<br>"
                 + "Smallest runtime impact of the three parameters.</html>");
         spMcFanPaths   = spinI(500, 20, 2500, 20, "#,###");
         spMcFanPaths.setToolTipText("<html><b>Fan chart paths</b><br>"
                 + "Full simulation paths used to draw the fan chart and<br>"
                 + "compute the actual PoS metric shown at the top.<br><br>"
-                + "<b>Default: 400</b> -- smooth fan chart, stable PoS reading.<br>"
+                + "<b>Default: 500</b> -- smooth fan chart, stable PoS reading.<br>"
                 + "100 = ~4x faster but noisier. 50 = rough but usable for quick checks.<br>"
                 + "Each fan path re-solves the withdrawal annually against its current balance -- most expensive per path.</html>");
 
@@ -693,7 +722,8 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         spMcFanPaths.addChangeListener(refreshRunTooltip);
         spHorizon.addChangeListener(refreshRunTooltip);
 
-        spGkPreRate = spinD(4.0, 1.0, 10.0, 0.1, "0.0#");
+        // v11 2026-09-27: default raised 4.0% -> 5.4%.
+        spGkPreRate = spinD(5.4, 1.0, 10.0, 0.1, "0.0#");
         spGkPreRate.setToolTipText("<html><b>GK only -- initial withdrawal rate (%)</b><br>"
                 + "Used exclusively by the Guyton-Klinger tab.<br>"
                 + "Has no effect on the Income PoS tab.<br><br>"
@@ -701,7 +731,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "balance sets the GK withdrawal (prorated by start month).<br>"
                 + "From year 2 onward, CPR\u25bc / PR\u25b2 / PMR\u2070 guardrail rules engage,<br>"
                 + "using this rate as the permanent benchmark for all comparisons.<br><br>"
-                + "<b>Default: 4.0%</b></html>");
+                + "<b>Default: 5.4%</b></html>");
 
         inner.add(card("Portfolio & Simulation", new Object[]{
                 "Simulation start year",       spSimStartYear,
@@ -1373,27 +1403,60 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         refreshStreamFieldsEnabled();   // v11: initial stream enable/greyed state
 
         // == Pro PoS advisory guardrails ===================================
+        // v11 2026-09-27: these two spinners are still BUILT and still READ, but
+        // their card is no longer added to the Input panel. See the deactivation
+        // note below the tooltips for why the objects must continue to exist.
         spProPosUpperGuardrail = spinD(20.0, 5.0, 50.0, 1.0, "0.0#");
         spProPosUpperGuardrail.setToolTipText("<html><b>Pro PoS -- Upper advisory guardrail (raise alert)</b><br>"
-                + "Used ONLY by the Pro PoS table's Alert column. It is <b>informational</b> --<br>"
+                + "Advisory only. It is <b>informational</b> --<br>"
                 + "it does NOT change any withdrawal amount.<br><br>"
                 + "If this year's base withdrawal RATE (draw / balance, go-go removed) rises<br>"
-                + "more than this % <b>above</b> the Year-1 base rate, the table flags a<br>"
-                + "<b>[^] above</b> flag in the Rate drift column, signalling the portfolio has<br>"
-                + "could sustainably spend more.<br><b>Default: 20%</b></html>");
+                + "more than this % <b>above</b> the Year-1 base rate, the table colours the<br>"
+                + "<b>Wd %</b> figure <font color='#155E2D'><b>deep green</b></font>, signalling that the portfolio has<br>"
+                + "grown faster than plan and could sustainably spend more.<br>"
+                + "<b>Default: 20%</b></html>");
         spProPosLowerGuardrail = spinD(20.0, 5.0, 50.0, 1.0, "0.0#");
         spProPosLowerGuardrail.setToolTipText("<html><b>Pro PoS -- Lower advisory guardrail (cut alert)</b><br>"
-                + "Used ONLY by the Pro PoS table's Alert column. It is <b>informational</b> --<br>"
+                + "Advisory only. It is <b>informational</b> --<br>"
                 + "it does NOT change any withdrawal amount.<br><br>"
                 + "If this year's base withdrawal RATE (draw / balance, go-go removed) falls<br>"
-                + "more than this % <b>below</b> the Year-1 base rate, the table flags a<br>"
-                + "<b>[v] below</b> flag in the Rate drift column, suggesting you re-run and<br>"
+                + "more than this % <b>below</b> the Year-1 base rate, the table colours the<br>"
+                + "<b>Wd %</b> figure <font color='#A32D2D'><b>red</b></font>, suggesting you re-run the plan and<br>"
+                + "consider trimming discretionary spend.<br>"
                 + "<b>Default: 20%</b></html>");
-        inner.add(card("Pro PoS Guardrails (advisory alerts only)", new Object[]{
-                "Upper guardrail (% above yr1, raise alert)", spProPosUpperGuardrail,
-                "Lower guardrail (% below yr1, cut alert)",   spProPosLowerGuardrail,
-        }));
-        inner.add(Box.createVerticalStrut(4));
+
+        // v11 2026-09-27: CARD DEACTIVATED -- deliberately built but NOT added.
+        //
+        // The two spinners above are still constructed, still hold 20.0, and are
+        // still read by readInputs() into SimInputs.proPosUpper/LowerGuardrail.
+        // Everything downstream is therefore UNCHANGED and still live:
+        //   - Wd % (col 5) colour coding         renderer, "col == 5" branch
+        //   - Wd % cell tooltip, case 5          the "numbers behind the colour" block
+        //   - Rate drift column tooltip          COL_ALERT case
+        //   - "Re-run if portfolio falls below"  refreshBaselineLine()
+        //
+        // Why the spinner OBJECTS must survive rather than be nulled out:
+        //   1. readInputs() calls dv() on both with NO null guard -> NPE on startup.
+        //   2. batchFingerprint() hashes EVERY non-static SimInputs field except the
+        //      eight in FP_EXCLUDE. Deleting these two fields would change the hash
+        //      and orphan every SS Optimizer batch already saved to disk. Keeping
+        //      them pinned at 20.0 keeps the fingerprint byte-identical to every
+        //      run made before this build.
+        //
+        // Hidden because the control went unused: the alerts are advisory, nothing
+        // on the Pro PoS tab can act on them, and the +/-20% band was never retuned
+        // off its default. A side effect worth knowing: with the card gone the
+        // spinners can no longer move, which also closes a latent orphan path --
+        // they were never persisted to the scenario file, so changing one, running
+        // a batch and restarting used to reset it to 20.0 and lose the batch.
+        //
+        // To restore, uncomment the four lines below. Nothing else needs touching.
+        //
+        // inner.add(card("Pro PoS Guardrails (advisory alerts only)", new Object[]{
+        //         "Upper guardrail (% above yr1, raise alert)", spProPosUpperGuardrail,
+        //         "Lower guardrail (% below yr1, cut alert)",   spProPosLowerGuardrail,
+        // }));
+        // inner.add(Box.createVerticalStrut(4));
 
         // == Historical Stress Scenario card =====================================
         chkSSColaTracksInfl = new JCheckBox("SS COLA tracks simulated inflation");
@@ -2367,7 +2430,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                             + "Required Minimum Distribution from the spouse's traditional IRA + 401K.<br>"
                             + "Begins age 75 (SECURE 2.0, born after 1960).</html>";
                     case 20 -> "<html><b>Combined RMD</b><br>"
-                            + "Sum of man + woman RMDs.<br>"
+                            + "Sum of User + Spouse RMDs.<br>"
                             + "Orange = RMD exceeds planned withdrawal; overage retained in Money Mkt (v8).</html>";
                     case 21 -> "<html><b>-> Roth/MM (year) -- RMD overage, per year</b><br>"
                             + "= max(0, Combined RMD - Actual wd). A <b>yearly flow</b>, not a total.<br>"
@@ -2567,8 +2630,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
         // v9: toolbar above the table holding the column picker button.
         javax.swing.JButton btnCols = new javax.swing.JButton("Columns\u2026");
-        btnCols.setToolTipText("Choose which Pro PoS columns to show. "
-                + "Protected columns can't be hidden. Saved into the scenario file.");
+        btnCols.setToolTipText("<html>Choose which Pro PoS columns to show.<br>"
+                + "<b>Protect</b> locks a column's current setting, shown or hidden.<br>"
+                + "Saved into the scenario file.</html>");
         btnCols.addActionListener(e -> showProColumnPicker());
         JPanel bar = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 2));
         bar.add(btnCols);
@@ -2629,10 +2693,12 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     }
 
     // Modal picker: a flat checklist of every column (except the engine-hidden
-    // Rate drift). Each row has a "Show" checkbox and a "Protect" (non-hideable)
-    // checkbox. Protecting a column disables and forces-on its Show box so it
-    // cannot be hidden. Reset restores all-shown. OK applies and is picked up by
-    // the next save into the .ilscen file.
+    // Rate drift). Each row has a "Show" checkbox and a "Protect" checkbox.
+    //
+    // v11 2026-09-27: Protecting a column LOCKS its current Show state -- it disables the Show
+    // box without altering it, so a hidden column stays hidden and a shown column
+    // stays shown. Reset restores visibility for unprotected columns only. OK
+    // applies and is picked up by the next save into the .ilscen file.
     private void showProColumnPicker() {
         if (tblProModel == null) return;
         int n = tblProModel.getColumnCount();
@@ -2665,12 +2731,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             prot.setBackground(Color.WHITE);
             prot.setSelected(proProtectedCols.contains(idx));
 
-            // A protected column cannot be hidden: force Show on and disable it.
-            if (prot.isSelected()) { show.setSelected(true); show.setEnabled(false); }
-            prot.addActionListener(e -> {
-                if (prot.isSelected()) { show.setSelected(true); show.setEnabled(false); }
-                else show.setEnabled(true);
-            });
+            // v11 2026-09-27: Protect LOCKS the current Show state -- it does not change it.
+            // Disable the Show box so the choice cannot be altered by accident, and
+            // leave whatever it is showing alone.
+            if (prot.isSelected()) show.setEnabled(false);
+            prot.addActionListener(e -> show.setEnabled(!prot.isSelected()));
 
             showBox[idx]    = show;
             protectBox[idx] = prot;
@@ -2689,15 +2754,20 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         reset.addActionListener(e -> {
             for (int mi = 0; mi < n; mi++) {
                 if (showBox[mi] == null) continue;
+                // v11 2026-09-27: protection means "do not touch this one" -- so Reset restores
+                // visibility for unprotected columns and leaves locked ones exactly
+                // as they are, hidden or shown. Untick Protect first to release one.
+                if (protectBox[mi].isSelected()) continue;
                 showBox[mi].setSelected(true);
-                // leave Protect flags as-is; reset is about visibility, not protection
             }
         });
 
         JPanel wrap = new JPanel(new BorderLayout(0, 8));
         wrap.add(new JLabel("<html><b>Choose which Pro PoS columns to show.</b><br>"
-                + "Protected columns cannot be hidden. This selection is saved into<br>"
-                + "the scenario (.ilscen) file.</html>"), BorderLayout.NORTH);
+                + "<b>Protect</b> locks a column's current setting &mdash; shown stays shown,<br>"
+                + "hidden stays hidden &mdash; so it cannot be changed by accident or by<br>"
+                + "Reset. Untick Protect to release it. Saved into the scenario<br>"
+                + "(.ilscen) file.</html>"), BorderLayout.NORTH);
         wrap.add(sp, BorderLayout.CENTER);
         JPanel south = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
         south.add(reset);
@@ -2717,8 +2787,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             if (protectBox[mi].isSelected()) proProtectedCols.add(mi);
             if (!showBox[mi].isSelected())   proHiddenCols.add(mi);
         }
-        // A protected column can never be hidden, even if some other state tried to.
-        proHiddenCols.removeAll(proProtectedCols);
+        // v11 2026-09-27: no removeAll. A protected column keeps whatever the user chose, hidden
+        // included -- that is the whole point of protecting it.
+        normaliseColumnSets(proHiddenCols, proProtectedCols);
         applyProColumnVisibility();
     }
 
@@ -2850,6 +2921,21 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "whatever pins the target PoS, so the plan's risk stays steady while the paycheck moves. There "
                 + "is no spending-changing guardrail here by design -- when you re-pin PoS every period, there is "
                 + "no drift to catch. The guardrail alerts on this tab are advisory only.</p>"
+
+                // v11 2026-09-27: records that the guardrail INPUT card was hidden
+                // while the guardrail SIGNAL stayed live. Without this the colour
+                // coding looks like it comes from nowhere.
+                + "<p><b>The guardrail input card is hidden.</b> The two spinners that set the alert "
+                + "band (+20% / -20% against the Year-1 base withdrawal rate) were removed from the "
+                + "Input panel because the control went unused: the band was never retuned off its "
+                + "default, and by design nothing on this tab can act on it. <b>The signal itself is "
+                + "still fully live.</b> The Wd % figure still turns "
+                + "<font color='#155E2D'><b>deep green</b></font> when the base rate sits at or above "
+                + "the upper band and <font color='#A32D2D'><b>red</b></font> at or below the lower "
+                + "band, and both the Wd % cell tooltip and the Rate drift column tooltip still report "
+                + "the numbers behind the colour. Only the ability to move the band was withdrawn. The "
+                + "values remain part of the saved plan fingerprint, so hiding the card does not "
+                + "invalidate any stored SS Optimizer batch.</p>"
 
                 + "<p><b>Income Lab (risk-based guardrails).</b> IL defines its trigger in risk space: a PoS "
                 + "level, which folds in taxes, Social Security timing, longevity, mortality, and inflation. It "
@@ -3338,7 +3424,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "alone from pushing MAGI over an IRMAA threshold or into the 24% bracket. A go-go multiplier "
                 + "that is higher than expected can breach either limit on its own. You can look for a Roth "
                 + "conversion column of zeroes for hints of where you may need to look.</p>"
-                + "<p><i>Account note: when the spouse retires, her 401(k) balances roll over (trustee-to-"
+                + "<p><i>Account note: when the spouse retires, their 401(k) balances roll over (trustee-to-"
                 + "trustee, non-taxable) into EDJ IRAs. The tool treats Traditional IRA and Traditional 401(k) "
                 + "identically for RMD, so this is a label change, not a math change.</i></p>"
 
@@ -3581,9 +3667,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "OFF; both the optimizer and the confirming Pro tab run will use seed 0 and agree within scan-"
                 + "fidelity noise.</p>"
 
-                + "<p><b>What the optimizer maximizes (v12).</b> Through v11 the ranking metric was the "
-                + "<b>survivor's Social Security check</b> &mdash; <i>max(his, hers) &times; 12</i>. That is "
-                + "pure arithmetic on PIA and claim age, so it rises with every month of delay and ranked "
+                + "<p><b>Why the survivor's Social Security check does not rank the table.</b> The obvious "
+                + "metric is the <b>survivor's Social Security check</b> &mdash; <i>max(User, Spouse) &times; 12</i>. That is "
+                + "pure arithmetic on PIA and claim age, so it rises with every month of delay and ranks "
                 + "late claims first without exception. It is the wrong objective. <b>Delaying does not "
                 + "create money.</b> It buys a larger <i>guaranteed floor</i>, and it pays for that floor by "
                 + "draining the portfolio through the bridge years. Measured across a sample of claim pairs "
@@ -3594,7 +3680,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "raise decays &mdash; 8.0%, then 7.4%, then 6.9%. Against that, delaying forgoes the payments "
                 + "you would have drawn AND the market return on the portfolio dollars spent bridging the gap. "
                 + "Net of both, a nominal 8% credit is commonly worth nearer 4%.</p>"
-                + "<p>So v12 ranks on <b>spendable income</b>:</p>"
+                + "<p>The table therefore shows both sides of that trade:</p>"
                 + "<ul>"
                 + "<li><b>Survivor spendable</b> &mdash; the leanest year of "
                 + "<i>total income &minus; tax &minus; medical</i> across the survivor years, i.e. the money "
@@ -3612,7 +3698,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "leanest year of <i>income &minus; tax &minus; medical</i> across the survivor phase. It is "
                 + "not what ranks the table; the final-years draw is. Both are there so the trade-off reads "
                 + "without opening a dialog.</p>"
-                + "<p><b>Ranking (v13).</b> <b>A combination that passes every floor always ranks above one "
+                + "<p><b>How rows are ranked.</b> <b>A combination that passes every floor always ranks above one "
                 + "that does not.</b> Feasibility is a gate, not a preference. Within each block the order "
                 + "is <b>total portfolio withdrawals across the final 5 years</b>, highest first, with the "
                 + "ending balance, then combined annual benefit, then the claim dates as tie-breaks.</p>"
@@ -3622,18 +3708,19 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "that actually separates claim dates is therefore <i>how much can this plan still pay out "
                 + "at the far end of life</i> &mdash; not what is left unspent at the horizon, and not a "
                 + "lifetime total the bridge flattens.</p>"
-                + "<p><b>What was removed in v13, and why.</b> v9 through v12 scored each combination on a "
-                + "few hundred Monte Carlo paths so a scan would finish quickly. Everything else was a patch "
-                + "on the noise that created: a measured noise floor, a borderline tier for rows the scan "
-                + "could not call, a two-stage re-verification of the top rows at full fidelity, a penalty "
-                + "weight so a flip could not move a row dozens of places, and finally a K-seed ensemble. "
-                + "Each patch cost time. A 4,636-combination monthly grid reached nearly two hours &mdash; "
-                + "roughly five times the honest cost of simply running the engine properly.</p>"
-                + "<p>So the original decision was reversed. <b>Each combination now gets one run of the real "
-                + "Pro engine at the full Pro-tab fidelity</b>, and the verdict is read straight off the "
+                // v11 2026-09-27: the "What was removed" changelog paragraph was deleted. It
+                // described the removal of machinery no user outside development ever ran,
+                // and its closing arithmetic ("nearly two hours -- roughly five times the
+                // honest cost of running the engine properly") contradicted the paragraph
+                // directly below it, which correctly states full fidelity costs about nine
+                // hours. The one genuinely useful thing in it -- why there is no fast scan --
+                // is kept, in the last sentence here.
+                + "<p><b>How each combination is scored.</b> Each combination gets one run of the real "
+                + "Pro engine at the full Pro-tab fidelity, and the verdict is read straight off the "
                 + "resulting Surplus/gap column &mdash; the same column, the same stochastic median, that the "
-                + "Pro PoS tab puts on screen. There is nothing left to compensate for, so the compensation "
-                + "is gone along with the Scan paths, fan, Verify top, MC runs and Penalty controls.</p>"
+                + "Pro PoS tab puts on screen. There is no reduced-fidelity scan: a faster pass produces "
+                + "noise, and correcting for that noise costs more than running the engine properly in the "
+                + "first place.</p>"
                 + "<p><b>What it costs.</b> About 9 hours for 4,636 combinations; a quarterly grid is far "
                 + "quicker. Every finished combination is appended to <tt>incomelab_ssbatch.csv</tt> the "
                 + "moment it completes in <tt>~/.retirement_utils/.incomelab/</tt> &mdash; a fixed location, not "
@@ -3787,7 +3874,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     /** v11: months per step for each entry of cmbOptGrid (year/half/quarter/month). */
     private static final int[] OPT_GRID_STEP = { 12, 6, 3, 1 };
     /**
-     * v13: how many years at the END of the horizon the rank metric sums.
+     * v11 2026-09-27: how many years at the END of the horizon the rank metric sums.
      *
      * Five. The claim decision is a bet on longevity, so the honest scoreboard is
      * what the portfolio can still pay out at the far end of life -- not what is
@@ -3804,10 +3891,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private static final int OCOL_MINSURP   = 6;
     private static final int OCOL_GOGO      = 7;
     private static final int OCOL_SLOWGO    = 8;
-    private static final int OCOL_FINALDRAW = 9;    // v13: THE RANK METRIC
-    private static final int OCOL_ENDBAL     = 10;  // v13: left unspent, the tie-break
-    private static final int OCOL_SURVSPEND  = 11;  // v12: leanest survivor year
-    private static final int OCOL_SURVSS     = 12;  // v12: what delay actually buys
+    private static final int OCOL_FINALDRAW = 9;    // v11 2026-09-27: THE RANK METRIC
+    private static final int OCOL_ENDBAL     = 10;  // v11 2026-09-27: left unspent, the tie-break
+    private static final int OCOL_SURVSPEND  = 11;  // v11 2026-09-27: leanest survivor year
+    private static final int OCOL_SURVSS     = 12;  // v11 2026-09-27: what delay actually buys
     private static final int OCOL_SSFULL     = 13;
 
     private JPanel buildSsOptimizerPanel() {
@@ -3897,7 +3984,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     : "Manual mode: enter SS start dates in the input panel.");
         });
 
-        // v18: read-only but SELECTABLE. A JTextField with no border and no fill
+        // v11 2026-09-27: read-only but SELECTABLE. A JTextField with no border and no fill
         // reads as a label and behaves as text: click, drag, Ctrl-C.
         tfOptFingerprint = new javax.swing.JTextField("--", 18);
         tfOptFingerprint.setEditable(false);
@@ -3979,7 +4066,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "The status line shows the real count before the scan starts, and Cancel<br>"
                 + "stops it at any time.</html>");
 
-        // v13: the scan-fidelity, re-verify, MC-runs and penalty controls are GONE.
+        // v11 2026-09-27: the scan-fidelity, re-verify, MC-runs and penalty controls are GONE.
         // Every combination is now scored once at the full Pro-tab fidelity set on
         // the Portfolio panel, so there is no reduced fidelity to tune, nothing to
         // re-verify, no ensemble to size and no penalty weight to order failures
@@ -4055,9 +4142,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
         // v11: 130 for "Why" inserted at OCOL_WHY -- wide enough for
         // "slow-go -$10,778" without truncation.
-        // v12: one more column -- Survivor spendable (the rank metric) now sits beside
+        // v11 2026-09-27: one more column -- Survivor spendable (the rank metric) now sits beside
         // Survivor SS (what delay buys), so the trade-off reads without a dialog.
-        // v13: "Verified" is gone -- every row is full fidelity. Two new columns
+        // v11 2026-09-27: "Verified" is gone -- every row is full fidelity. Two new columns
         // carry the rank metric and its tie-break.
         int[] optWidths = {40, 110, 110, 60, 100, 150, 100, 110, 110, 120, 110, 130, 110, 110};
         for (int i = 0; i < optWidths.length && i < tblOpt.getColumnCount(); i++)
@@ -4083,7 +4170,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     Object ro = tblOptModel.getValueAt(row, OCOL_RANK);
                     int rank = ro instanceof Integer ? (Integer)ro : 9999;
                     if (col == OCOL_FEASMIN || col == OCOL_WHY) {
-                        // v13: green if the plan passes, red if it fails. The amber
+                        // v11 2026-09-27: green if the plan passes, red if it fails. The amber
                         // "cannot tell" state is gone -- every row is scored at full
                         // fidelity, so there is no third verdict to shade.
                         c.setBackground(feas ? FEAS_GREEN : FEAS_RED);
@@ -4445,7 +4532,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
     // == SS batch runner =====================================================
     //
-    // v13: THIS IS NO LONGER AN OPTIMIZER. It is a batch runner plus a scoreboard.
+    // v11 2026-09-27: THIS IS NO LONGER AN OPTIMIZER. It is a batch runner plus a scoreboard.
     //
     // The whole v9-v12 apparatus -- reduced-fidelity scanning, two-stage
     // re-verification, a measured noise floor, BORDERLINE tiers, a K-seed
@@ -4504,7 +4591,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     }
 
     /**
-     * v13: everything the batch needs, read ON THE EDT before any worker starts.
+     * v11 2026-09-27: everything the batch needs, read ON THE EDT before any worker starts.
      *
      * Swing components must not be read off the event thread, so the snapshot is
      * taken here and the batch never touches a control again. It is also what lets
@@ -4517,7 +4604,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         int goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget, gridStepMo;
         int fullPaths, fullFan, binIters;
         long seed;
-        boolean real;
+        // v11 2026-09-27: `real` is gone. The scorer always works in today's dollars.
     }
 
     private BatchCfg readBatchCfg() {
@@ -4535,12 +4622,12 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         c.gridStepMo  = OPT_GRID_STEP[(cmbOptGrid != null)
                 ? Math.max(0, Math.min(cmbOptGrid.getSelectedIndex(), OPT_GRID_STEP.length - 1))
                 : 0];
-        // v13: the ONLY fidelity now -- the same spinners the Pro tab uses, so the
+        // v11 2026-09-27: the ONLY fidelity now -- the same spinners the Pro tab uses, so the
         // batch's numbers are the Pro tab's numbers.
         c.fullPaths   = iv(spMcSolvePaths);
         c.fullFan     = iv(spMcFanPaths);
         c.binIters    = iv(spBinaryIters);
-        // v14: THE BATCH SEED IS ALWAYS 0, and "Re-randomize each run" is not
+        // v11 2026-09-27: THE BATCH SEED IS ALWAYS 0, and "Re-randomize each run" is not
         // consulted here at all.
         //
         // The batch is a COMPARISON, not a forecast. Its job is to judge thousands
@@ -4557,11 +4644,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // Fixing the seed also means the batch no longer writes runSeedOffset --
         // one less piece of state shared with the Pro tab.
         c.seed        = 0L;
-        c.real        = showRealDollars;
         return c;
     }
 
-    /** v13: the batch itself. Shared verbatim by the GUI worker and headless mode. */
+    /** v11 2026-09-27: the batch itself. Shared verbatim by the GUI worker and headless mode. */
     private void runSsOptimizerCore(BatchCfg c, java.util.function.Consumer<String> publish) {
         java.time.LocalDate today = java.time.LocalDate.now();
         int sy = today.getYear(), sm = today.getMonthValue();
@@ -4573,20 +4659,20 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
         int total = bobMonths.size() * joMonths.size();
 
-        // v13: resume. Each finished combination is appended to disk the moment it
+        // v11 2026-09-27: resume. Each finished combination is appended to disk the moment it
         // completes, tagged with a fingerprint of the inputs and floors. A batch
         // interrupted at hour 8 costs one run, not eight hours, and pressing Run
         // again picks up where it stopped.
         String fp = batchFingerprint(c);
         batchWriteError = null;
         java.io.File resultsFile = batchFile();
-        // v15: say WHERE the results go, before nine hours start. A path the user can
+        // v11 2026-09-27: say WHERE the results go, before nine hours start. A path the user can
         // see is a path they can check.
-        // v16: and say WHAT the fingerprint is. It is the tag every row is filed and
+        // v11 2026-09-27: and say WHAT the fingerprint is. It is the tag every row is filed and
         // matched under, and without it on screen a file that fails to match can only
         // be diagnosed by reverse-engineering the hash out of the file itself. That
         // cost a nine-hour monthly batch once; it should not cost another.
-        // v18: the fingerprint goes to its own persistent field, not into the status
+        // v11 2026-09-27: the fingerprint goes to its own persistent field, not into the status
         // line the progress messages overwrite.
         final String fpShown = fp;
         if (tfOptFingerprint != null)
@@ -4599,7 +4685,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         if (!onDisk.isEmpty()) {
             publish.accept(String.format("Resuming: %,d of %,d already on disk.", onDisk.size(), total));
         } else if (rowsInFile > 0) {
-            // v16: the file has results, but none of them are THIS plan's. Say so
+            // v11 2026-09-27: the file has results, but none of them are THIS plan's. Say so
             // plainly instead of silently starting from zero -- it usually means an
             // input moved, and it is the one moment the user can still stop and check.
             publish.accept(String.format(
@@ -4620,7 +4706,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     r = scoreCombinationPro(
                             c.base, bob[0], bob[1], jo[0], jo[1], c.single,
                             c.goGoFloor, c.slowGoFloor, c.greenBuf, c.termGrace, c.posTarget,
-                            c.fullPaths, c.fullFan, c.binIters, c.seed, c.real, OPT_SCORE_YEARS);
+                            c.fullPaths, c.fullFan, c.binIters, c.seed, OPT_SCORE_YEARS);
                     appendBatchResult(fp, key, r);
                     ran++;
                 }
@@ -4638,7 +4724,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
         rankOptResults(results);
 
-        // v15: a batch that could not write must say so, loudly, once. Silence here
+        // v11 2026-09-27: a batch that could not write must say so, loudly, once. Silence here
         // is how nine hours of work disappears.
         if (batchWriteError != null) {
             String warn = "WARNING: results could NOT be saved to "
@@ -4674,7 +4760,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     }
 
     /**
-     * v13: the batch, run to completion on the calling thread.
+     * v11 2026-09-27: the batch, run to completion on the calling thread.
      *
      * The GUI path wraps the same work in a SwingWorker so the window stays alive;
      * headless has no window to keep alive and must not return before the work is
@@ -4687,7 +4773,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     }
     private boolean headlessBatch = false;
 
-    /** v13: "2h 14m" / "6m 30s" / "45s" -- an ETA a person can act on. */
+    /** v11 2026-09-27: "2h 14m" / "6m 30s" / "45s" -- an ETA a person can act on. */
     private static String humanDuration(long ms) {
         if (ms < 0) ms = 0;
         long s = ms / 1000, h = s / 3600, m = (s % 3600) / 60, ss = s % 60;
@@ -4697,12 +4783,12 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     }
 
     // ------------------------------------------------------------------------
-    // v13: batch persistence. Plain CSV next to the app, one line per finished
+    // v11 2026-09-27: batch persistence. Plain CSV next to the app, one line per finished
     // combination. The fingerprint is a hash of every input that would change a
     // result, so a stale file from different assumptions is never reused.
     // ------------------------------------------------------------------------
     /**
-     * v15: the batch results live in a FIXED location, not the working directory.
+     * v11 2026-09-27: the batch results live in a FIXED location, not the working directory.
      *
      * The old bare filename resolved against user.dir, so where a nine-hour batch
      * landed depended on how the app was launched -- the project root from an IDE,
@@ -4717,7 +4803,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private static final String BATCH_DIR_REL  = ".retirement_utils/.incomelab";
     private static final String BATCH_FILE_NAME = "incomelab_ssbatch.csv";
     /**
-     * v16: the column names, written once as the first line of a new results file.
+     * v11 2026-09-27: the column names, written once as the first line of a new results file.
      *
      * The reader needs no special case for it: every data line is matched on its
      * fingerprint in column 1, and "fingerprint" is never a 16-hex hash, so the
@@ -4744,7 +4830,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         return new java.io.File(dir, BATCH_FILE_NAME);
     }
 
-    /** v16: write the column names, but only into a file that has none yet. */
+    /** v11 2026-09-27: write the column names, but only into a file that has none yet. */
     private static void ensureBatchHeader(java.io.File f) {
         if (f.exists() && f.length() > 0) return;
         try (java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter(f, true))) {
@@ -4752,7 +4838,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         } catch (Exception ignore) { /* the append that follows reports any real trouble */ }
     }
 
-    /** v16: how many DATA rows the file holds, across every batch in it. */
+    /** v11 2026-09-27: how many DATA rows the file holds, across every batch in it. */
     private static int countBatchRows(java.io.File f) {
         if (!f.exists()) return 0;
         int n = 0;
@@ -4765,7 +4851,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     }
 
     /**
-     * v17: fields kept OUT of the fingerprint.
+     * v11 2026-09-27: fields kept OUT of the fingerprint.
      *
      * The first four are the claim dates the batch varies -- hashing them would give
      * every combination its own fingerprint and make resume impossible.
@@ -4783,16 +4869,34 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
      *
      * Excluding them loses nothing: they are a pure function of PIA, birth date and
      * claim date, and PIA and birth date are both hashed.
+     *
+     * v11 2026-09-27: the last five are ADVISORY controls that cannot change a single
+     * scored number, yet were part of plan identity:
+     *
+     *   gkPreRate, gkUpperGuardrail, gkLowerGuardrail
+     *       Guyton-Klinger inputs. The batch runs simulatePro with withGk=false, so
+     *       the GK overlay never executes during an optimizer run.
+     *   proPosUpperGuardrail, proPosLowerGuardrail
+     *       Pro PoS advisory alerts. They colour the Wd % figure and nothing else;
+     *       their input card is not even shown any more.
+     *
+     * None of the five is written to the scenario file either, so each reset to its
+     * hardcoded default on every launch. Move one, run a batch, restart -- the spinner
+     * snapped back, the hash moved, and the batch stopped matching. Excluding them
+     * closes that path for good and costs nothing, because no figure in a result row
+     * depends on any of them.
      */
     private static final java.util.Set<String> FP_EXCLUDE = java.util.Set.of(
             "manSSStartYear", "manSSStartMonth", "womanSSStartYear", "womanSSStartMonth",
-            "manSSMonthly",   "womanSSMonthly",  "manSSAmount",      "womanSSAmount");
+            "manSSMonthly",   "womanSSMonthly",  "manSSAmount",      "womanSSAmount",
+            "gkPreRate",      "gkUpperGuardrail", "gkLowerGuardrail",
+            "proPosUpperGuardrail", "proPosLowerGuardrail");
 
     private String batchFingerprint(BatchCfg c) {
         SimInputs in = c.base;
         StringBuilder sb = new StringBuilder();
         try {
-            // v17: sorted by NAME, not left in getDeclaredFields() order. That order is
+            // v11 2026-09-27: sorted by NAME, not left in getDeclaredFields() order. That order is
             // not guaranteed by the JVM spec, and a hash whose input order could shift
             // between runs is a resume that fails for no visible reason.
             java.util.List<java.lang.reflect.Field> fields =
@@ -4811,9 +4915,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 .append(c.posTarget).append(';').append(c.gridStepMo).append(';')
                 .append(c.fullPaths).append(';').append(c.fullFan).append(';')
                 .append(c.binIters).append(';')
-                // v14: no seed here -- the batch seed is fixed at 0, so the hash identifies
+                // v11 2026-09-27: no seed here -- the batch seed is fixed at 0, so the hash identifies
                 // the PLAN and nothing else. Two runs of the same plan always match.
-                .append(c.real).append(';').append(c.single).append(';').append(OPT_SCORE_YEARS);
+                // v11 2026-09-27: `real` is no longer hashed -- the scorer always works in
+                // today's dollars, so the display toggle cannot change a verdict or an order.
+                .append(c.single).append(';').append(OPT_SCORE_YEARS);
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
             byte[] d = md.digest(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -4824,7 +4930,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     }
 
     /**
-     * v14: encode one FloorMiss list for a CSV cell.
+     * v11 2026-09-27: encode one FloorMiss list for a CSV cell.
      *
      * Commas are the record separator, so entries use '|' and fields ':'. FloorMiss
      * carries only ints and a short floor name ("green" / "go-go" / "slow-go"), none
@@ -4857,7 +4963,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     /**
      * Reads back any rows already recorded under this fingerprint.
      *
-     * v14: restores the row's WORKING as well as its results -- the per-year
+     * v11 2026-09-27: restores the row's WORKING as well as its results -- the per-year
      * violations, the graced dips, the floor levels it was judged against and its
      * margin to each. Without those a resumed row ranked and displayed correctly
      * but its Why dialog was hollow: no failing years, every floor reading zero.
@@ -4940,7 +5046,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                     r.marginGreen, r.marginGoGo, r.marginSlowGo, r.marginPoS, r.bindMargin,
                     encodeMisses(r.violations), encodeMisses(r.gracedDips));
         } catch (Exception ex) {
-            // v15: disk trouble must not kill a nine-hour run -- but it must not be
+            // v11 2026-09-27: disk trouble must not kill a nine-hour run -- but it must not be
             // invisible either. Pre-v15 this was swallowed silently, so an unwritable
             // directory produced a full batch and an empty file with no warning. The
             // first failure is recorded and reported when the batch ends.
@@ -4983,7 +5089,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private SsOptResult scoreCombinationPro(
             SimInputs base, int bobY, int bobM, int joY, int joM, boolean single,
             int goGoFloor, int slowGoFloor, int greenBuf, int termGrace, int posTarget,
-            int solvePaths, int fanPaths, int binIters, long seed, boolean realDollars,
+            int solvePaths, int fanPaths, int binIters, long seed,
             int scoreYears) {
 
         SsOptResult r = new SsOptResult();
@@ -5000,7 +5106,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         r.joMonthly  = single ? 0
                 : calcSSMonthlyBenefit(inp.womanPIA, inp.womanBirthYear, inp.womanBirthMonth, joY, joM);
         r.combinedAnnual = (r.bobMonthly + r.joMonthly) * 12.0;
-        // v12: the survivor's Social Security check. THIS WAS THE RANK METRIC through
+        // v11 2026-09-27: the survivor's Social Security check. THIS WAS THE RANK METRIC through
         // v11 and it is not any more -- see survivorSpendable below. It is retained
         // and displayed because it is exactly what delaying a claim buys: a larger
         // guaranteed income floor. That is longevity insurance, not more money, and
@@ -5029,12 +5135,12 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         boolean sawGo = false, sawSlow = false;
         int minGreenTest = Integer.MAX_VALUE;   // drives feasibility
         int minGreenTestYear = 0;               // calendar year of that worst counted year
-        // v12: the floor THAT year was actually judged against -- greenBuf normally,
+        // v11 2026-09-27: the floor THAT year was actually judged against -- greenBuf normally,
         // 0 inside the terminal window. Tracked because the shortfall and the binding
         // capture below must measure against the floor that applied, not the buffer.
         int minGreenTestFloor = greenBuf;
         int minRawSurplus = Integer.MAX_VALUE;  // shown in the Min surplus column
-        // v12: THE RANK METRIC. Spendable income is what is left after the two costs
+        // v11 2026-09-27: THE RANK METRIC. Spendable income is what is left after the two costs
         // that are not discretionary -- tax and medical -- so it is the money the
         // household actually has to live on:
         //
@@ -5048,32 +5154,43 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         double minCoupSpend = Double.MAX_VALUE; int coupYears = 0;
         r.violations.clear();
         r.gracedDips.clear();
-        r.dollarsReal = realDollars;
+        // v11 2026-09-27: always true now. The CSV column and the "today's $" / "future $"
+        // label are KEPT so an archived file written before this change still reads back
+        // with the units it was actually computed in.
+        r.dollarsReal = true;
         if (pr.medianRows != null) {
             int nRows = pr.medianRows.size();
             for (int i = 0; i < nRows; i++) {
                 EnhRow row = pr.medianRows.get(i);
-                double d = (realDollars && row.inflFactor > 0) ? row.inflFactor : 1.0;
+                // v11 2026-09-27: ALWAYS deflate. The floors are entered as dollar amounts
+                // and a dollar amount is a standard of living, which is a REAL quantity.
+                // Previously this followed the Pro tab's display toggle: in nominal mode a
+                // $24,000 go-go floor was compared against nominal surplus, so the floor
+                // silently got easier every year as inflation lifted the nominal figures --
+                // the same plan passed or failed depending on which way a display button
+                // happened to be set. Pinning to today's dollars makes the verdict a
+                // property of the plan instead of a property of the view.
+                double d = (row.inflFactor > 0) ? row.inflFactor : 1.0;
                 int surplusDisp = (int) Math.round(row.surplus / d);
                 int balanceDisp = (int) Math.round(row.balance / d);
                 int calY        = row.calYear;
                 if (surplusDisp < minRawSurplus) minRawSurplus = surplusDisp;
 
-                // v12: a year BEFORE the withdrawal start year has no spending and no
+                // v11 2026-09-27: a year BEFORE the withdrawal start year has no spending and no
                 // draw, so its surplus is a structural 0 -- not a miss. Pre-v12 it was
                 // scored against the Green Surplus/Gap and every such year registered a
                 // phantom shortfall of the whole buffer. Only bites when the simulation
                 // starts before withdrawals do, which is why it went unnoticed.
                 if (!row.drawing) continue;
 
-                // v12: this year's spendable income, deflated with the same factor
+                // v11 2026-09-27: this year's spendable income, deflated with the same factor
                 // every other figure on the row uses, so the whole table is in one
                 // unit and follows the Real/Nominal toggle.
                 double spendable = (row.totalIncome - row.tax - row.medical) / d;
                 if (row.survivorYear) { survYears++; minSurvSpend = Math.min(minSurvSpend, spendable); }
                 else                  { coupYears++; minCoupSpend = Math.min(minCoupSpend, spendable); }
 
-                // v12: inside the terminal window the green floor is ZERO, not the
+                // v11 2026-09-27: inside the terminal window the green floor is ZERO, not the
                 // buffer. At 92 with three years left and the portfolio able to cover
                 // the gap, there is no reason to fail a plan for missing a comfort
                 // margin -- the money is right there. Outside the window the floor is
@@ -5109,7 +5226,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             }
         }
         // Min surplus SHOWN is the raw worst year (so the user still sees the dip).
-        // v12: reduce the two phases to the rank metric. Survivor years decide it when
+        // v11 2026-09-27: reduce the two phases to the rank metric. Survivor years decide it when
         // a death event is set; with no death event there are no survivor years at all
         // and the couple figure stands in, so the column never goes blank or changes
         // units. deathYear is a single global input, so every row in one scan uses the
@@ -5119,7 +5236,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         r.coupleSpendable   = (coupYears > 0) ? minCoupSpend : 0;
         r.survivorSpendable = (survYears > 0) ? minSurvSpend : r.coupleSpendable;
 
-        // v13: THE RANK METRIC -- total portfolio withdrawals across the final
+        // v11 2026-09-27: THE RANK METRIC -- total portfolio withdrawals across the final
         // `scoreYears` years of the horizon.
         //
         // This is what the claim decision actually buys. Spending is held roughly
@@ -5137,12 +5254,17 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             double sum = 0;
             for (int i = Math.max(0, n - scoreYears); i < n; i++) {
                 EnhRow row = pr.medianRows.get(i);
-                double d = (realDollars && row.inflFactor > 0) ? row.inflFactor : 1.0;
+                // v11 2026-09-27: deflated for the same reason as the floors above, and for
+                // one more: if the rank metric still followed the display toggle then the
+                // toggle would change the ROW ORDER, and it would have to stay in the
+                // fingerprint. Summing nominal dollars also silently overweights the later
+                // years of the window, which is the opposite of what the measure is for.
+                double d = (row.inflFactor > 0) ? row.inflFactor : 1.0;
                 sum += row.wdActual / d;
             }
             r.finalYearsDraw = sum;
             EnhRow lastRow = pr.medianRows.get(n - 1);
-            double dl = (realDollars && lastRow.inflFactor > 0) ? lastRow.inflFactor : 1.0;
+            double dl = (lastRow.inflFactor > 0) ? lastRow.inflFactor : 1.0;
             r.endingBalance = lastRow.balance / dl;
         }
 
@@ -5162,7 +5284,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // Feasibility test + worst shortfall (how far the worst floor is missed).
         int shortfall = 0;
         boolean feas = true;
-        // v12: measured against the floor THAT year carried (0 in the terminal window).
+        // v11 2026-09-27: measured against the floor THAT year carried (0 in the terminal window).
         if (greenTestMin != Integer.MAX_VALUE && greenTestMin < minGreenTestFloor)
         { feas = false; shortfall = Math.max(shortfall, minGreenTestFloor - greenTestMin); }
         if (sawGo && r.minGoGoSurplus < goGoFloor)     { feas = false; shortfall = Math.max(shortfall, goGoFloor - r.minGoGoSurplus); }
@@ -5237,7 +5359,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     private static boolean approxEq(double a, double b) { return Math.abs(a - b) < 1e-6; }
 
     /**
-     * v13: PASS ALWAYS OUTRANKS FAIL, then most portfolio dollars paid out late.
+     * v11 2026-09-27: PASS ALWAYS OUTRANKS FAIL, then most portfolio dollars paid out late.
      *
      * The v11/v12 comparator carried three tiers, a penalty score and a measured
      * noise floor. All of that existed because the verdict was decided on a few
@@ -5473,7 +5595,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         String unit = r.dollarsReal ? "today's $" : "future $";
         int total = optRowResults.size();
         int minShort = Integer.MAX_VALUE, minShortRank = 0;
-        // v13: two blocks. Every row is full fidelity, so there is no third state.
+        // v11 2026-09-27: two blocks. Every row is full fidelity, so there is no third state.
         int passCount = 0, failCount = 0;
         double bestDraw = -1;
         for (int i = 0; i < total; i++) {
@@ -5669,7 +5791,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         optRowDates.clear();
         optRowResults.clear();
 
-        // v13: two blocks. Every row is full fidelity, so there is no third state.
+        // v11 2026-09-27: two blocks. Every row is full fidelity, so there is no third state.
         int passCount = 0, failCount = 0;
         for (SsOptResult r : results) { if (r.feasible) passCount++; else failCount++; }
 
@@ -5699,7 +5821,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             optRowResults.add(r);
         }
 
-        // v13: one message. Full fidelity everywhere, two blocks, one measure.
+        // v11 2026-09-27: one message. Full fidelity everywhere, two blocks, one measure.
         String head = String.format(
                 "%,d combinations at full Pro fidelity: %,d pass, %,d fail. "
                         + "PASS ranks first; within each block, most portfolio dollars drawn "
@@ -5738,7 +5860,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // spend. Kept and displayed, because the insurance delay buys is real and the
         // user should see it next to the spending it costs.
         double survivorSS;
-        // v12: THE RANK METRIC. Worst year of (totalIncome - tax - medical) across the
+        // v11 2026-09-27: THE RANK METRIC. Worst year of (totalIncome - tax - medical) across the
         // survivor phase, or across the couple phase when no death event is set. Unlike
         // survivorSS this is read off the simulated median path, so it carries Monte
         // Carlo noise -- which is why the K-seed ensemble exists. See runSsOptimizer.
@@ -5746,7 +5868,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         double coupleSpendable;      // same figure over the couple phase, always computed
         int     survivorYears;       // how many drawing survivor years the horizon holds
         boolean spendableIsCouple;   // true when the couple figure stood in (no death event)
-        // v13: THE RANK METRIC -- total portfolio withdrawals across the final
+        // v11 2026-09-27: THE RANK METRIC -- total portfolio withdrawals across the final
         // OPT_SCORE_YEARS years of the horizon, in the scan's dollar mode. See
         // rankOptResults for why this and not the ending balance.
         double finalYearsDraw;
@@ -5792,7 +5914,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // dollar floor and bindMargin is positive. Empty only when nothing applies.
         String bindFloor  = "";     // "green" | "go-go" | "slow-go" | "PoS" | ""
         int    bindMargin = 0;      // signed dollars (0 when PoS binds -- see marginPoS)
-        // v13: the worst floor miss in dollars, kept for the Why dialog. The v11
+        // v11 2026-09-27: the worst floor miss in dollars, kept for the Why dialog. The v11
         // score / boundaryDist / borderline fields are gone with the machinery that
         // needed them.
         int    shortfallDollars = 0;
@@ -6495,7 +6617,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         if (spOptSlowGoFloor!= null) props.setProperty("opt.slowGoFloor", String.valueOf(iv(spOptSlowGoFloor)));
         if (spOptGreenBuffer!= null) props.setProperty("opt.greenBuffer", String.valueOf(iv(spOptGreenBuffer)));
         if (spOptTermGrace  != null) props.setProperty("opt.termGrace",   String.valueOf(iv(spOptTermGrace)));
-        // v13: the grid is a real planning choice (year/half/quarter/month), so it
+        // v11 2026-09-27: the grid is a real planning choice (year/half/quarter/month), so it
         // persists. The scan-fidelity, re-verify, MC-runs and penalty keys are no
         // longer written -- the controls they mirrored are gone. Old scenario files
         // still carrying them load fine; the keys are simply ignored.
@@ -6752,8 +6874,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             proProtectedCols.addAll(intsOfCsv(props.getProperty("view.proProtectedCols", "0,1")));
             proHiddenCols.clear();
             proHiddenCols.addAll(intsOfCsv(props.getProperty("view.proHiddenCols", "")));
-            proHiddenCols.remove(PRO_RATE_DRIFT_COL);      // never user-managed
-            proHiddenCols.removeAll(proProtectedCols);     // protected can't be hidden
+            // v11 2026-09-27: a saved protected-AND-hidden column loads as hidden. Forcing it
+            // visible here undid the user's choice on every scenario load.
+            normaliseColumnSets(proHiddenCols, proProtectedCols);
             applyProColumnVisibility();
         }
         // v9: restore SS Optimizer objective inputs (missing keys keep defaults).
@@ -6761,7 +6884,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         setSpinnerIfPresent(spOptSlowGoFloor, props, "opt.slowGoFloor");
         setSpinnerIfPresent(spOptGreenBuffer, props, "opt.greenBuffer");
         setSpinnerIfPresent(spOptTermGrace,   props, "opt.termGrace");
-        // v13: only the grid survives from the old optimizer keys. opt.infeasMode,
+        // v11 2026-09-27: only the grid survives from the old optimizer keys. opt.infeasMode,
         // opt.lambda, opt.posDollars, opt.verifyTopN and opt.seeds are ignored --
         // the controls they drove no longer exist. A pre-v13 scenario therefore
         // opens cleanly, minus tuning that no longer has anything to tune.
@@ -8181,10 +8304,10 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 streamSummary(inp), streamSummaryStartYear(inp),
                 CURRENCY.format(inp.manTradIRA) + " + " + CURRENCY.format(inp.manTrad401K), manRmdYear,
                 CURRENCY.format(inp.womanTradIRA) + " + " + CURRENCY.format(inp.womanTrad401K), womanRmdYear,
-                CURRENCY.format(inp.manRothIRA) + " (man Roth IRA) + "
-                        + CURRENCY.format(inp.manRoth401K) + " (man Roth 401K) + "
-                        + CURRENCY.format(inp.womanRoth401K) + " (woman Roth 401K) + "
-                        + CURRENCY.format(inp.womanRothIRA) + " (woman Roth IRA)",
+                CURRENCY.format(inp.manRothIRA) + " (User Roth IRA) + "
+                        + CURRENCY.format(inp.manRoth401K) + " (User Roth 401K) + "
+                        + CURRENCY.format(inp.womanRoth401K) + " (Spouse Roth 401K) + "
+                        + CURRENCY.format(inp.womanRothIRA) + " (Spouse Roth IRA)",
                 CURRENCY.format(inp.baseTax), inp.withdrawStartYear,
                 CURRENCY.format(inp.medical), inp.medInflation * 100,
                 inp.goGoMultiplier, inp.goGoDuration, inp.withdrawStartYear + inp.goGoDuration - 1,
@@ -10638,7 +10761,8 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         body.setOpaque(false);
         body.setAlignmentX(LEFT_ALIGNMENT);
 
-        // Header row: a triangle (▾/▸) + the section title. v9: the ENTIRE header
+        // Header row: a triangle (U+25BE down / U+25B8 right) + the section title.
+        // v9: the ENTIRE header
         // -- triangle, title, and the space across to the right edge -- is the
         // click target that toggles the section, not just the triangle. The arrow
         // and title are passive display; the shared listener lives on the header
@@ -10652,7 +10776,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         header.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
         header.setToolTipText("Collapse / expand this section");
 
-        final JLabel arrow = new JLabel(startExpanded ? "\u25be" : "\u25b8"); // ▾ / ▸
+        final JLabel arrow = new JLabel(startExpanded ? "\u25be" : "\u25b8"); // U+25BE down / U+25B8 right
         arrow.setFont(new Font("SansSerif",Font.BOLD,12));
         arrow.setForeground(new Color(110,105,95));
         arrow.setBorder(BorderFactory.createEmptyBorder(0,0,0,6));
@@ -10757,13 +10881,15 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         double g = (spProPosUpperGuardrail != null) ? dv(spProPosUpperGuardrail) / 100.0 : 0.20;
         if (lastRunBalance > 0 && g > 0) {
             long trig = (long) (lastRunBalance / (1.0 + g));
+            // v11 2026-09-27: the trailing "(a N% drop, your M% upper guardrail)"
+            // clause was removed. It pointed at a control the user can no longer
+            // see -- the Pro PoS Guardrails card is deactivated in the Input panel
+            // -- so naming the guardrail here only raised a question the UI could
+            // not answer. `g` still drives the trigger balance; only the wording
+            // that cited it is gone.
             sb.append("Re-run if portfolio falls below <b>")
                     .append(CURRENCY.format(trig))
-                    .append("</b> (a ")
-                    .append(String.format("%.0f%%", (1.0 - trig / (double) lastRunBalance) * 100))
-                    .append(" drop, your ")
-                    .append(String.format("%.0f%%", g * 100))
-                    .append(" upper guardrail) <i>(today's $)</i>");
+                    .append("</b> <i>(today's $)</i>");
         }
 
         if (baselineSet && baselineActualWd > 0 && baselineBalance > 0 && lastRunBalance > 0) {
@@ -10906,10 +11032,16 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             int womanPlan = iv(spWomanPlanAge);
             int horizon   = Math.max(10, Math.min(50, Math.max(manPlan, womanPlan) - manAge));
             spHorizon.setValue(horizon);
-            String driver = (manPlan >= womanPlan) ? "man to " + manPlan : "woman to " + womanPlan;
+            // v11 2026-09-27: every field on this card is labelled User / Spouse, so this
+            // summary said "man" / "woman" for the same two people and read as a third
+            // party. "man age 65" also never said the 65 was a CURRENT age. Note that the
+            // horizon is always measured from the User's current age, even when the
+            // Spouse's plan age is the later one -- the wording now makes that visible
+            // rather than leaving it to be inferred.
+            String driver = (manPlan >= womanPlan) ? "User to " + manPlan : "Spouse to " + womanPlan;
             if (lblHorizonNote != null)
-                lblHorizonNote.setText("<html><i>Horizon = "
-                        + horizon + " yrs (" + driver + ", man age " + manAge + ")</i></html>");
+                lblHorizonNote.setText("<html><i>Horizon = " + horizon + " yrs (" + driver
+                        + ", User current age " + manAge + ")</i></html>");
         } catch (Exception ignored) {}
     }
 
@@ -11048,7 +11180,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     //  MAIN
     // ========================================================================
     /**
-     * v13: run the SS batch with no GUI. Returns a process exit code.
+     * v11 2026-09-27: run the SS batch with no GUI. Returns a process exit code.
      *
      * Builds the frame off-screen so every input control exists and the scenario
      * loader can populate it exactly as it would interactively, then drives the
@@ -11089,7 +11221,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     }
 
     public static void main(String[] args) {
-        // v13: headless batch. `--batch <scenario.properties>` loads a saved
+        // v11 2026-09-27: headless batch. `--batch <scenario.properties>` loads a saved
         // scenario, runs the SS batch against it with no GUI, and writes the same
         // incremental CSV the tab reads. One jar, one engine -- deliberately NOT a
         // second application, because a second copy of simulatePro would drift from
