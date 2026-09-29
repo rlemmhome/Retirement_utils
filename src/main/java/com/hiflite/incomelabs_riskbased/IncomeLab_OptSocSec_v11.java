@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v11.java
-// Last modified: Sunday, September 27, 2026 at 07:29 PM MST (UTC-7)
+// Last modified: Tuesday, September 29, 2026 at 09:45 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v11";
-    private static final String BUILD_STAMP = "Sunday, September 27, 2026 at 07:29 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, September 29, 2026 at 09:45 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1531,23 +1531,35 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                         BorderFactory.createLineBorder(new Color(208,206,200),1),
                         BorderFactory.createEmptyBorder(8,10,8,10))));
 
-        JLabel scenTitleLbl = new JLabel("HISTORICAL STRESS SCENARIO");
-        scenTitleLbl.setFont(new Font("SansSerif", Font.BOLD, 12));
-        scenTitleLbl.setForeground(new Color(110,105,95));
-        scenTitleLbl.setBorder(BorderFactory.createEmptyBorder(0,0,6,0));
-        scenTitleLbl.setAlignmentX(LEFT_ALIGNMENT);
-        cardScenario.add(scenTitleLbl);
+        // v11 2026-09-29: this card is now collapsible like every other one. It was
+        // the lone exception -- hand-built for the JComboBox, and the hand-building
+        // skipped the header, so it had a dead JLabel title where every sibling card
+        // had a clickable one. The rows move into `bodyScenario`, whose visibility IS
+        // the collapsed state; collapseHeader() supplies the triangle, the whole-row
+        // click target, and the saved section state. The combo keeps its own 32px
+        // maximum because these rows are still built here, not by card().
+        //
+        // Section key: sectionKey("Historical Stress Scenario") -> "historicalstress
+        // scenario". A new key, so it simply defaults to expanded the first time and
+        // is written to the panel-state file from then on. No saved layout is
+        // invalidated -- loadPanelState reads whatever keys it finds.
+        JPanel bodyScenario = new JPanel();
+        bodyScenario.setLayout(new BoxLayout(bodyScenario, BoxLayout.Y_AXIS));
+        bodyScenario.setOpaque(false);
+        bodyScenario.setAlignmentX(LEFT_ALIGNMENT);
+        cardScenario.add(collapseHeader("Historical Stress Scenario",
+                cardScenario, bodyScenario, /*defaultExpanded=*/true));
 
         JLabel scenRowLbl = new JLabel("Sequence of returns");
         scenRowLbl.setFont(new Font("SansSerif", Font.PLAIN, 14));
         scenRowLbl.setForeground(new Color(75,75,75));
         scenRowLbl.setBorder(BorderFactory.createEmptyBorder(5,0,1,0));
         scenRowLbl.setAlignmentX(LEFT_ALIGNMENT);
-        cardScenario.add(scenRowLbl);
+        bodyScenario.add(scenRowLbl);
 
         cmbScenario.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
         cmbScenario.setAlignmentX(LEFT_ALIGNMENT);
-        cardScenario.add(cmbScenario);
+        bodyScenario.add(cmbScenario);
 
         JLabel scenarioNote = new JLabel(
                 "<html><i>Historical years replay actual S&P 500 returns + CPI.<br>"
@@ -1556,7 +1568,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         scenarioNote.setForeground(new Color(90, 70, 10));
         scenarioNote.setBorder(BorderFactory.createEmptyBorder(4,0,0,0));
         scenarioNote.setAlignmentX(LEFT_ALIGNMENT);
-        cardScenario.add(scenarioNote);
+        bodyScenario.add(scenarioNote);
 
         // v6: sequence offset sits directly under the sequence selector.
         JPanel offRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
@@ -1568,13 +1580,13 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         offLbl.setForeground(new Color(75, 75, 75));
         spSeqOffset.setPreferredSize(new Dimension(70, 26));
         offRow.add(offLbl); offRow.add(spSeqOffset);
-        cardScenario.add(offRow);
+        bodyScenario.add(offRow);
 
         // v6: COLA option + guard note live with the sequence selector, because
         // that pairing is exactly where a fixed COLA misleads.
         chkSSColaTracksInfl.setAlignmentX(LEFT_ALIGNMENT);
         chkSSColaTracksInfl.setBorder(BorderFactory.createEmptyBorder(6,0,0,0));
-        cardScenario.add(chkSSColaTracksInfl);
+        bodyScenario.add(chkSSColaTracksInfl);
         JPanel colaRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         colaRow.setOpaque(false);
         colaRow.setAlignmentX(LEFT_ALIGNMENT);
@@ -1584,12 +1596,13 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         colaLbl.setForeground(new Color(75, 75, 75));
         spColaShortfall.setPreferredSize(new Dimension(80, 26));
         colaRow.add(colaLbl); colaRow.add(spColaShortfall);
-        cardScenario.add(colaRow);
+        bodyScenario.add(colaRow);
         lblColaWarn.setAlignmentX(LEFT_ALIGNMENT);
-        cardScenario.add(lblColaWarn);
+        bodyScenario.add(lblColaWarn);
         chkSSColaTracksInfl.addActionListener(e -> refreshColaWarn());
         cmbScenario.addActionListener(e -> refreshColaWarn());
 
+        cardScenario.add(bodyScenario);
         inner.add(cardScenario);
         inner.add(Box.createVerticalStrut(4));
 
@@ -10733,40 +10746,37 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // ========================================================================
     //  UI HELPERS
     // ========================================================================
-    private JPanel card(String title, Object[] items) {
-        return card(title, items, true);   // default: sections start expanded
-    }
-
-    // v9: overload allowing a section to start COLLAPSED by default (e.g. the
-    // rarely-edited Roth Conversion & IRMAA Surcharge section). A saved panel
-    // state still overrides this default on scenario load.
-    private JPanel card(String title, Object[] items, boolean defaultExpanded) {
-        JPanel card = new JPanel();
-        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBackground(Color.WHITE);
-        card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createEmptyBorder(0,0,6,0),
-                BorderFactory.createCompoundBorder(
-                        BorderFactory.createLineBorder(new Color(208,206,200),1),
-                        BorderFactory.createEmptyBorder(8,10,8,10))));
-
+    /**
+     * v11 2026-09-29: builds a card's clickable collapse header and wires it to the
+     * body panel that holds the card's rows.
+     *
+     * Extracted from card() so a hand-built card gets IDENTICAL behaviour -- the
+     * triangle, the whole-row click target, and the same saved section state --
+     * without a second copy of any of it. The only card that needs this is the
+     * Historical Stress Scenario card: card() clamps every row it lays out to 30px
+     * high, which squashes a JComboBox, so that one builds its own rows and calls
+     * this for the header.
+     *
+     * The caller supplies `body` and adds its own rows to it. This method sets the
+     * body's initial visibility from the saved state, so the caller must not.
+     *
+     * @param title          display title; also the source of the save/load key
+     * @param card           the card panel, revalidated on each toggle
+     * @param body           the panel holding the rows; its visibility IS the state
+     * @param defaultExpanded state to use when nothing is saved for this section
+     */
+    private JPanel collapseHeader(String title, JPanel card, JPanel body,
+                                  boolean defaultExpanded) {
         // v7: section slug (stable key for save/load), derived from the title so
         // no call site changes. Titles are unique across the pane.
         final String key = sectionKey(title);
         final boolean startExpanded = sectionExpanded.getOrDefault(key, defaultExpanded);
 
-        // Body panel holds every row; its visibility is what collapse toggles.
-        JPanel body = new JPanel();
-        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
-        body.setOpaque(false);
-        body.setAlignmentX(LEFT_ALIGNMENT);
-
         // Header row: a triangle (U+25BE down / U+25B8 right) + the section title.
-        // v9: the ENTIRE header
-        // -- triangle, title, and the space across to the right edge -- is the
-        // click target that toggles the section, not just the triangle. The arrow
-        // and title are passive display; the shared listener lives on the header
-        // panel so a click anywhere along the row collapses or expands.
+        // v9: the ENTIRE header -- triangle, title, and the space across to the right
+        // edge -- is the click target that toggles the section, not just the triangle.
+        // The arrow and title are passive display; the shared listener lives on the
+        // header panel so a click anywhere along the row collapses or expands.
         JPanel header = new JPanel();
         header.setLayout(new BoxLayout(header, BoxLayout.X_AXIS));
         header.setOpaque(false);
@@ -10811,7 +10821,38 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         arrow.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
         titleLbl.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
 
-        card.add(header);
+        body.setVisible(startExpanded);           // honor saved/default state
+        return header;
+    }
+
+    private JPanel card(String title, Object[] items) {
+        return card(title, items, true);   // default: sections start expanded
+    }
+
+    // v9: overload allowing a section to start COLLAPSED by default (e.g. the
+    // rarely-edited Roth Conversion & IRMAA Surcharge section). A saved panel
+    // state still overrides this default on scenario load.
+    private JPanel card(String title, Object[] items, boolean defaultExpanded) {
+        JPanel card = new JPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBackground(Color.WHITE);
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createEmptyBorder(0,0,6,0),
+                BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(208,206,200),1),
+                        BorderFactory.createEmptyBorder(8,10,8,10))));
+
+        // Body panel holds every row; its visibility is what collapse toggles.
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.setOpaque(false);
+        body.setAlignmentX(LEFT_ALIGNMENT);
+
+        // v11 2026-09-29: the header is built by collapseHeader() now. It used to be
+        // inline here, which is why the one card that cannot use this helper -- the
+        // Historical Stress Scenario card, hand-built so its JComboBox escapes the
+        // 30px row clamp below -- had no triangle at all. One builder, both callers.
+        card.add(collapseHeader(title, card, body, defaultExpanded));
 
         for (int i = 0; i < items.length; i += 2) {
             Object labelObj = items[i]; Object comp = items[i+1];
@@ -10828,8 +10869,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
             body.add(row);
         }
 
-        body.setVisible(startExpanded);           // honor saved/default state
-        card.add(body);
+        card.add(body);                           // visibility already set by collapseHeader
         return card;
     }
 
