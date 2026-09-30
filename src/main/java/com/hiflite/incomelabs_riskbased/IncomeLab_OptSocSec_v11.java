@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v11.java
-// Last modified: Tuesday, September 29, 2026 at 09:45 AM MST (UTC-7)
+// Last modified: Tuesday, September 29, 2026 at 04:25 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v11";
-    private static final String BUILD_STAMP = "Tuesday, September 29, 2026 at 09:45 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, September 29, 2026 at 04:25 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -599,11 +599,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         });
 
         spMinChangePct = spinD(5.0, 0.0, 25.0, 1.0, "0.0");
-        spMinChangePct.setToolTipText("<html><b>Minimum material change %% (v6)</b><br>"
+        spMinChangePct.setToolTipText("<html><b>Minimum material change % (v6)</b><br>"
                 + "Year-over-year withdrawal changes smaller than this are reported as<br>"
                 + "<i>no material change</i> rather than prompting action, so ordinary<br>"
                 + "market noise between annual runs does not read as a signal.<br><br>"
-                + "<b>Default 5%%</b>, matching the threshold risk-based guardrail<br>"
+                + "<b>Default 5%</b>, matching the threshold risk-based guardrail<br>"
                 + "methodologies commonly use.</html>");
 
         JPanel scenBtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
@@ -876,8 +876,8 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "<b>Reference benefit</b> is the smaller EARLY-claim amount, not the<br>"
                 + "eventual delayed one -- the bridge replaces the early-claim<br>"
                 + "equivalent, then real SS (possibly larger) takes over at the date.<br><br>"
-                + "<b>Grossed up for tax.</b> Social Security is at most 85%% taxable; a<br>"
-                + "Traditional withdrawal is 100%% ordinary income. Each spouse's<br>"
+                + "<b>Grossed up for tax.</b> Social Security is at most 85% taxable; a<br>"
+                + "Traditional withdrawal is 100% ordinary income. Each spouse's<br>"
                 + "bridge covers its own extra tax so Surplus/gap lands where a<br>"
                 + "no-delay run would, and that extra tax becomes real drawdown.<br><br>"
                 + "The draw is applied inside the PoS solver, so probability of<br>"
@@ -885,7 +885,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "base withdrawal rather than the success probability.</html>");
 
         spSSHaircutPct = spinD(0.0, 0.0, 50.0, 1.0, "0.0#");
-        spSSHaircutPct.setToolTipText("<html><b>SS benefit haircut %% (v6) -- a STRESS input</b><br>"
+        spSSHaircutPct.setToolTipText("<html><b>SS benefit haircut % (v6) -- a STRESS input</b><br>"
                 + "Applies an across-the-board reduction to BOTH benefits from the<br>"
                 + "start year onward. <b>0 = disabled</b> (default), which reproduces<br>"
                 + "every earlier scenario exactly.<br><br>"
@@ -893,7 +893,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "depletes, benefits are automatically reduced to what incoming<br>"
                 + "payroll tax can cover -- no legislation required. CBO's 2026<br>"
                 + "projection puts depletion at <b>2032</b>, with payroll tax covering<br>"
-                + "about 72%% of scheduled benefits -- roughly a <b>28%% cut</b>.<br><br>"
+                + "about 72% of scheduled benefits -- roughly a <b>28% cut</b>.<br><br>"
                 + "<b>This is not a forecast.</b> Congress has never allowed a scheduled<br>"
                 + "cut to take effect, and any fix would likely protect people already<br>"
                 + "claiming. Use it to see how much of your plan leans on Social<br>"
@@ -1329,19 +1329,19 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
 
         spHisRmdShare = spinD(50.0, 0.0, 100.0, 5.0, "0.0#");
         spHisRmdShare.setToolTipText("<html><b>User's share of combined Traditional (v6)</b><br>"
-                + "The combined Traditional bucket is split by this %% (User) and its<br>"
+                + "The combined Traditional bucket is split by this % (User) and its<br>"
                 + "complement (Spouse) so RMDs can be computed on each person's age.<br>"
-                + "Set to your actual User/Spouse Traditional split. <b>Default 50%%</b><br>"
+                + "Set to your actual User/Spouse Traditional split. <b>Default 50%</b><br>"
                 + "for a near-equal couple; the value is saved with the scenario.<br>"
-                + "At the death year the survivor's share becomes 100%%.</html>");
+                + "At the death year the survivor's share becomes 100%.</html>");
         spSurvivorSpendCut = spinD(20.0, 0.0, 40.0, 5.0, "0.0");
-        spSurvivorSpendCut.setToolTipText("<html><b>Survivor spending reduction %% (v6)</b><br>"
+        spSurvivorSpendCut.setToolTipText("<html><b>Survivor spending reduction % (v6)</b><br>"
                 + "How much <b>living expenses</b> fall once one spouse has died. Applied<br>"
                 + "beginning the year AFTER the death year, alongside the Single tax<br>"
                 + "basis and the survivor Social Security benefit.<br><br>"
-                + "<b>Default 20%%</b> -- the standard survivor estimate. A survivor does<br>"
+                + "<b>Default 20%</b> -- the standard survivor estimate. A survivor does<br>"
                 + "NOT need half a couple's budget: housing, utilities, insurance and<br>"
-                + "property costs barely change. Range 0-40%%.<br><br>"
+                + "property costs barely change. Range 0-40%.<br><br>"
                 + "<b>Medical is handled separately and automatically:</b> it is halved,<br>"
                 + "because it is mechanically per-person (Part B, Medigap Plan G,<br>"
                 + "Part D and the self-insurance reserve all stop for the decedent).<br>"
@@ -1470,9 +1470,9 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "indexing actually does under current law. On stochastic runs each<br>"
                 + "fan path uses ITS OWN inflation, so the PoS calculation is affected<br>"
                 + "too, not just the displayed table.<br><br>"
-                + "<b>Turn this ON for historical stress sequences.</b> With a fixed 2.4%%<br>"
-                + "COLA against 1966-82 inflation (~5.4%%/yr), modelled SS loses about<br>"
-                + "60%% of its real value over 30 years -- an artifact, not a risk. That<br>"
+                + "<b>Turn this ON for historical stress sequences.</b> With a fixed 2.4%<br>"
+                + "COLA against 1966-82 inflation (~5.4%/yr), modelled SS loses about<br>"
+                + "60% of its real value over 30 years -- an artifact, not a risk. That<br>"
                 + "single distortion can turn a survivable stress run into a failing one.</html>");
 
         spSeqOffset = spinI(0, 0, 20, 1, "0");
@@ -1493,7 +1493,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "PoS solver, the GK loop, and the Stress Test tab.</html>");
 
         spColaShortfall = spinD(0.2, 0.0, 2.0, 0.1, "0.0#");
-        spColaShortfall.setToolTipText("<html><b>COLA shortfall (%%/yr) -- v6</b><br>"
+        spColaShortfall.setToolTipText("<html><b>COLA shortfall (%/yr) -- v6</b><br>"
                 + "A constant annual haircut on the inflation-tracked COLA, so Social<br>"
                 + "Security drifts slowly DOWN in real terms instead of holding flat.<br>"
                 + "Only applies when <i>SS COLA tracks simulated inflation</i> is on.<br><br>"
@@ -1504,11 +1504,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "<b>0.2 pp/yr higher</b> -- hence the default.<br><br>"
                 + "Note CPI-W is a HEADLINE index: food and energy ARE included.<br>"
                 + "(Core CPI excludes them, but core is not used for COLA.)<br><br>"
-                + "Raise toward <b>0.4-0.5%%</b> if you also want it to absorb the Medicare<br>"
+                + "Raise toward <b>0.4-0.5%</b> if you also want it to absorb the Medicare<br>"
                 + "Part B drag. Do NOT raise it for the taxation drag -- the frozen<br>"
                 + "$32,000/$44,000 provisional thresholds are already modelled<br>"
                 + "directly by the tax engine, so that would double-count.<br><br>"
-                + "Real SS remaining after 30 yrs: 0.2%% -> 94%%, 0.3%% -> 91%%, 0.5%% -> 86%%.</html>");
+                + "Real SS remaining after 30 yrs: 0.2% -> 94%, 0.3% -> 91%, 0.5% -> 86%.</html>");
 
         lblColaWarn = new JLabel(" ");
         lblColaWarn.setFont(new Font("SansSerif", Font.PLAIN, 11));
@@ -1770,7 +1770,7 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 + "&nbsp;&nbsp;&nbsp;&nbsp;go-go also slightly LOWERS the base draw, since the survival<br>"
                 + "&nbsp;&nbsp;&nbsp;&nbsp;test spends more during those years -- both effects are shown.<br>"
                 + "The split reconciles exactly to the total change.<br><br>"
-                + "Changes smaller than the minimum-change %% are reported as<br>"
+                + "Changes smaller than the minimum-change % are reported as<br>"
                 + "<i>no material change</i> so ordinary noise does not prompt action.</html>");
 
         JPanel aSouth = new JPanel(new BorderLayout(2, 2)); aSouth.setOpaque(false);
@@ -3895,6 +3895,31 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
      */
     private static final int OPT_SCORE_YEARS = 5;
 
+    /**
+     * v11 2026-09-29: the version of the SCORING LOGIC, hashed into the batch
+     * fingerprint beside the floors.
+     *
+     * The fingerprint answers "is this the same plan?" by hashing the INPUTS. It
+     * cannot see the code that turns those inputs into a scored row, so a fix to
+     * the scorer leaves every stale row on disk still matching -- and the resume
+     * path treats a matching row as finished and never recomputes it. A corrected
+     * build then silently serves the old, wrong answers.
+     *
+     * That is not hypothetical: the SS-amount fix below was exactly this shape.
+     * Bump this whenever a change alters what a scored row MEANS -- the floors and
+     * how they are tested, the rank metric, the dollar basis, what the engine is
+     * handed. Do NOT bump it for display text, column order, or anything that
+     * leaves the numbers alone.
+     *
+     *   1  baseline -- every batch written before 2026-09-29
+     *   2  2026-09-29  scoreCombinationPro now writes each combination's OWN Social
+     *                  Security benefit onto the inputs it simulates. Rows scored
+     *                  under version 1 were all paid the benefit that matched
+     *                  whatever dates sat in the SS spinners when Run was pressed,
+     *                  so at most one row per batch was ever right.
+     */
+    private static final int SCORER_VERSION = 2;
+
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
     private static final int OCOL_SPOUSE    = 2;
@@ -3928,9 +3953,14 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         // compile; it is not added to the panel.
         cmbOptSort = new JComboBox<>(new String[]{ "Score: survivor floor - penalty x worst miss" });
 
+        // v11 2026-09-29: the banner described the pre-v13 optimizer -- a single
+        // continuous score, a penalty weight on the worst floor miss, and a
+        // reduced-fidelity scan with re-verification. None of that machinery
+        // exists; feasibility is a hard gate and the rank is one measure.
         lblOptObjective = new JLabel(
-                "  Objective: maximize the survivor's income floor, penalised by how far the"
-                        + " worst green / travel / PoS floor is missed.");
+                "  Objective: meet every floor first -- that is a gate, not a preference."
+                        + " Passing rows are then ordered by the most portfolio dollars drawn"
+                        + " in the final 5 years.");
         lblOptObjective.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblOptObjective.setForeground(new Color(150, 60, 0));
 
@@ -4932,7 +4962,11 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
                 // the PLAN and nothing else. Two runs of the same plan always match.
                 // v11 2026-09-27: `real` is no longer hashed -- the scorer always works in
                 // today's dollars, so the display toggle cannot change a verdict or an order.
-                .append(c.single).append(';').append(OPT_SCORE_YEARS);
+                // v11 2026-09-29: SCORER_VERSION rides here so a change to the SCORING CODE
+                // orphans stale rows on its own. Without it the hash sees only the inputs,
+                // and a corrected build happily resumes over rows the old code got wrong.
+                .append(c.single).append(';').append(OPT_SCORE_YEARS)
+                .append(';').append(SCORER_VERSION);
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
             byte[] d = md.digest(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -5118,6 +5152,30 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
         r.bobMonthly = calcSSMonthlyBenefit(inp.manPIA, inp.manBirthYear, inp.manBirthMonth, bobY, bobM);
         r.joMonthly  = single ? 0
                 : calcSSMonthlyBenefit(inp.womanPIA, inp.womanBirthYear, inp.womanBirthMonth, joY, joM);
+
+        // v11 2026-09-29: PUT THE BENEFITS BACK ON inp. This was the bug.
+        //
+        // Setting the claim DATES above is only half the job. The engine never
+        // recomputes a benefit from PIA and claim date -- manSSThisYear() and
+        // womanSSThisYear() spend inp.manSSAmount / inp.womanSSAmount, the annual
+        // dollar figures readInputs() derived from whatever the SS spinners held
+        // when Run was pressed. Leaving them alone meant every one of the 4,636
+        // combinations was paid the SAME check, just starting on different dates,
+        // so delaying a claim bought nothing and cost the bridge years. The whole
+        // grid then ranked earliest-first, and the result rows still DISPLAYED the
+        // correct monthly benefit -- they come from `r` -- so the table looked
+        // right while the simulation underneath had spent a different number.
+        //
+        // Measured on one claim pair (2031/09 + 2031/09), scoring it from a base
+        // built for 2026/09 instead of its own: slow-go minimum $13,159 against
+        // $37,196, and the row flipped FAIL -> PASS. SsAmountHarness locks this.
+        //
+        // These are the same four assignments readInputs() makes; the values are
+        // already computed one line above, they simply never reached `inp`.
+        inp.manSSMonthly   = r.bobMonthly;
+        inp.manSSAmount    = (int) Math.round(r.bobMonthly * 12);
+        inp.womanSSMonthly = single ? 0 : r.joMonthly;
+        inp.womanSSAmount  = single ? 0 : (int) Math.round(r.joMonthly * 12);
         r.combinedAnnual = (r.bobMonthly + r.joMonthly) * 12.0;
         // v11 2026-09-27: the survivor's Social Security check. THIS WAS THE RANK METRIC through
         // v11 and it is not any more -- see survivorSpendable below. It is retained
@@ -10518,6 +10576,14 @@ public class IncomeLab_OptSocSec_v11 extends JFrame {
          *                            year (for the state exclusion cap headroom)
          * @return double[]{ totalConvTax, fedConvTax, stateConvTax }
          */
+        // v11 2026-09-29: this takes retirementOrdinary but NOT streamStateExempt,
+        // and that omission is deliberate. A state-exempt stream (Arizona military
+        // retired pay, say) is not part of a Roth conversion, so subtracting it from
+        // the conversion base would grant the exemption twice -- once against living
+        // income in stateTaxLiving, again here. retirementOrdinary IS passed, because
+        // living income and the conversion really do share one retirement-exclusion
+        // cap and the headroom must not be spent twice. Different rules, different
+        // treatment; the asymmetry is the correct answer, not a missing parameter.
         static double[] conversionTax(double livingTaxableIncome, double conversion,
                                       double inflFactor, FilingStatus fs,
                                       StateTaxProfile stateProfile, int simYear,
