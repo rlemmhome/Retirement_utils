@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Friday, October 02, 2026 at 06:27 PM MST (UTC-7)
+// Last modified: Saturday, October 03, 2026 at 02:54 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Friday, October 02, 2026 at 06:27 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, October 03, 2026 at 02:54 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1230,7 +1230,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "Used in <b>Fill to MAGI target</b> mode. The fill stops this many dollars<br>"
                 + "below the IRMAA Tier-0 threshold (2026 base $218,000, inflation-indexed),<br>"
                 + "leaving headroom so an income surprise does not trip the surcharge.<br>"
-                + "Default $13,000 (targets ~$205,000 MAGI in 2026 dollars).</html>");
+                + "Default $13,000 (targets ~$205,000 MAGI in 2026 dollars).<br><br>"
+                + "<b>Inflation-indexed</b> (v12): enter it in 2026 dollars; each year it grows<br>"
+                + "with inflation exactly as the threshold does, so the cushion -- and the<br>"
+                + "MAGI target -- hold steady in today's dollars for the whole horizon.</html>");
         spConvCap    = spinI(40_000, 0, 1_000_000, 1_000, "#,###");
         spConvCap.setToolTipText("<html><b>Roth conversion cap ($/yr)</b><br>"
                 + "Used in <b>Fill to MAGI target</b> mode. The computed fill is never<br>"
@@ -1890,8 +1893,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         // selected, tooltip figures are shown in today's dollars
                         // (value / inflFactor), same as every other cell tooltip.
                         double d = showRealDollars ? er.inflFactor : 1.0;
-                        long port   = (long) (er.balance / d);
-                        long mm     = (long) (er.mmBal   / d);
+                        long port   = Math.round(er.balance / d);
+                        long mm     = Math.round(er.mmBal   / d);
                         long actual = port + mm;
                         return "<html><b>Portfolio balance -- true 50th percentile</b><br>"
                                 + "The median of all " + lastResults.fanPathCount
@@ -1938,7 +1941,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                             if (ss == null || !ss[k].active()) continue;
                             any = true;
                             sb.append("<tr><td><b>").append(nm[k]).append("</b></td><td>")
-                                    .append(CURRENCY.format((long) (vals[k] / d)))
+                                    .append(CURRENCY.format(Math.round(vals[k] / d)))
                                     .append("</td><td><i>").append(colaDesc(ss[k]))
                                     .append("</i></td></tr>");
                         }
@@ -1946,7 +1949,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                 + " Turn one on in the input panel.</i></td></tr>");
                         sb.append("</table>");
                         if (any) sb.append("<b>Total: ")
-                                .append(CURRENCY.format((long) (er.annuity / d)))
+                                .append(CURRENCY.format(Math.round(er.annuity / d)))
                                 .append("</b><br>");
                         if (er.survivorYear) sb.append("<br><i>Survivor year: any stream set to"
                                 + " reduce on this death is already at its survivor"
@@ -1996,8 +1999,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                     case 4 -> {
                         // Actual wd -- show the go-go breakdown if active
                         double d = showRealDollars ? er.inflFactor : 1.0;
-                        String wdStr     = CURRENCY.format((long)(er.wdActual  / d));
-                        String posWdStr  = CURRENCY.format((long)(er.withdrawal / d));
+                        String wdStr     = CURRENCY.format(Math.round(er.wdActual  / d));
+                        String posWdStr  = CURRENCY.format(Math.round(er.withdrawal / d));
                         // v6: three phases now, not two. Naming the wrong tier --
                         // or claiming a 1.0 multiplier during slow-go -- made the
                         // tooltip contradict the Actual wd figure beside it.
@@ -2010,7 +2013,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                             bridgeLines = "&nbsp;&nbsp;= base draw:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
                                     + CURRENCY.format(base) + "<br>"
                                     + "&nbsp;&nbsp;+ SS bridge:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
-                                    + CURRENCY.format((long)(er.ssBridge / d)) + "<br>";
+                                    + CURRENCY.format(Math.round(er.ssBridge / d)) + "<br>";
                         }
                         if (er.goGoActive) {
                             return String.format(
@@ -2044,7 +2047,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                             + "Both elevated tiers have ended -- multiplier = 1.000.<br>"
                                             + (er.ssBridge > 0
                                             ? "Pro PoS withdrawal (%s) + SS bridge "
-                                            + CURRENCY.format((long)(er.ssBridge / d)) + ".<br><br>"
+                                            + CURRENCY.format(Math.round(er.ssBridge / d)) + ".<br><br>"
                                             : "Actual wd = Pro PoS withdrawal (%s).<br><br>")
                                             + "Go-go ran %d year(s), slow-go %d year(s).</html>",
                                     posWdStr, lastResults.inp.goGoDuration,
@@ -2062,7 +2065,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                 er.inflFactor,
                                 (er.inflFactor - 1.0) * 100.0,
                                 er.inflFactor,
-                                CURRENCY.format((long)(100_000 / er.inflFactor)));
+                                CURRENCY.format(Math.round(100_000 / er.inflFactor)));
                     }
                     case 10 -> {
                         double d = showRealDollars ? er.inflFactor : 1.0;
@@ -2072,10 +2075,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "&nbsp;&nbsp;Spouse SS:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;Annuity/Pen/Mil:&nbsp;&nbsp;&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;= Fixed Inc:&nbsp;<b>%s</b></html>",
-                                CURRENCY.format((long)(er.manSS / d)),
-                                CURRENCY.format((long)(er.womanSS / d)),
-                                CURRENCY.format((long)(er.annuity / d)),
-                                CURRENCY.format((long)(er.guaranteed / d)));
+                                CURRENCY.format(Math.round(er.manSS / d)),
+                                CURRENCY.format(Math.round(er.womanSS / d)),
+                                CURRENCY.format(Math.round(er.annuity / d)),
+                                CURRENCY.format(Math.round(er.guaranteed / d)));
                     }
                     case 11 -> {
                         double d = showRealDollars ? er.inflFactor : 1.0;
@@ -2085,7 +2088,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "&nbsp;&nbsp;Inflation factor applied:&nbsp;%.3f<br><br>"
                                         + "Source: your Living Expense input, scaled by the median<br>"
                                         + "cumulative inflation factor for this year.</html>",
-                                CURRENCY.format((long)(er.living / d)),
+                                CURRENCY.format(Math.round(er.living / d)),
                                 er.inflFactor);
                     }
                     case 14 -> {
@@ -2096,10 +2099,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "&nbsp;&nbsp;Medical:&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;Tax (est):&nbsp;&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;= Total spend:&nbsp;<b>%s</b></html>",
-                                CURRENCY.format((long)(er.living / d)),
-                                CURRENCY.format((long)(er.medical / d)),
-                                CURRENCY.format((long)(er.tax / d)),
-                                CURRENCY.format((long)(er.totalSpend / d)));
+                                CURRENCY.format(Math.round(er.living / d)),
+                                CURRENCY.format(Math.round(er.medical / d)),
+                                CURRENCY.format(Math.round(er.tax / d)),
+                                CURRENCY.format(Math.round(er.totalSpend / d)));
                     }
                     case 15 -> {
                         double d = showRealDollars ? er.inflFactor : 1.0;
@@ -2108,9 +2111,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "&nbsp;&nbsp;Actual wd (portfolio draw):&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;Fixed Inc (guaranteed):&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;= Total income:&nbsp;<b>%s</b></html>",
-                                CURRENCY.format((long)(er.wdActual / d)),
-                                CURRENCY.format((long)(er.guaranteed / d)),
-                                CURRENCY.format((long)(er.totalIncome / d)));
+                                CURRENCY.format(Math.round(er.wdActual / d)),
+                                CURRENCY.format(Math.round(er.guaranteed / d)),
+                                CURRENCY.format(Math.round(er.totalIncome / d)));
                     }
                     case 16 -> {
                         double d = showRealDollars ? er.inflFactor : 1.0;
@@ -2124,11 +2127,20 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "lumpy costs or can be banked in a money market.<br><br>"
                                         + "<b>Does not accumulate:</b> this is this year's headroom only.<br>"
                                         + "The model never carries surplus forward, which is why the<br>"
-                                        + "last years can show a negative gap.</html>",
-                                CURRENCY.format((long)(er.totalIncome / d)),
-                                CURRENCY.format((long)(er.totalSpend / d)),
+                                        + "last years can show a negative gap.%s</html>",
+                                CURRENCY.format(Math.round(er.totalIncome / d)),
+                                CURRENCY.format(Math.round(er.totalSpend / d)),
                                 (er.surplus >= 0 ? "+" : "-")
-                                        + CURRENCY.format((long)(Math.abs(er.surplus) / d)));
+                                        + CURRENCY.format(Math.round(Math.abs(er.surplus) / d)),
+                                // v12 2026-10-03: say when MM interest pushed Tax (est) up.
+                                (er.mmInterest > 0 && er.mmInterestTax > 0)
+                                        ? "<br><br><b>Money market grew by "
+                                        + CURRENCY.format(Math.round(er.mmInterest / d))
+                                        + " in interest this year.</b> That interest is taxable and<br>"
+                                        + "added <b>" + CURRENCY.format(Math.round(er.mmInterestTax / d))
+                                        + "</b> to Tax (est), which lowers this surplus. The larger<br>"
+                                        + "MM balance can be tapped to make up the difference."
+                                        : "");
                     }
                     case COL_ALERT -> {
                         if ("[^] above".equals(er.alert))
@@ -2160,10 +2172,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "&nbsp;&nbsp;Market growth:&nbsp;&nbsp;+%s<br>"
                                         + "&nbsp;&nbsp;Withdrawal:&nbsp;&nbsp;&nbsp;-%s</html>",
                                 er.balDelta >= 0 ? "+" : "",
-                                CURRENCY.format((long)(er.balDelta / d)),
+                                CURRENCY.format(Math.round(er.balDelta / d)),
                                 CURRENCY.format((long) (showRealDollars
                                         ? er.investmentGrowthReal : er.investmentGrowth)),
-                                CURRENCY.format((long)(er.wdActual / d)));
+                                CURRENCY.format(Math.round(er.wdActual / d)));
                     }
                     case COL_TAX -> {
                         if (!er.drawing) return null;
@@ -2180,7 +2192,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "This is the tax on your SPENDING income only. Any Roth<br>"
                                         + "conversion is taxed SEPARATELY (see the Conv Tax column).<br><br>"
                                         + "&nbsp;&nbsp;Taxable Social Security:&nbsp;%s<br>"
-                                        + "&nbsp;&nbsp;Ordinary income (RMD/draw + annuity):&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Ordinary income (RMD/draw + annuity + MM interest):&nbsp;%s<br>"
+                                        + "%s"   // v12: MM-interest sub-line, when there is any
                                         + "&nbsp;&nbsp;Top marginal bracket:&nbsp;<b>%s</b><br><br>"
                                         + "&nbsp;&nbsp;Federal tax:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;%s:&nbsp;%s<br>"
@@ -2191,14 +2204,18 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "thresholds are 2026 statutory values, inflation-indexed.<br>"
                                         + "SS taxability via the provisional-income formula. See the<br>"
                                         + "Assumptions &amp; Methods tab.</html>",
-                                CURRENCY.format((long)(er.taxableSS / d)),
-                                CURRENCY.format((long)(er.ordinaryTax / d)),
+                                CURRENCY.format(Math.round(er.taxableSS / d)),
+                                CURRENCY.format(Math.round(er.ordinaryTax / d)),
+                                (er.mmInterest > 0)
+                                        ? "&nbsp;&nbsp;&nbsp;&nbsp;<i>incl. money-market interest:&nbsp;"
+                                        + CURRENCY.format(Math.round(er.mmInterest / d)) + "</i><br>"
+                                        : "",
                                 er.topBracket,
-                                CURRENCY.format((long)(er.fedTax / d)),
+                                CURRENCY.format(Math.round(er.fedTax / d)),
                                 stateTaxLabel(er.calYear),
-                                CURRENCY.format((long)(er.stateTax / d)),
-                                CURRENCY.format((long)(er.irmaa / d)),
-                                CURRENCY.format((long)(er.tax / d)),
+                                CURRENCY.format(Math.round(er.stateTax / d)),
+                                CURRENCY.format(Math.round(er.irmaa / d)),
+                                CURRENCY.format(Math.round(er.tax / d)),
                                 dollarBasisNote(er));
                     }
                     case COL_IRMAA -> {
@@ -2219,18 +2236,18 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "lookback). Because your conversions and later RMDs raise<br>"
                                         + "MAGI, they can trip a higher tier two years out. Thresholds<br>"
                                         + "are 2026 values, inflation-indexed. See Assumptions &amp; Methods.</html>",
-                                CURRENCY.format((long)(er.irmaa / d)));
+                                CURRENCY.format(Math.round(er.irmaa / d)));
                     }
                     case COL_MAGI -> {
                         if (!er.drawing) return null;
                         double d = showRealDollars ? er.inflFactor : 1.0;
-                        long magiDisp = (long)(er.magi / d);
+                        long magiDisp = Math.round(er.magi / d);
                         // Headroom to the active fill ceiling, when a fill ceiling
                         // exists for this row (fill mode). convCeiling is stored in
                         // nominal $, matching er.magi.
                         String headroom;
                         if (er.convCeiling > 0) {
-                            long gap = (long)((er.convCeiling - er.magi) / d);
+                            long gap = Math.round((er.convCeiling - er.magi) / d);
                             String which = er.convBoundByIrmaa
                                     ? "the IRMAA cliff (minus buffer)"
                                     : "the selected tax-bracket top";
@@ -2255,10 +2272,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         // Deriving it as the residual guarantees the four lines sum
                         // to the MAGI shown above in every case, in both nominal and
                         // real-dollar modes (each term divided by the same d).
-                        long ssComp   = (long)(er.taxableSS / d);
-                        long annComp  = (long)(er.annuity   / d);
-                        long convComp = (long)(er.conversion/ d);
-                        long tradComp = magiDisp - ssComp - annComp - convComp;
+                        long ssComp   = Math.round(er.taxableSS / d);
+                        long annComp  = Math.round(er.annuity   / d);
+                        long convComp = Math.round(er.conversion/ d);
+                        // v12 2026-10-03: money-market interest is its own MAGI term now;
+                        // it comes out of the residual so the Traditional line stays true.
+                        long mmComp   = Math.round(er.mmInterest / d);
+                        long tradComp = magiDisp - ssComp - annComp - convComp - mmComp;
                         return String.format(
                                 "<html><b>MAGI -- Modified AGI this year</b><br>"
                                         + "&nbsp;&nbsp;MAGI:&nbsp;<b>%s</b><br>"
@@ -2268,6 +2288,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "&nbsp;&nbsp;Ordinary income (Traditional draw):&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;&nbsp;&nbsp;<i>= RMD or larger discretionary draw</i><br>"
                                         + "&nbsp;&nbsp;Annuity/Pen/Mil:&nbsp;%s<br>"
+                                        + "&nbsp;&nbsp;Money-market interest:&nbsp;%s<br>"   // v12
                                         + "&nbsp;&nbsp;Roth conversion (gross):&nbsp;+%s<br>"
                                         + "&nbsp;&nbsp;----------------------------<br>"
                                         + "&nbsp;&nbsp;<b>MAGI total:&nbsp;%s</b><br>"
@@ -2281,6 +2302,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                 CURRENCY.format(ssComp),
                                 CURRENCY.format(tradComp),
                                 CURRENCY.format(annComp),
+                                CURRENCY.format(mmComp),
                                 CURRENCY.format(convComp),
                                 CURRENCY.format(magiDisp),
                                 dollarBasisNote(er));
@@ -2289,7 +2311,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         if (!er.drawing || er.conversion <= 0) return null;
                         double d = showRealDollars ? er.inflFactor : 1.0;
                         String ceil = er.convCeiling > 0
-                                ? CURRENCY.format((long)(er.convCeiling / d)) : "n/a";
+                                ? CURRENCY.format(Math.round(er.convCeiling / d)) : "n/a";
                         String bind = er.convCeiling <= 0 ? "flat amount (no fill ceiling)"
                                 : (er.convBoundByIrmaa
                                 ? "selected IRMAA cliff (minus buffer)"
@@ -2307,9 +2329,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "(gross - tax) is split equally into the two Roth IRAs.<br>"
                                         + "The conversion raises MAGI (IRMAA-relevant) but is NOT in<br>"
                                         + "the living-expenses Tax column. See Assumptions &amp; Methods.</html>",
-                                CURRENCY.format((long)(er.conversion / d)),
-                                CURRENCY.format((long)(er.convTax / d)),
-                                CURRENCY.format((long)(er.convNetToRoth / d)),
+                                CURRENCY.format(Math.round(er.conversion / d)),
+                                CURRENCY.format(Math.round(er.convTax / d)),
+                                CURRENCY.format(Math.round(er.convNetToRoth / d)),
                                 ceil, bind);
                     }
                     case COL_CONV_TAX -> {
@@ -2327,7 +2349,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "This tax is paid FROM the conversion and leaves your asset<br>"
                                         + "base -- the one real cost of converting. It is separate from<br>"
                                         + "the living-expenses Tax column. See Assumptions &amp; Methods.</html>",
-                                CURRENCY.format((long)(er.convTax / d)));
+                                CURRENCY.format(Math.round(er.convTax / d)));
                     }
                     default -> { return null; }
                 }
@@ -3272,7 +3294,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "reasons: (a) omitting it slightly OVERSTATES tax, the conservative and preferred direction; "
                 + "(b) it avoids encoding fresh-statute phase-out and per-spouse eligibility-timing logic that is "
                 + "date-of-birth and MAGI sensitive; and (c) at the household's planned MAGI (~$205k with "
-                + "conversions) the bonus is already heavily phased out. <b>Verify with a tax professional before "
+                + "conversions) the bonus is already more than half phased out &mdash; roughly 55% gone, leaving "
+                + "about $5,400 of deduction worth an estimated ~$1,300 of tax in 2027 and ~$1,150 in 2028, and "
+                + "nothing after the 2028 sunset. (At lower MAGI it is worth more: about $2,400&ndash;$2,800 a "
+                + "year in a no-conversion plan near $155k&ndash;$168k MAGI.) <b>Verify with a tax professional before "
                 + "relying on this deduction.</b> It can be added later once eligibility timing is confirmed.</p>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
@@ -3348,11 +3373,30 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "your buffer) and your chosen bracket edge. Because the IRMAA cliff is a true cliff (one dollar "
                 + "over triggers the full tier), the fill leaves the buffer you set and stops there.</p>"
                 + "<p><b>The two-year lookback is built in.</b> IRMAA bills on MAGI from <b>two years prior</b>, so "
-                + "the conversion you do this year sets a Medicare premium two years out. Concretely for a couple "
-                + "reaching Medicare together, the conversion sized in a given year is scored against the IRMAA "
-                + "threshold of the year whose premium it will drive &mdash; a 2027 conversion is what sets 2029 "
-                + "premiums. The engine carries a MAGI history and reads the year&minus;2 value for every IRMAA "
-                + "assessment, so the column already respects the lookback; you do not need to shift years by hand.</p>"
+                + "the conversion you do this year sets a Medicare premium two years out &mdash; a 2027 conversion "
+                + "is what sets 2029 premiums. The engine carries a MAGI history and, from the third simulated year "
+                + "on, reads the year&minus;2 value for each IRMAA assessment, so the column respects the lookback; "
+                + "you do not need to shift years by hand.</p>"
+                // v12 2026-10-03: the first two years and the fill's threshold year,
+                // both previously misdescribed as "every assessment" / "the premium year".
+                + "<p><b>The first two simulated years use a stand-in (2027 and 2028 for this plan).</b> Their "
+                + "premiums are set by your actual 2025 and 2026 MAGI &mdash; income that happened before the "
+                + "simulation starts, which no input here can change. For those two years the engine substitutes "
+                + "the same year's MAGI as a stand-in. If your real 2025 or 2026 MAGI (for example, including a "
+                + "final year of wages) was above a threshold, that surcharge applies whatever the table shows. A "
+                + "work stoppage is a life-changing event that can be reported to Social Security on Form SSA-44 "
+                + "to ask for the surcharge to be redetermined on current income (verify with SSA).</p>"
+                + "<p><b>The fill sizes against THIS year's threshold, not the premium year's.</b> Each year's "
+                + "conversion is sized against the IRMAA threshold for the year the conversion happens, indexed "
+                + "with your general inflation rate &mdash; not against the threshold of the premium year two years "
+                + "later that the MAGI is actually judged by. Under <b>Full CPI</b> threshold growth the "
+                + "premium-year threshold is always the higher one, so this adds roughly two years of indexing as "
+                + "extra margin on top of your buffer. Under the <b>Chained-CPI</b> default it is higher for about "
+                + "the first 16 years; after that chained-CPI's slower growth overtakes the two-year head start, "
+                + "and the buffer absorbs the difference &mdash; at a 2.3% inflation assumption the total real "
+                + "cushion below the cliff narrows from about $21,000 early on to about $5,000 by year 30, still "
+                + "clear of it. The fill indexes its ceiling with general inflation in <b>every</b> threshold-growth "
+                + "mode, including Frozen.</p>"
                 + "<p><b>Both spouses' surcharges are counted.</b> Once both of you are enrolled in Medicare, a tier "
                 + "breach costs the surcharge <b>twice</b> &mdash; once per person. The tool uses the per-couple "
                 + "(per-person &times; 2) MFJ schedule in section 6, so the cost it shows for crossing a cliff is "
@@ -3426,10 +3470,25 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "RMD forces out beyond what the household actually spends &mdash; are already-taxed dollars "
                 + "that accumulate into a separate <b>Money Market reserve</b> (its own column on the Pro table). "
                 + "The reserve grows with your inflation assumption each year, and is <b>excluded from the "
-                + "drawable Portfolio balance</b> in every solve, so it never props up sustainability numbers. "
-                + "A &quot;last-resort tap&quot; rule for when both Traditional and Roth run dry exists as a "
-                + "clean engine hook but is intentionally unused today &mdash; the reserve is a real safety "
-                + "pool the tool refuses to spend for you.</p>"
+                + "drawable Portfolio balance</b> in every solve, so it never props up sustainability numbers.</p>"
+                // v12 2026-10-03: Bob's decision on what the reserve is FOR, and the
+                // interest it earns now being taxed.
+                + "<p><b>Earmarked for sequence-of-returns protection (a decision).</b> The reserve could pay "
+                + "Roth-conversion tax, and doing so would leave more in Roth each year &mdash; but it is "
+                + "deliberately reserved for something more valuable. In a down market the household draws "
+                + "living expenses from the money market <i>before</i> drawing down the IRA accounts, so "
+                + "investments are not sold at depressed prices. The simulation does not model that tactic (it "
+                + "never draws the reserve), so its results are conservative on this point.</p>"
+                + "<p><b>Money-market interest is taxed.</b> The reserve's yearly growth is interest, and interest "
+                + "is ordinary income. Each year the interest &mdash; the reserve times that year's inflation rate, "
+                + "matching the MM-return-equals-inflation assumption &mdash; is added to ordinary income: it is "
+                + "taxed federally and by the state, counts in provisional income for Social Security "
+                + "taxability, and counts in MAGI for IRMAA. Its tax appears in the Tax (est) column and is paid "
+                + "from cash flow (it lowers Surplus/gap), so the reserve keeps its full real value. In Fill mode "
+                + "the interest also counts toward the MAGI target, so conversions shrink by the interest amount "
+                + "and the IRMAA cushion stays intact. The first simulated year carries no interest, matching the "
+                + "Money Mkt column, which starts growing in year two. The Surplus/gap tooltip shows each year's "
+                + "interest and the tax it added; the larger reserve can be tapped to make up that difference.</p>"
                 + "<p><b>Roth conversions are modeled as a SEPARATE Traditional distribution</b>, not folded "
                 + "into the living-expenses tax. Each conversion:</p>"
                 + "<ul>"
@@ -3457,8 +3516,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<li><b>Fill to MAGI target:</b> each year converts the largest amount that keeps MAGI under "
                 + "the binding ceiling &mdash; the lower of (a) the IRMAA Tier-0 cliff minus your buffer and "
                 + "(b) the 22%&rarr;24% bracket edge &mdash; then capped by the cap input. Both ceilings are "
-                + "inflation-indexed. In practice the IRMAA cliff usually binds first; the table reports which "
-                + "ceiling bound the conversion each year.</li>"
+                + "inflation-indexed, <b>and so is the buffer</b>: enter it in 2026 dollars and it grows with "
+                + "inflation exactly as the threshold does, so the cushion and the MAGI target hold steady in "
+                + "today's dollars for the whole horizon. (Held in nominal dollars, as before v12, a $13,000 "
+                + "buffer eroded to about $8,400 of real cushion by 2044 and the target crept upward.) In "
+                + "practice the IRMAA cliff usually binds first; the table reports which ceiling bound the "
+                + "conversion each year.</li>"
                 + "</ul>"
                 + "<p><b>Fill mode + go-go interaction.</b> In Fill mode + go-go, the code protects a "
                 + "<b>Roth conversion</b> from crossing the line, but nothing stops the <b>go-go withdrawal</b> "
@@ -3907,9 +3970,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
 
     // =========================================================================
     //  SS OPTIMIZER TAB
-    //  Deterministic scan of all Bob x Jo SS claiming-age combinations.
-    //  Uses fixed returns (user's nomReturn / inflation) -- same as the React
-    //  optimizer -- fast enough to score all ~5,000+ combos in seconds.
+    //  Scans every User x Spouse SS claiming-month combination on the chosen
+    //  grid. v12 2026-10-03: each combination is one full-fidelity simulatePro
+    //  run (the Pro PoS tab's own engine and settings), scored in parallel
+    //  across worker threads -- see runSsOptimizerCore.
     //  v11: left-click Rank / User / Spouse -> writes SS start dates to IL
     //  spinners -> runs IL sim. Left-click the Why cell, or right-click any
     //  column, opens the explanation dialog instead.
@@ -3951,8 +4015,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
      *                  under version 1 were all paid the benefit that matched
      *                  whatever dates sat in the SS spinners when Run was pressed,
      *                  so at most one row per batch was ever right.
+     *   3  2026-10-03  the IRMAA fill buffer is inflation-indexed, and money-market
+     *                  interest is taxed and counts toward MAGI. Both move Fill-mode
+     *                  conversions and every row's Tax (est) / Surplus when MM > 0,
+     *                  so version-2 rows must not be resumed under the new code.
      */
-    private static final int SCORER_VERSION = 2;
+    private static final int SCORER_VERSION = 3;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -4006,15 +4074,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<b>Unchecked:</b> Use the SS start dates entered manually in the input panel.<br><br>"
                 + "When unchecked, click Run Simulation on the Pro PoS / GK tabs as usual.</html>");
 
-        JLabel modeNote = new JLabel(
-                "  Each combination is scored by the real Pro engine (reduced-fidelity scan,"
-                        + " then full re-verify of the top few, repeated until the top is stable).");
-        modeNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
-        modeNote.setForeground(new Color(80, 80, 80));
+        // v12 2026-10-03: the italic mode note that stood here described the removed
+        // reduced-fidelity scan + top-few re-verify. Every combination is now one
+        // full-fidelity Pro run (see runSsOptimizerCore), so the note is gone.
 
         modeRow.add(chkOptimize);
         modeRow.add(lblOptObjective);
-        modeRow.add(modeNote);
 
         // == Optimizer controls =============================================
         JPanel ctrlRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
@@ -7876,6 +7941,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             // is part of the portfolio total b and of Money Mkt (total), but the
             // spending waterfall never touches it.
             double mmReserve = 0;
+            // v12 2026-10-03: this path's own copy of the Money Mkt (total) reserve
+            // -- the prior carry-in plus retained overage, grown at the path's
+            // inflation -- so its interest can enter MAGI exactly as the display
+            // loop's does. Never drawn; it only feeds the conversion sizing.
+            double mmPath = Math.max(0, inp.mmPrior);
             // If the qualified inputs exceed the stated portfolio, scale them to
             // fit b so the invariant still holds at t0.
             if (trad + roth > b && (trad + roth) > 0) {
@@ -7905,6 +7975,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 res.fanInflFactors[p][y + 1] = res.fanInflFactors[p][y] * (1 + infl);
                 if (calYear == inp.manSSStartYear)   pManStartInfl   = res.fanInflFactors[p][y];
                 if (calYear == inp.womanSSStartYear) pWomanStartInfl = res.fanInflFactors[p][y];
+                // v12: this year's MM interest on this path (mirrors the display loop:
+                // year 0 has no prior year, so no growth and no interest).
+                double mmIntPath = 0;
+                if (y > 0 && res.fanInflFactors[p][y - 1] > 0) {
+                    double g = mmPath * (res.fanInflFactors[p][y] / res.fanInflFactors[p][y - 1]);
+                    mmIntPath = Math.max(0, g - mmPath);
+                    mmPath    = g;
+                }
 
                 int goGoRem = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
                 int wd = 0;
@@ -7933,13 +8011,15 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 if (drawing && inp.computedTax) {
                     double convGross = fanConversion(inp, y, calYear, manAge,
                             womanAge, trad, roth, survivor, wdActual,
-                            res.fanInflFactors[p][y], pManStartInfl, pWomanStartInfl);
+                            res.fanInflFactors[p][y], pManStartInfl, pWomanStartInfl,
+                            mmIntPath);
                     convGross = Math.min(convGross, Math.max(0, trad));
                     if (convGross > 0) {
                         fpConv[p][y] = convGross;      // v6: record for display consistency
                         double convNet = fanConversionNet(inp, y, calYear, manAge,
                                 womanAge, trad, roth, convGross, survivor, wdActual,
-                                res.fanInflFactors[p][y], pManStartInfl, pWomanStartInfl);
+                                res.fanInflFactors[p][y], pManStartInfl, pWomanStartInfl,
+                                mmIntPath);
                         double convTax = Math.max(0, convGross - Math.max(0, convNet));
                         trad -= convGross;              // gross leaves Traditional
                         roth += convGross;              // gross lands in Roth...
@@ -7962,12 +8042,15 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 // v8: retained RMD overage. The DISPLAYED Money Mkt (total) now
                 // comes from an exact-tie-out accumulator at display time
                 // (mmPrior + cumulative overage), so this in-sim mmReserve no
-                // longer feeds the column or the balance. It is kept here as the
-                // hook for the FUTURE rule Bob described: allow the sim to tap
-                // this reserve ONLY as a last resort once Traditional AND Roth are
-                // both depleted. Until that rule is wired, it simply accumulates
-                // and is never drawn.
+                // longer feeds the column or the balance. v12 2026-10-03: the
+                // reserve is EARMARKED for sequence-of-returns protection -- in a
+                // down market Bob draws living expenses from the money market
+                // BEFORE drawing down the IRA accounts, so equities are not sold
+                // at depressed prices. That is also why it does not pay Roth-
+                // conversion tax. The sim does not model the down-market draw; the
+                // reserve simply accumulates and is never drawn here.
                 mmReserve += Math.max(0, tradDraw - wdWithBridge);
+                mmPath    += Math.max(0, tradDraw - wdWithBridge);   // v12: same overage
                 double need = Math.max(0, wdWithBridge - tradDraw);
                 double taxDraw = Math.min(need, Math.max(0, taxable));
                 taxable = Math.max(0, taxable - taxDraw);
@@ -8138,8 +8221,15 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             // inflation). Year 0 has no prior year, so no growth is applied before
             // the first overage. Bob's model: MM return ~= inflation (~0% real),
             // so the nominal reserve holds real value flat rather than eroding.
+            // v12 2026-10-03: that growth IS interest, and interest is taxable
+            // ordinary income. It is captured here (before the overage lands) and
+            // fed to the tax block below; the reserve itself still compounds at
+            // the full inflation rate -- the tax is paid from cash flow.
+            double mmInterest = 0;
             if (y > 0 && medInfl[y - 1] > 0) {
-                mmReserveRun *= medInfl[y] / medInfl[y - 1];
+                double grown = mmReserveRun * (medInfl[y] / medInfl[y - 1]);
+                mmInterest   = Math.max(0, grown - mmReserveRun);
+                mmReserveRun = grown;
             }
             mmReserveRun += rmdOverage;
 
@@ -8209,6 +8299,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             int    convTaxThisYear = 0, convNetToRoth = 0;
             int    magiInt = 0, taxableSSInt = 0, ordTaxInt = 0, irmaaInt = 0,
                     fedInt = 0, stateInt = 0, convCeilInt = 0;
+            int    mmIntTaxInt = 0;   // v12
             String bracketStr = "--";
             boolean convByIrmaa = false;
             if (drawing && inp.computedTax) {
@@ -8229,7 +8320,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 // Defaults are 100%, so this equals `ann` and reproduces v10; a
                 // non-qualified annuity's return-of-principal share is excluded.
                 double annTaxable = streamsTaxable(inp, calYear, ssInflNow, fAnn, fPen, fMil);
-                double ordinaryBeforeConv = tradDraw + annTaxable;
+                // v12 2026-10-03: + money-market interest. Ordinary income for the
+                // federal and state base, provisional income (SS taxability) and
+                // MAGI -- so it also counts toward the Fill target below.
+                double ordinaryBeforeConv = tradDraw + annTaxable + mmInterest;
 
                 // MAGI (before conversion) drives the fill; taxable SS depends on
                 // the conversion is a SEPARATE Traditional distribution (see
@@ -8286,6 +8380,17 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil));
 
                 tax          = tr.totalTax;                 // living-expenses tax
+                // v12 2026-10-03: the part of this year's Tax (est) the MM interest
+                // caused, for the Surplus/gap tooltip. Display only: the same
+                // computation re-run without the interest; nothing feeds back.
+                if (mmInterest > 0) {
+                    TaxEngine.TaxResult trNoInt = TaxEngine.compute(
+                            grossSS, ordinaryBeforeConv - mmInterest, magiTwoYrPrior,
+                            manAge >= 65, womanAge >= 65, inflFactor, irmaaTF,
+                            fsYear, stProfile, calYear, tradDraw,
+                            streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil));
+                    mmIntTaxInt = (int) Math.max(0, tr.totalTax - trNoInt.totalTax);
+                }
                 taxableSSInt = (int) tr.taxableSS;
                 ordTaxInt    = (int) tr.ordinaryOther;      // living ordinary only
                 irmaaInt     = (int) tr.irmaaCost;
@@ -8381,6 +8486,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             row.magi          = magiInt;
             row.taxableSS     = taxableSSInt;
             row.ordinaryTax   = ordTaxInt;
+            // v12: interest only counts when the computed tax engine taxed it.
+            row.mmInterest    = (drawing && inp.computedTax) ? (int) mmInterest : 0;
+            row.mmInterestTax = mmIntTaxInt;
             row.fedTax        = fedInt;
             row.stateTax      = stateInt;
             row.topBracket    = bracketStr;
@@ -8555,10 +8663,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
 
         lblActualPoS.setText(String.format("%.1f%%", res.actualPoS * 100));
         lblMedianFinal.setText(showRealDollars
-                ? formatMoney((long)(res.medianFinalBalance / dEnd)) + " (real)"
+                ? formatMoney(Math.round(res.medianFinalBalance / dEnd)) + " (real)"
                 : formatMoney(res.medianFinalBalance) + " (nom.)");
         lblYr10Wd.setText(showRealDollars
-                ? CURRENCY.format((long)(yr10wd / d10)) : CURRENCY.format(yr10wd));
+                ? CURRENCY.format(Math.round(yr10wd / d10)) : CURRENCY.format(yr10wd));
         lblInitRate.setText(String.format("%.2f%%", rate));
 
         // Populate table
@@ -8568,44 +8676,44 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             tblProModel.addRow(new Object[]{
                     r.manAge,                                                              // 0
                     r.calYear,                                                             // 1
-                    CURRENCY.format((long)(r.balance / d)),                                // 2
-                    r.drawing ? CURRENCY.format((long)(r.withdrawal / d)) : "--",          // 3
-                    r.drawing ? CURRENCY.format((long)(r.wdActual   / d)) : "--",          // 4
+                    CURRENCY.format(Math.round(r.balance / d)),                                // 2
+                    r.drawing ? CURRENCY.format(Math.round(r.withdrawal / d)) : "--",          // 3
+                    r.drawing ? CURRENCY.format(Math.round(r.wdActual   / d)) : "--",          // 4
                     r.drawing ? String.format("%.2f%%", r.wdPct) : "--",                   // 5
                     r.alert,                                                               // 6
-                    r.manSS   > 0 ? CURRENCY.format((long)(r.manSS   / d)) : "--",         // 7
-                    r.womanSS > 0 ? CURRENCY.format((long)(r.womanSS / d)) : "--",         // 8
-                    r.annuity > 0 ? CURRENCY.format((long)(r.annuity / d)) : "--",         // 9
-                    r.guaranteed > 0 ? CURRENCY.format((long)(r.guaranteed / d)) : "--",  // 10
-                    r.drawing ? CURRENCY.format((long)(r.living    / d)) : "--",           // 11
-                    r.drawing ? CURRENCY.format((long)(r.medical   / d)) : "--",           // 12
-                    r.drawing ? CURRENCY.format((long)(r.tax       / d)) : "--",           // 13
-                    r.drawing ? CURRENCY.format((long)(r.totalSpend/ d)) : "--",           // 14
-                    CURRENCY.format((long)(r.totalIncome / d)),                            // 15
+                    r.manSS   > 0 ? CURRENCY.format(Math.round(r.manSS   / d)) : "--",         // 7
+                    r.womanSS > 0 ? CURRENCY.format(Math.round(r.womanSS / d)) : "--",         // 8
+                    r.annuity > 0 ? CURRENCY.format(Math.round(r.annuity / d)) : "--",         // 9
+                    r.guaranteed > 0 ? CURRENCY.format(Math.round(r.guaranteed / d)) : "--",  // 10
+                    r.drawing ? CURRENCY.format(Math.round(r.living    / d)) : "--",           // 11
+                    r.drawing ? CURRENCY.format(Math.round(r.medical   / d)) : "--",           // 12
+                    r.drawing ? CURRENCY.format(Math.round(r.tax       / d)) : "--",           // 13
+                    r.drawing ? CURRENCY.format(Math.round(r.totalSpend/ d)) : "--",           // 14
+                    CURRENCY.format(Math.round(r.totalIncome / d)),                            // 15
                     r.drawing
                             ? (r.surplus >= 0 ? "+" : "-")
-                            + CURRENCY.format((long)(Math.abs(r.surplus) / d)) : "--",   // 16
+                            + CURRENCY.format(Math.round(Math.abs(r.surplus) / d)) : "--",   // 16
                     String.format("%.3f", r.inflFactor),                                  // 17
-                    r.manRmd   > 0 ? CURRENCY.format((long)(r.manRmd   / d)) : "--",       // 18
-                    r.womanRmd > 0 ? CURRENCY.format((long)(r.womanRmd / d)) : "--",       // 19
-                    r.combRmd  > 0 ? CURRENCY.format((long)(r.combRmd  / d)) : "--",       // 20
-                    r.rmdOverage > 0 ? CURRENCY.format((long)(r.rmdOverage / d)) : "--",   // 21
+                    r.manRmd   > 0 ? CURRENCY.format(Math.round(r.manRmd   / d)) : "--",       // 18
+                    r.womanRmd > 0 ? CURRENCY.format(Math.round(r.womanRmd / d)) : "--",       // 19
+                    r.combRmd  > 0 ? CURRENCY.format(Math.round(r.combRmd  / d)) : "--",       // 20
+                    r.rmdOverage > 0 ? CURRENCY.format(Math.round(r.rmdOverage / d)) : "--",   // 21
                     ((showRealDollars ? r.balDeltaReal : r.balDelta) >= 0 ? "+" : "-")
                             + CURRENCY.format((long) Math.abs(
                             showRealDollars ? r.balDeltaReal : r.balDelta)),       // 22 (v6)
                     (r.drawing && r.irmaa > 0)
-                            ? CURRENCY.format((long)(r.irmaa / d)) : "--",                 // 23 IRMAA
+                            ? CURRENCY.format(Math.round(r.irmaa / d)) : "--",                 // 23 IRMAA
                     (r.drawing && r.magi > 0)
-                            ? CURRENCY.format((long)(r.magi / d)) : "--",                  // 24 MAGI (v7)
+                            ? CURRENCY.format(Math.round(r.magi / d)) : "--",                  // 24 MAGI (v7)
                     (r.drawing && r.conversion > 0)
-                            ? CURRENCY.format((long)(r.conversion / d)) : "--",            // 25 Roth Conv
+                            ? CURRENCY.format(Math.round(r.conversion / d)) : "--",            // 25 Roth Conv
                     (r.drawing && r.convTax > 0)
-                            ? CURRENCY.format((long)(r.convTax / d)) : "--",               // 26 Conv Tax
-                    r.tradBal > 0 ? CURRENCY.format((long)(r.tradBal / d)) : "--",          // 27 Trad Bal (v6)
-                    r.rothBal > 0 ? CURRENCY.format((long)(r.rothBal / d)) : "--",          // 28 Roth Bal (v6)
-                    r.mmBal > 0 ? CURRENCY.format((long)(r.mmBal / d)) : "--",              // 29 Money Mkt (v6)
+                            ? CURRENCY.format(Math.round(r.convTax / d)) : "--",               // 26 Conv Tax
+                    r.tradBal > 0 ? CURRENCY.format(Math.round(r.tradBal / d)) : "--",          // 27 Trad Bal (v6)
+                    r.rothBal > 0 ? CURRENCY.format(Math.round(r.rothBal / d)) : "--",          // 28 Roth Bal (v6)
+                    r.mmBal > 0 ? CURRENCY.format(Math.round(r.mmBal / d)) : "--",              // 29 Money Mkt (v6)
                     String.format("%.3fx", r.goGoMult),                                     // 30 Spend mult (v6)
-                    r.ssBridge > 0 ? CURRENCY.format((long)(r.ssBridge / d)) : "--",        // 31 SS bridge (v6)
+                    r.ssBridge > 0 ? CURRENCY.format(Math.round(r.ssBridge / d)) : "--",        // 31 SS bridge (v6)
             });
         }
 
@@ -9231,7 +9339,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                  int manAge, int womanAge,
                                  double trad, double roth, boolean survivor,
                                  double wdActual,
-                                 double iNow, double iManStart, double iWomanStart) {
+                                 double iNow, double iManStart, double iWomanStart,
+                                 double mmInterest) {
         TaxEngine.FilingStatus fs = filingFor(inp, calYear);
         double inflFactor = Math.pow(1 + inp.inflation, y);
         double grossSS = manSSSurv(inp, y, iNow, iManStart, iWomanStart)
@@ -9245,7 +9354,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // Traditional portion of the draw (RMD floors it), not the full
         // withdrawal and not the RMD alone. Sizing conversions off RMD only
         // understated income and over-converted.
-        double ordinaryBeforeConv = Math.max(rmd, Math.min(wdActual, Math.max(0, trad))) + ann;
+        // v12 2026-10-03: + this path's money-market interest, as in the display loop.
+        double ordinaryBeforeConv = Math.max(rmd, Math.min(wdActual, Math.max(0, trad))) + ann
+                + mmInterest;
         double taxSSpre = TaxEngine.taxableSocialSecurity(grossSS, ordinaryBeforeConv, inflFactor, fs);
         double magiBeforeConv = taxSSpre + ordinaryBeforeConv;
         if (inp.convFillMode) {
@@ -9264,14 +9375,16 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                     double trad, double roth,
                                     double convGross, boolean survivor,
                                     double wdActual,
-                                    double iNow, double iManStart, double iWomanStart) {
+                                    double iNow, double iManStart, double iWomanStart,
+                                    double mmInterest) {
         TaxEngine.FilingStatus fs = filingFor(inp, calYear);
         double inflFactor = Math.pow(1 + inp.inflation, y);
         double grossSS = manSSSurv(inp, y, iNow, iManStart, iWomanStart)
                 + womanSSSurv(inp, y, iNow, iManStart, iWomanStart);
         double rmd     = combinedRmd(inp, trad, calYear, manAge, womanAge);
         double ann     = streamsTaxableDet(inp, calYear);   // v11
-        double ordinaryBeforeConv = Math.max(rmd, Math.min(wdActual, Math.max(0, trad))) + ann;  // v6 FIX
+        double ordinaryBeforeConv = Math.max(rmd, Math.min(wdActual, Math.max(0, trad))) + ann  // v6 FIX
+                + mmInterest;   // v12: interest raises the base the conversion stacks on
         TaxEngine.StateTaxProfile stProfile = TaxEngine.stateProfile(inp.stateCode);
         TaxEngine.TaxResult tr = TaxEngine.compute(grossSS, ordinaryBeforeConv,
                 magiBeforeForConv(grossSS, ordinaryBeforeConv, inflFactor, fs),
@@ -9549,10 +9662,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                     + "&nbsp;&nbsp;Spouse SS:&nbsp;%s<br>"
                                     + "&nbsp;&nbsp;Annuity/Pen/Mil:&nbsp;&nbsp;&nbsp;%s<br>"
                                     + "&nbsp;&nbsp;= Fixed Inc:&nbsp;<b>%s</b></html>",
-                            CURRENCY.format((long)(gr.manSS / d)),
-                            CURRENCY.format((long)(gr.womanSS / d)),
-                            CURRENCY.format((long)(gr.annuity / d)),
-                            CURRENCY.format((long)(gr.guaranteed / d)));
+                            CURRENCY.format(Math.round(gr.manSS / d)),
+                            CURRENCY.format(Math.round(gr.womanSS / d)),
+                            CURRENCY.format(Math.round(gr.annuity / d)),
+                            CURRENCY.format(Math.round(gr.guaranteed / d)));
                 }
                 if (col == 12) { // Living Exp
                     double d = showRealDollars ? gr.inflFactor : 1.0;
@@ -9562,7 +9675,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                     + "&nbsp;&nbsp;Inflation factor applied:&nbsp;%.3f<br><br>"
                                     + "Source: your Living Expense input, scaled by the median<br>"
                                     + "cumulative inflation factor for this year.</html>",
-                            CURRENCY.format((long)(gr.living / d)),
+                            CURRENCY.format(Math.round(gr.living / d)),
                             gr.inflFactor);
                 }
                 if (col == 15) { // Total spend
@@ -9573,10 +9686,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                     + "&nbsp;&nbsp;Medical:&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
                                     + "&nbsp;&nbsp;Tax (est):&nbsp;&nbsp;%s<br>"
                                     + "&nbsp;&nbsp;= Total spend:&nbsp;<b>%s</b></html>",
-                            CURRENCY.format((long)(gr.living / d)),
-                            CURRENCY.format((long)(gr.medical / d)),
-                            CURRENCY.format((long)(gr.tax / d)),
-                            CURRENCY.format((long)(gr.totalSpend / d)));
+                            CURRENCY.format(Math.round(gr.living / d)),
+                            CURRENCY.format(Math.round(gr.medical / d)),
+                            CURRENCY.format(Math.round(gr.tax / d)),
+                            CURRENCY.format(Math.round(gr.totalSpend / d)));
                 }
                 if (col == 16) { // Total income
                     double d = showRealDollars ? gr.inflFactor : 1.0;
@@ -9585,9 +9698,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                     + "&nbsp;&nbsp;Actual wd (portfolio draw):&nbsp;%s<br>"
                                     + "&nbsp;&nbsp;Fixed Inc (guaranteed):&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
                                     + "&nbsp;&nbsp;= Total income:&nbsp;<b>%s</b></html>",
-                            CURRENCY.format((long)(gr.wdActual / d)),
-                            CURRENCY.format((long)(gr.guaranteed / d)),
-                            CURRENCY.format((long)(gr.totalIncome / d)));
+                            CURRENCY.format(Math.round(gr.wdActual / d)),
+                            CURRENCY.format(Math.round(gr.guaranteed / d)),
+                            CURRENCY.format(Math.round(gr.totalIncome / d)));
                 }
                 if (col == 17) { // Surplus/gap
                     double d = showRealDollars ? gr.inflFactor : 1.0;
@@ -9598,10 +9711,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                     + "&nbsp;&nbsp;= Surplus/gap:&nbsp;<b>%s</b><br><br>"
                                     + "This column represents the amount over the expected living<br>"
                                     + "expenses that is available for spending.</html>",
-                            CURRENCY.format((long)(gr.totalIncome / d)),
-                            CURRENCY.format((long)(gr.totalSpend / d)),
+                            CURRENCY.format(Math.round(gr.totalIncome / d)),
+                            CURRENCY.format(Math.round(gr.totalSpend / d)),
                             (gr.surplus >= 0 ? "+" : "-")
-                                    + CURRENCY.format((long)(Math.abs(gr.surplus) / d)));
+                                    + CURRENCY.format(Math.round(Math.abs(gr.surplus) / d)));
                 }
                 if (col == 22 && gr.rmdOverage > 0) { // Roth/MM
                     return "<html><b>RMD overage -> Roth/MM</b><br>"
@@ -9620,8 +9733,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                             (showRealDollars ? gr.balDeltaReal : gr.balDelta) >= 0 ? "+" : "",
                             CURRENCY.format((long) Math.abs(
                                     showRealDollars ? gr.balDeltaReal : gr.balDelta)),
-                            CURRENCY.format((long)(gr.investmentGrowth / d)),
-                            CURRENCY.format((long)(gr.wdActual / d)));
+                            CURRENCY.format(Math.round(gr.investmentGrowth / d)),
+                            CURRENCY.format(Math.round(gr.wdActual / d)));
                 }
                 return super.getToolTipText(e);
             }
@@ -9924,30 +10037,30 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 tblGkModel.addRow(new Object[]{
                         gr.manAge,                                                              // 0
                         gr.calYear,                                                             // 1
-                        CURRENCY.format((long)(gr.balance  / d)),                               // 2
-                        gr.drawing ? CURRENCY.format((long)(gr.wdGK    / d)) : "--",            // 3
-                        gr.drawing ? CURRENCY.format((long)(gr.wdActual/ d)) : "--",            // 4
+                        CURRENCY.format(Math.round(gr.balance  / d)),                               // 2
+                        gr.drawing ? CURRENCY.format(Math.round(gr.wdGK    / d)) : "--",            // 3
+                        gr.drawing ? CURRENCY.format(Math.round(gr.wdActual/ d)) : "--",            // 4
                         gr.drawing ? String.format("%.2f%%", gr.wdPct) : "--",                  // 5
                         gr.ruleFlags,                                                           // 6 hidden
                         gr.ruleFlags,                                                           // 7 visible flags
-                        gr.manSS   > 0 ? CURRENCY.format((long)(gr.manSS   / d)) : "--",        // 8
-                        gr.womanSS > 0 ? CURRENCY.format((long)(gr.womanSS / d)) : "--",        // 9
-                        gr.annuity > 0 ? CURRENCY.format((long)(gr.annuity / d)) : "--",        // 10
-                        gr.guaranteed > 0 ? CURRENCY.format((long)(gr.guaranteed / d)) : "--", // 11
-                        gr.drawing ? CURRENCY.format((long)(gr.living    / d)) : "--",          // 12
-                        gr.drawing ? CURRENCY.format((long)(gr.medical   / d)) : "--",          // 13
-                        gr.tax > 0  ? CURRENCY.format((long)(gr.tax      / d)) : "--",          // 14
-                        gr.drawing ? CURRENCY.format((long)(gr.totalSpend/ d)) : "--",          // 15
-                        CURRENCY.format((long)(gr.totalIncome / d)),                            // 16
+                        gr.manSS   > 0 ? CURRENCY.format(Math.round(gr.manSS   / d)) : "--",        // 8
+                        gr.womanSS > 0 ? CURRENCY.format(Math.round(gr.womanSS / d)) : "--",        // 9
+                        gr.annuity > 0 ? CURRENCY.format(Math.round(gr.annuity / d)) : "--",        // 10
+                        gr.guaranteed > 0 ? CURRENCY.format(Math.round(gr.guaranteed / d)) : "--", // 11
+                        gr.drawing ? CURRENCY.format(Math.round(gr.living    / d)) : "--",          // 12
+                        gr.drawing ? CURRENCY.format(Math.round(gr.medical   / d)) : "--",          // 13
+                        gr.tax > 0  ? CURRENCY.format(Math.round(gr.tax      / d)) : "--",          // 14
+                        gr.drawing ? CURRENCY.format(Math.round(gr.totalSpend/ d)) : "--",          // 15
+                        CURRENCY.format(Math.round(gr.totalIncome / d)),                            // 16
                         gr.drawing
                                 ? (gr.surplus >= 0 ? "+" : "-")
-                                + CURRENCY.format((long)(Math.abs(gr.surplus) / d))
+                                + CURRENCY.format(Math.round(Math.abs(gr.surplus) / d))
                                 : "--",                                                              // 17
                         String.format("%.3f", gr.inflFactor),                                  // 18
-                        gr.manRmd   > 0 ? CURRENCY.format((long)(gr.manRmd   / d)) : "--",      // 19
-                        gr.womanRmd > 0 ? CURRENCY.format((long)(gr.womanRmd / d)) : "--",      // 20
-                        gr.combRmd  > 0 ? CURRENCY.format((long)(gr.combRmd  / d)) : "--",      // 21
-                        gr.rmdOverage>0  ? CURRENCY.format((long)(gr.rmdOverage/d)) : "--",     // 22
+                        gr.manRmd   > 0 ? CURRENCY.format(Math.round(gr.manRmd   / d)) : "--",      // 19
+                        gr.womanRmd > 0 ? CURRENCY.format(Math.round(gr.womanRmd / d)) : "--",      // 20
+                        gr.combRmd  > 0 ? CURRENCY.format(Math.round(gr.combRmd  / d)) : "--",      // 21
+                        gr.rmdOverage>0  ? CURRENCY.format(Math.round(gr.rmdOverage/d)) : "--",     // 22
                         ((showRealDollars ? gr.balDeltaReal : gr.balDelta) >= 0 ? "+" : "-")
                                 + CURRENCY.format((long) Math.abs(
                                 showRealDollars ? gr.balDeltaReal : gr.balDelta)),         // 23 (v6)
@@ -9961,7 +10074,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                     / (showRealDollars ? wd1InflFactor : 1.0))) + " / yr");
             lblGkInitRate.setText(String.format("%.2f%%", gkRate));
             lblGkFinalBal.setText(showRealDollars
-                    ? formatMoney((long)(gk.finalBalance / dEndGk)) + " (2026$)"
+                    ? formatMoney(Math.round(gk.finalBalance / dEndGk)) + " (2026$)"
                     : formatMoney(gk.finalBalance) + " (nom.)");
         }
     }
@@ -10855,7 +10968,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                        int irmaaTierIdx, int bracketCeilIdx) {
             double[] thr = irmaaThresh(fs);
             int ti = Math.max(0, Math.min(irmaaTierIdx, thr.length - 1));
-            double irmaaCeil = infl(thr[ti], inflFactor) - buffer;
+            // v12 2026-10-03: the buffer is entered in 2026 dollars and is now
+            // inflation-indexed like the threshold it sits under. Held nominal, it
+            // eroded in real terms -- $13,000 shrank to ~$8,400 of real cushion by
+            // 2044 on a 1.55 inflation factor, and the MAGI target crept upward.
+            double irmaaCeil = infl(thr[ti], inflFactor) - infl(buffer, inflFactor);
             // Bracket edge is a TAXABLE-income figure; convert to MAGI by adding
             // back the deduction so both ceilings are compared in MAGI.
             double ded        = totalDeduction(man65, woman65, inflFactor, fs);
@@ -11088,6 +11205,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         int  living, medical, tax, totalSpend, totalIncome, surplus;
         // v3 tax engine detail
         int  irmaa, conversion, magi, taxableSS, ordinaryTax, fedTax, stateTax;
+        // v12 2026-10-03: money-market interest this year (nominal, taxable) and
+        // the Tax (est) it added -- the row's tax with the interest minus the
+        // same tax without it. Both 0 when the reserve is empty.
+        int  mmInterest, mmInterestTax;
         int  convTax, convNetToRoth;   // v3: conversion tax + net landing in Roth
         // v6: the actual figures behind the Wd % guardrail colour, so the cell
         // tooltip can show WHY a row is green or red rather than just that it is.
