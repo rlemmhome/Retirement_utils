@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Saturday, October 03, 2026 at 02:54 PM MST (UTC-7)
+// Last modified: Sunday, October 04, 2026 at 01:44 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Saturday, October 03, 2026 at 02:54 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, October 04, 2026 at 01:44 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -4872,8 +4872,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 btnRunOpt.setEnabled(true);
                 btnCancelOpt.setEnabled(false);
                 if (optCancelRequested)
-                    lblOptStatus.setText("Cancelled. Finished combinations are saved -- "
-                            + "press Run to resume.");
+                    lblOptStatus.setText("Cancelled [elapsed " + minSec(optRunElapsedMs)
+                            + "]. Finished combinations are saved -- press Run to resume.");
             }
         };
         worker.execute();
@@ -4938,6 +4938,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
 
     /** v11 2026-09-27: the batch itself. Shared verbatim by the GUI worker and headless mode. */
     private void runSsOptimizerCore(BatchCfg c, java.util.function.Consumer<String> publish) {
+        // v12 2026-10-04: wall clock from pressing Run -- grid build and resume-file
+        // read included, not just scoring. Read by the progress line, the
+        // completion message and the cancel message.
+        optRunStartMs   = System.currentTimeMillis();
+        optRunElapsedMs = 0;
         java.time.LocalDate today = java.time.LocalDate.now();
         int sy = today.getYear(), sm = today.getMonthValue();
 
@@ -5077,16 +5082,20 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             int ran  = ranCnt.get();
             int done = fromDisk + ran;
             long el  = System.currentTimeMillis() - t0;
+            // v12 2026-10-04: "[remaining <time>]   [elapsed <m>m <ss>s]". The ETA rate
+            // still comes from scoring time only (t0); elapsed is wall clock from Run.
             String eta = (ran > 0)
-                    ? humanDuration((long) (el / (double) ran * Math.max(0, toRun - ran))) + " remaining"
-                    : "estimating...";
-            publish.accept(String.format("%,d / %,d  (%.0f%%)   workers %d of %d   %s   %s",
+                    ? "[remaining " + humanDuration((long) (el / (double) ran * Math.max(0, toRun - ran))) + "]"
+                    : "[remaining --]";
+            String elapsed = "[elapsed " + minSec(System.currentTimeMillis() - optRunStartMs) + "]";
+            publish.accept(String.format("%,d / %,d  (%.0f%%)   workers %d of %d   %s   %s   %s",
                     done, total, done * 100.0 / Math.max(1, total),
-                    activeWorkerTarget(), CPU_COUNT, lastDone.get(), eta));
+                    activeWorkerTarget(), CPU_COUNT, lastDone.get(), eta, elapsed));
         }
         for (Thread th : pool) {
             try { th.join(); } catch (InterruptedException ignored) { }
         }
+        optRunElapsedMs = System.currentTimeMillis() - optRunStartMs;   // v12: final, frozen
 
         java.util.List<SsOptResult> results = new java.util.ArrayList<>();
         for (SsOptResult r : slot) if (r != null) results.add(r);
@@ -5133,8 +5142,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         } else {
             final java.util.List<SsOptResult> fin = results;
             final BatchCfg cc = c;
+            final long elapsedMs = optRunElapsedMs;   // v12
             SwingUtilities.invokeLater(() -> populateOptTable(
-                    fin, cc.manBY, cc.manBM, cc.womanBY, cc.womanBM, cc.manPIA, cc.womanPIA));
+                    fin, cc.manBY, cc.manBM, cc.womanBY, cc.womanBM, cc.manPIA, cc.womanPIA,
+                    elapsedMs));
         }
     }
 
@@ -5151,6 +5162,16 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         finally { headlessBatch = false; }
     }
     private boolean headlessBatch = false;
+
+    // v12 2026-10-04: SS Optimizer run clock (set by runSsOptimizerCore).
+    private volatile long optRunStartMs, optRunElapsedMs;
+
+    /** v12 2026-10-04: elapsed as minutes and seconds, minutes uncapped -- "75m 10s". */
+    private static String minSec(long ms) {
+        if (ms < 0) ms = 0;
+        long s = ms / 1000;
+        return String.format("%dm %02ds", s / 60, s % 60);
+    }
 
     /** v11 2026-09-27: "2h 14m" / "6m 30s" / "45s" -- an ETA a person can act on. */
     private static String humanDuration(long ms) {
@@ -6198,7 +6219,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
 
     private void populateOptTable(java.util.List<SsOptResult> results,
                                   int manBY, int manBM, int womanBY, int womanBM,
-                                  int manPIA, int womanPIA) {
+                                  int manPIA, int womanPIA, long elapsedMs) {
         // Cache for real/nominal toggle refresh
         lastOptResults  = results;
         lastOptManBY    = manBY;  lastOptManBM   = manBM;
@@ -6245,6 +6266,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         + "PASS ranks first; within each block, most portfolio dollars drawn "
                         + "in the final %d years. Click the Why cell for the reason.",
                 show, passCount, failCount, OPT_SCORE_YEARS);
+        // v12 2026-10-04: the run's final wall-clock time stays on screen.
+        if (elapsedMs > 0) head += "   [elapsed " + minSec(elapsedMs) + "]";
         lblOptStatus.setText(head);
     }
 
