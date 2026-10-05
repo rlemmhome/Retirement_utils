@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Sunday, October 04, 2026 at 01:44 PM MST (UTC-7)
+// Last modified: Sunday, October 04, 2026 at 05:19 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -109,7 +109,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Sunday, October 04, 2026 at 01:44 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, October 04, 2026 at 05:19 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -3825,10 +3825,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "Pro PoS tab puts on screen. There is no reduced-fidelity scan: a faster pass produces "
                 + "noise, and correcting for that noise costs more than running the engine properly in the "
                 + "first place.</p>"
-                + "<p><b>What it costs.</b> About 9 hours of CPU time for 4,636 combinations; a quarterly "
-                + "grid is far quicker. <b>Combinations are scored in parallel</b> (v12), one per worker "
-                + "thread, so the wall-clock time divides by roughly the number of workers &mdash; under "
-                + "an hour on a 24-core machine. <i>Leave free for other work</i> sets how many CPUs the "
+                + "<p><b>What it costs.</b> About 10&frac12; hours single-threaded for a Monthly grid "
+                + "(4,500 combinations in October 2026 &mdash; the count shrinks as the first claim month "
+                + "moves later); a quarterly grid is far quicker. <b>Combinations are scored in parallel</b> "
+                + "(v12), one per worker thread &mdash; about 41 minutes for that Monthly grid on a 24-core "
+                + "machine (see the timing table below). <i>Leave free for other work</i> sets how many CPUs the "
                 + "batch keeps its hands off; it applies live, mid-batch, and changes only speed, never "
                 + "a result. Parallel and single-threaded batches produce identical rows: every path "
                 + "seeds its own random stream, so no number depends on which thread computed it. "
@@ -3849,6 +3850,57 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "per-year violation, every graced dip, the floors it was judged against and its margin to "
                 + "each &mdash; so a batch read back off disk explains its verdicts exactly as a fresh one "
                 + "does. Delete the file for a clean slate; it costs only the resume.</p>"
+                // v12 2026-10-04: measured batch timings, the E-core pinning recipe, and
+                // the author's note -- all from Bob's runs on his 24-CPU laptop.
+                + "<p><b>Measured batch times</b> (author's 24-CPU laptop, October 2026 grid; "
+                + "<i>italic</i> = projected from the measured cells):</p>"
+                + "<table border='1' cellpadding='3' cellspacing='0'>"
+                + "<tr><th>Leave free</th><th>Workers</th><th>Yearly (48)</th><th>Half-year (154)</th>"
+                + "<th>Quarterly (546)</th><th>Monthly (4,500)</th><th>Speed-up</th></tr>"
+                + "<tr><td>1 (Overnight)</td><td>23</td><td>0m 28s</td><td>1m 26s</td><td>5m 04s</td>"
+                + "<td><b>40m 35s</b></td><td>15.3&times;</td></tr>"
+                + "<tr><td>4 (Daytime)</td><td>20</td><td>0m 32s</td><td>1m 34s</td><td>5m 27s</td>"
+                + "<td>44m 10s</td><td>14.0&times;</td></tr>"
+                + "<tr><td>8 (Gaming)</td><td>16</td><td>0m 34s</td><td>1m 48s</td><td>6m 21s</td>"
+                + "<td><i>~51 min</i></td><td>12.2&times;</td></tr>"
+                + "<tr><td>16</td><td>8</td><td>0m 53s</td><td>2m 55s</td><td>10m 08s</td>"
+                + "<td><i>~1h 21m</i></td><td>7.5&times;</td></tr>"
+                + "<tr><td>23</td><td>1</td><td>6m 51s</td><td>21m 57s</td><td><i>~1h 17m</i></td>"
+                + "<td><i>~10h 40m</i></td><td>1&times;</td></tr>"
+                + "</table>"
+                + "<p>Speed-up is single-threaded time divided by this setting's time, taken from the "
+                + "half-year column (the largest grid timed at every setting). Projections: Monthly = "
+                + "Quarterly &times; 8.06 (the measured 23- and 20-worker ratios were 8.01 and 8.10); one "
+                + "worker = 8.56 s per combination (both single-worker runs measured exactly that). Each "
+                + "added worker helps less than the last: 8 workers deliver 94% of their count, 23 deliver "
+                + "67%, because the later ones land on slower efficiency cores and share one power and "
+                + "cooling budget.</p>"
+                + "<p><b>Keeping the performance cores free.</b> <i>Leave free</i> sets how many CPUs the "
+                + "batch uses, not which ones. Linux places the threads, and it tends to put busy batch "
+                + "threads on the fast performance (P) cores. To guarantee a game keeps the P-cores, pin "
+                + "the app to the efficiency (E) cores:</p>"
+                + "<ul>"
+                + "<li>Find the cores: <tt>cat /sys/devices/cpu_core/cpus</tt> lists the P-cores and "
+                + "<tt>cat /sys/devices/cpu_atom/cpus</tt> the E-cores. If those files are missing, "
+                + "<tt>lscpu --extended=CPU,CORE,MAXMHZ</tt> shows them &mdash; P-cores have the higher MAXMHZ.</li>"
+                + "<li>Launch pinned: <tt>taskset -c \"$(cat /sys/devices/cpu_atom/cpus)\" nice -n 19 "
+                + "java -jar IncomeLab.jar</tt>. The app then sees only the E-cores (16 on the author's "
+                + "machine); set <i>Leave free</i> = 1, which runs 15 workers on the 16 E-cores.</li>"
+                + "<li>Pin an app already running: <tt>taskset -a -cp \"$(cat /sys/devices/cpu_atom/cpus)\" "
+                + "$(pgrep -f IncomeLab)</tt> &mdash; run <tt>pgrep -af IncomeLab</tt> first to confirm it "
+                + "finds only the app. The app still counts every CPU, so set <i>Leave free</i> to the number "
+                + "of P-cores (8 on the author's machine) for one worker per E-core.</li>"
+                + "<li>Trade-off: pinned, the batch cannot use the P-cores at all, so pin only when you "
+                + "need them; overnight, launch normally.</li>"
+                + "</ul>"
+                + "<p><b>Author's note.</b> The program's creator doesn't see overwhelming benefit in "
+                + "going further than the built-in <i>Leave free</i> control on the SS Optimizer tab. On his "
+                + "24-CPU machine, the <b>Gaming</b> preset (8 left free, 16 workers) left enough capacity to "
+                + "run full-speed modern games while long Monthly batches ran. A single-threaded Monthly "
+                + "batch would take about 10&frac12; hours; with parallel scoring it took <b>40m 35s at "
+                + "Overnight (about 15&times; faster)</b> and is projected at <b>about 51 minutes at Gaming "
+                + "(about 12&times; faster)</b>. Pinning to the E-cores is there for anyone who wants a "
+                + "guarantee, not because it was needed.</p>"
                 + "<p><b>The batch seed is always 0, and <i>Re-randomize each run</i> does not apply to it.</b> "
                 + "The batch is a <i>comparison</i>, not a forecast: its job is to judge thousands of claim "
                 + "dates against one another, which needs a future they all share, not a random one. "
@@ -4468,9 +4520,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 "Leave " + presetOvernight() + " free -- you are not using the machine.");
         JButton bDay   = presetButton("Daytime (" + presetDaytime() + ")", presetDaytime(),
                 "Leave " + presetDaytime() + " free -- browsing, email, office work.");
+        // v12 2026-10-04: says HOW MANY, not WHICH -- Linux places the threads.
         JButton bGame  = presetButton("Gaming (" + presetGaming() + ")", presetGaming(),
-                "Leave " + presetGaming() + " free -- roughly the performance-core share,"
-                        + " for a CPU-heavy game.");
+                "<html>Leave " + presetGaming() + " free for a CPU-heavy game.<br>"
+                        + "This sets <b>how many</b> CPUs the batch uses, not <b>which</b> ones. To<br>"
+                        + "guarantee the game keeps the performance cores, launch the app<br>"
+                        + "pinned to the E-cores (see Assumptions section 11). On the author's<br>"
+                        + "machine, Gaming ran about 20% slower than Overnight.</html>");
 
         JButton bSuggest = new JButton("Suggest");
         bSuggest.setToolTipText("<html><b>Suggest a value from what the machine is doing now</b><br>"
