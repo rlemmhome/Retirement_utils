@@ -101,6 +101,7 @@ import java.util.List;
  * Compile:  javac IncomeLab_OptSocSec_v12.java
  * Run:      java com.hiflite.incomelabs_riskbased.IncomeLab_OptSocSec_v12
  * Requires Java 16+, but JDK 25+ is desired. No external dependencies.
+ *
  */
 public class IncomeLab_OptSocSec_v12 extends JFrame {
 
