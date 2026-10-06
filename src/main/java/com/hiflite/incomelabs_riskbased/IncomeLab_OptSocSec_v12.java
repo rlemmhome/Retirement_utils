@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Monday, October 05, 2026 at 03:46 PM MST (UTC-7)
+// Last modified: Monday, October 05, 2026 at 10:27 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -70,18 +70,18 @@ import java.util.List;
  *     minus the MFJ + age-65 standard deduction, through inflation-indexed 2026
  *     brackets + the selected STATE tax + IRMAA (costed, 2-year MAGI lookback).
  *
- *     STATE TAX (v5): the state is selectable. Two profiles ship: Arizona
- *     (flat 2.5%, Social Security excluded from the state base -- this
- *     reproduces the pre-v5 hardcoded behavior EXACTLY) and Custom (a user-
- *     entered flat rate with two flags: "tax Social Security" and "exclude
- *     retirement income", the latter with an optional dollar cap). Every state
- *     is a StateTaxProfile holding a year->StateTaxYear map, so rules are
+ *     STATE TAX (v5; framework v12 2026-10-05): the state is selectable --
+ *     Arizona (default), Colorado, Florida, Idaho, Nevada, Oklahoma, Custom.
+ *     Each built-in state follows its own law (StateRules): its own starting
+ *     point (federal AGI or federal taxable income), deduction, per-person
+ *     age-65 and personal exemptions, Social Security by age, a per-person
+ *     retirement exclusion and a flat, graduated or zero-bracket rate. Custom
+ *     keeps the original flat-rate rule set unchanged. Every state is a
+ *     StateTaxProfile holding a year->StateTaxYear map, so rules are
  *     modifiable per state AND per year with full year-history: forYear() uses
  *     the most recent entry at or before the simulation year (floorEntry), and
- *     adding a new tax year is a one-line data append with no code change.
- *     Bracketed (progressive) state tax is scaffolded (bracketedTax) but no
- *     shipped profile uses it yet -- AZ and Custom are flat. See TaxEngine's
- *     StateTaxProfile/StateTaxYear classes and the Assumptions & Methods tab.
+ *     adding a new tax year is a one-line data append with no code change. See
+ *     TaxEngine's state block and section 3b of the Assumptions & Methods tab.
  *     Roth conversions are modeled as a SEPARATE
  *     Traditional distribution: gross from the Traditional IRAs, taxed at the
  *     stacked marginal rate (Conv Tax column), the tax paid from the conversion
@@ -110,7 +110,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Monday, October 05, 2026 at 03:46 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, October 05, 2026 at 10:27 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -204,7 +204,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // v3 tax engine: computed-tax toggle, Roth conversion controls
     private JCheckBox  chkComputedTax;      // true = TaxEngine, false = legacy flat escalator
     // v5 state tax: state selector + custom-state controls
-    private JComboBox<String> cmbState;     // state profile selector (Arizona / Custom)
+    private JComboBox<String> cmbState;     // state profile selector (Arizona default; v12: AZ/CO/FL/ID/NV/OK/Custom)
     private JSpinner   spCustomStateRate;   // custom flat state rate (%), custom only
     private JCheckBox  chkCustomTaxSS;      // custom: state taxes Social Security
     private JCheckBox  chkCustomExclRetire; // custom: state excludes retirement income
@@ -1167,16 +1167,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         for (TaxEngine.StateTaxProfile p : TaxEngine.STATE_REGISTRY.values())
             stateNames.add(p.displayName);
         cmbState = new JComboBox<>(stateNames.toArray(new String[0]));
-        cmbState.setSelectedIndex(0); // default: Arizona (prior behavior)
-        cmbState.setToolTipText("<html><b>State income tax (v5)</b><br>"
-                + "Selects the state tax rules folded into the Tax column<br>"
-                + "(federal + <b>state</b> + IRMAA).<br><br>"
-                + "<b>Arizona:</b> flat 2.5%, Social Security excluded from the<br>"
-                + "state base. Reproduces the app's prior fixed behavior.<br>"
-                + "<b>Custom (flat rate):</b> enter your own flat rate and two<br>"
-                + "flags below to model any other state's basic treatment.<br><br>"
-                + "State rules are stored per year with history, so a future<br>"
-                + "rate change is a data update, not a code change.</html>");
+        cmbState.setSelectedIndex(0); // default: Arizona (first in the registry)
+        cmbState.setToolTipText(stateTooltip("AZ"));   // v12: follows the selection
         cmbState.addActionListener(e -> refreshStateFieldsEnabled());
 
         spCustomStateRate = spinD(0.0, 0.0, 15.0, 0.1, "0.0");
@@ -2219,6 +2211,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "&nbsp;&nbsp;Top marginal bracket:&nbsp;<b>%s</b><br><br>"
                                         + "&nbsp;&nbsp;Federal tax:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;%s:&nbsp;%s<br>"
+                                        + "%s"   // v12: framework-state breakdown
                                         + "&nbsp;&nbsp;IRMAA surcharge:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;= Total living-expenses tax:&nbsp;<b>%s</b><br><br>"
                                         + "%s"   // v12: dollar-basis note
@@ -2236,6 +2229,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                 CURRENCY.format(Math.round(er.fedTax / d)),
                                 stateTaxLabel(er.calYear),
                                 CURRENCY.format(Math.round(er.stateTax / d)),
+                                stateBreakdown(er, d),
                                 CURRENCY.format(Math.round(er.irmaa / d)),
                                 CURRENCY.format(Math.round(er.tax / d)),
                                 dollarBasisNote(er));
@@ -2541,8 +2535,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                             + "+ ordinary income (max(RMD, Traditional draw) + annuity + conversion),<br>"
                             + "minus the MFJ + age-65 standard deduction, run through inflation-indexed<br>"
                             + "2026 brackets, plus the selected STATE tax and the IRMAA surcharge.<br>"
-                            + "(State defaults to Arizona 2.5%, SS-excluded; choose Custom to model<br>"
-                            + "another state.) When OFF, reverts to the legacy flat escalator. Hover<br>"
+                            + "(State defaults to Arizona; Colorado, Florida, Idaho, Nevada, Oklahoma<br>"
+                            + "and Custom are on the Tax Engine card.) When OFF, reverts to the legacy flat escalator. Hover<br>"
                             + "a cell for that year's breakdown. See the Assumptions &amp; Methods tab.</html>";
                     case COL_IRMAA -> "<html><b>IRMAA -- Medicare Part B + D surcharge (per couple)</b><br>"
                             + "Assessed on your MAGI from 2 years prior (the IRMAA lookback).<br>"
@@ -2975,6 +2969,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<li><a href='#sec2' style='color:#264653; text-decoration:none;'>2. Market assumptions &mdash; forward capital-market basis (2026 CMAs)</a></li>"
                 + "<li><a href='#sec3' style='color:#264653; text-decoration:none;'>3. Tax engine (v3) &mdash; federal + state + IRMAA</a></li>"
                 + "<li><a href='#sec3a' style='color:#264653; text-decoration:none;'>3a. Single mode &mdash; spouse fields disabled (v4)</a></li>"
+                + "<li><a href='#sec3b' style='color:#264653; text-decoration:none;'>3b. State income tax &mdash; six states plus Custom</a></li>"
                 + "<li><a href='#sec4' style='color:#264653; text-decoration:none;'>4. Standard deduction &mdash; what IS and is NOT modeled</a></li>"
                 + "<li><a href='#sec5' style='color:#264653; text-decoration:none;'>5. Social Security taxability &mdash; provisional-income formula</a></li>"
                 + "<li><a href='#sec6' style='color:#264653; text-decoration:none;'>6. IRMAA &mdash; Medicare surcharge, costed and visible</a></li>"
@@ -3276,21 +3271,90 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<li>35% : $512,450 &ndash; $768,700</li>"
                 + "<li>37% : above $768,700</li>"
                 + "</ul>"
-                + "<p><b>State income tax (selectable, v5):</b> the state is chosen from the 'State' "
-                + "selector in the Tax Engine card. Two profiles ship. <b>Arizona</b> (the default) applies "
-                + "a flat 2.5% to taxable income and excludes Social Security from the state base &mdash; "
-                + "identical to the app's prior fixed behavior. <b>Custom (flat rate)</b> lets you enter any "
-                + "flat rate plus two flags: <i>tax Social Security</i> (off = SS is subtracted from the "
-                + "state base, matching most states) and <i>exclude retirement income</i> (on = the "
-                + "retirement ordinary draw &mdash; RMD or Traditional withdrawal &mdash; is subtracted from "
-                + "the state base, up to an optional dollar cap where 0 means unlimited). Each state's rules "
-                + "are stored per tax year with full history, so a future rate or rule change is a data "
-                + "update rather than a code change; a simulation year with no exact entry inherits the most "
-                + "recent prior year's rules. Progressive (bracketed) state tax is supported by the engine "
-                + "but no shipped profile uses it yet. The Custom profile is UNVERIFIED &mdash; confirm your "
-                + "state's actual treatment of Social Security, pensions, IRA/401(k) distributions, and any "
-                + "local income tax before relying on it.</p>"
+                + "<p><b>State income tax:</b> chosen with the <i>State</i> selector on the Tax Engine card "
+                + "(Arizona is the default). The rules for each state, their sources and what is still "
+                + "unverified are in section 3b.</p>"
                 + "<p>Source: IRS Rev. Proc. 2025-32 (tax year 2026).</p>"
+
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                + "<h3 style='color:#2a5d34;'><a name='sec3b'></a>3b. State income tax &mdash; six states plus Custom</h3>"
+                + "<p>Added October 5, 2026. Each state is computed from <b>its own law</b>, not as a "
+                + "tweak of the federal return. Every rule below was checked in October 2026 against the "
+                + "state's statutes, tax forms and instructions, or its tax agency and legislative staff; "
+                + "the sources are listed in the project document <i>state-tax-rules-2026.md</i>. Each "
+                + "state's tooltip on the selector repeats its rules and anything still unverified.</p>"
+                + "<ul>"
+                + "<li><b>Arizona</b> (default) &mdash; 2.5% flat. Starts from federal AGI, subtracts Social "
+                + "Security, then Arizona's standard deduction, which by statute (ARS 43-1041) moves with the "
+                + "federal <i>basic</i> deduction ($32,200 MFJ / $16,100 single in 2026) but never gets the "
+                + "federal age-65 add-on. Instead Arizona allows <b>$2,100 per taxpayer 65 or older</b> "
+                + "(ARS 43-1023), a fixed amount. IRA and 401(k) money is taxed. Earlier versions started "
+                + "from federal taxable income, which borrowed the federal $1,650-per-spouse add-on in place of "
+                + "the $2,100 exemption and overstated Arizona tax by about $22.50 a year once both spouses "
+                + "were 65.</li>"
+                + "<li><b>Colorado</b> &mdash; 4.40% flat (2026 and 2027 per the June 2026 Legislative Council "
+                + "forecast; its forecast temporary 4.36% for 2028 is not modeled). Starts from federal taxable "
+                + "income, so the federal deduction and age-65 add-on carry through. Social Security is fully "
+                + "subtracted at 65+; at 55&ndash;64 only when AGI is at or below $95,000 MFJ ($75,000 single), "
+                + "otherwise within the $20,000 limit. Pension, annuity and IRA income: up to <b>$24,000 per "
+                + "person at 65+ ($20,000 at 55&ndash;64), reduced by that person's Social Security "
+                + "subtraction</b>. Once a person's taxable Social Security passes $24,000 the cap is used up "
+                + "and that person's IRA withdrawals are fully taxed &mdash; true for the author's benefits "
+                + "at any claiming age.</li>"
+                + "<li><b>Florida</b> and <b>Nevada</b> &mdash; no personal income tax.</li>"
+                + "<li><b>Idaho</b> &mdash; 5.3% on income above a zero bracket ($9,622 MFJ / $4,811 single for "
+                + "2025, indexed for inflation; the 2025 figure stands in until the 2026 amount is published). "
+                + "Starts from federal AGI, subtracts Social Security, and uses the federal standard deduction "
+                + "including the age-65 add-on. IRA and 401(k) money is taxed; Idaho's retirement benefits "
+                + "deduction covers only certain government and military pensions &mdash; use a stream's "
+                + "<i>Exempt from state income tax</i> box for those.</li>"
+                + "<li><b>Oklahoma</b> &mdash; graduated 0% / 2.5% / 3.5% / 4.5% from 2026 (MFJ breaks at "
+                + "$7,500, $9,800 and $14,400; single exactly half). Starts from federal AGI, subtracts Social "
+                + "Security and a <b>retirement exclusion of up to $10,000 per person</b> (IRAs and 401(k)s "
+                + "qualify, no age test), then a $12,700 MFJ / $6,350 single standard deduction and $1,000 per "
+                + "person. Possible future quarter-point cuts triggered by state revenue are not modeled.</li>"
+                + "<li><b>Custom (flat rate)</b> &mdash; unchanged: your flat rate on federal taxable income, "
+                + "with the two flags and the optional cap. Unverified for any real state.</li>"
+                + "</ul>"
+                + "<p><b>Decisions behind the model</b> (made October 5, 2026):</p>"
+                + "<ul>"
+                + "<li><b>Fixed dollars stay fixed.</b> Where the law sets a dollar amount and does not index "
+                + "it &mdash; Arizona's $2,100, Oklahoma's deduction, exemptions and brackets, Colorado's "
+                + "$24,000 / $20,000 caps &mdash; it is held at that amount for the whole plan, exactly as the "
+                + "Social Security taxability thresholds are. Amounts the law indexes (Arizona's and Idaho's "
+                + "deductions, Idaho's zero bracket) grow with inflation. Legislatures do sometimes raise fixed "
+                + "amounts, so this leans slightly conservative over 30 years.</li>"
+                + "<li><b>Roth conversions do not count toward Oklahoma's or Colorado's exclusion.</b> Neither "
+                + "state's guidance addresses conversions. Treating them as not qualifying is the conservative "
+                + "choice: at most it overstates Oklahoma tax by $450 per person per year, and in Colorado "
+                + "the cap is normally used up by Social Security anyway.</li>"
+                + "<li><b>The annuity stream counts toward Colorado's subtraction</b> (the law names annuities) "
+                + "<b>but not Oklahoma's</b> (private annuities are not among its listed sources). The pension "
+                + "stream counts in both. Because the model does not track which spouse owns a stream, pension "
+                + "and annuity income fills whatever exclusion room the two spouses have left after their "
+                + "Traditional withdrawals.</li>"
+                + "<li><b>Who owns the Traditional money.</b> Traditional withdrawals are split between the "
+                + "spouses by the <i>User Traditional share %</i> on the Tax Engine card, the same split the RMDs "
+                + "use. Taxable Social Security is split in proportion to each spouse's benefit. In a survivor "
+                + "year only the survivor is on the return, at the single amounts.</li>"
+                + "<li><b>Senior deduction.</b> Arizona, Colorado and Idaho all follow the federal OBBBA senior "
+                + "deduction. Because that deduction is deliberately not modeled (section 4), it is not modeled "
+                + "for these states either &mdash; the model stays consistent and slightly conservative.</li>"
+                + "</ul>"
+                + "<p><b>How a Roth conversion is taxed by the state.</b> The state figure for the year is "
+                + "computed twice &mdash; with and without the conversion &mdash; and the conversion is "
+                + "charged the difference. That stacks a conversion on top of living income in a graduated "
+                + "state such as Oklahoma (rather than restarting it at the 0% bracket), and it lets living "
+                + "income and the conversion share one exclusion cap without spending it twice. For a flat-rate "
+                + "state the result is the same as before. The Social Security bridge sizer, which has no "
+                + "per-person detail, charges the state's top rate.</p>"
+                + "<p><b>Hover the Tax (est) cell</b> of any year for the state line's components: starting "
+                + "income, Social Security and exempt streams, the retirement exclusion, deductions and "
+                + "exemptions, and the state taxable income.</p>"
+                + "<p><b>SS Optimizer.</b> The batch fingerprint now includes the selected state's rules "
+                + "(including the Custom rate and flags), and the scorer version moved to 4. Rows scored under "
+                + "the old Arizona calculation, or under a different Custom rate, are not resumed &mdash; the "
+                + "next batch reruns from scratch.</p>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec4'></a>4. Standard deduction &mdash; what IS and is NOT modeled</h3>"
@@ -4111,8 +4175,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
      *                  interest is taxed and counts toward MAGI. Both move Fill-mode
      *                  conversions and every row's Tax (est) / Surplus when MM > 0,
      *                  so version-2 rows must not be resumed under the new code.
+     *   4  2026-10-05  state tax framework: Arizona now starts from federal AGI with
+     *                  its own deduction and $2,100 per 65+ exemption, and every
+     *                  framework state stacks a conversion on living income. The
+     *                  fingerprint also carries the active state's rules signature
+     *                  from this version on (Bob asked for both).
      */
-    private static final int SCORER_VERSION = 3;
+    private static final int SCORER_VERSION = 4;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -5450,7 +5519,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 // orphans stale rows on its own. Without it the hash sees only the inputs,
                 // and a corrected build happily resumes over rows the old code got wrong.
                 .append(c.single).append(';').append(OPT_SCORE_YEARS)
-                .append(';').append(SCORER_VERSION);
+                .append(';').append(SCORER_VERSION)
+                // v12 2026-10-05: the active state's rules, every year of them. The
+                // state's code alone (stateCode, hashed above) said nothing about its
+                // RATE -- changing the Custom rate resumed over rows scored at the
+                // old one. Now a rule or Custom-field change orphans those rows.
+                .append(';').append(TaxEngine.stateProfile(in.stateCode).signature());
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
             byte[] d = md.digest(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -6747,6 +6821,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
      */
     private void refreshStateFieldsEnabled() {
         if (cmbState == null) return; // guard: called during construction
+        cmbState.setToolTipText(stateTooltip(selectedStateCode()));   // v12
         boolean computed = (chkComputedTax != null) && chkComputedTax.isSelected();
         boolean custom   = computed && "CUSTOM".equals(selectedStateCode());
         if (spCustomStateRate != null)   spCustomStateRate.setEnabled(custom);
@@ -6823,12 +6898,70 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "checked against them directly.<br><br>";
     }
 
+    /**
+     * v12 2026-10-05: the State dropdown tooltip (Tax Engine card) for one state:
+     * the rules in plain words, where they were verified, and anything that had
+     * no official source. Rebuilt on every selection change.
+     */
+    static String stateTooltip(String code) {
+        TaxEngine.StateTaxProfile p = TaxEngine.stateProfile(code);
+        TaxEngine.StateTaxYear sty = p.byYear.lastEntry().getValue();
+        StringBuilder sb = new StringBuilder("<html><b>State income tax: ")
+                .append(p.displayName).append("</b><br>")
+                .append(wrapHtml(sty.note, 60)).append("<br>");
+        if (sty.rules != null) {
+            if (!sty.rules.verified.isEmpty())
+                sb.append("<br><i>").append(wrapHtml(sty.rules.verified, 60)).append("</i><br>");
+            if (!sty.rules.unverified.isEmpty())
+                sb.append("<br><b>Unverified:</b> ").append(wrapHtml(sty.rules.unverified, 60)).append("<br>");
+            sb.append("<br>Fixed-dollar amounts in state law (deductions, exemptions, caps,<br>"
+                    + "Oklahoma's brackets) are held at their legal values, not inflated.<br>");
+        } else {
+            sb.append("<br>Enter the flat rate and the two flags below. This profile starts<br>"
+                    + "from federal taxable income and is UNVERIFIED for any real state.<br>");
+        }
+        sb.append("<br>Arizona is the default. See section 3b of the Assumptions &amp; Methods tab.</html>");
+        return sb.toString();
+    }
+
+    /** v12 2026-10-05: the state line's components under a framework state, as an
+     *  indented italic sub-line; "" for Custom and for no-income-tax states. */
+    private String stateBreakdown(EnhRow er, double d) {
+        if (!er.stParts || er.stStart == 0) return "";
+        return "&nbsp;&nbsp;&nbsp;&nbsp;<i>state: start " + CURRENCY.format(Math.round(er.stStart / d))
+                + " &minus; SS/exempt " + CURRENCY.format(Math.round(er.stSub / d))
+                + " &minus; retirement excl. " + CURRENCY.format(Math.round(er.stExcl / d))
+                + "<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&minus; deductions/exemptions "
+                + CURRENCY.format(Math.round(er.stDed / d))
+                + " = state taxable " + CURRENCY.format(Math.round(er.stTaxable / d)) + "</i><br>";
+    }
+
+    /** v12: break plain text into <br>-separated lines of about `width` chars. */
+    private static String wrapHtml(String text, int width) {
+        StringBuilder out = new StringBuilder();
+        int col = 0;
+        for (String w : text.split(" ")) {
+            if (col > 0 && col + 1 + w.length() > width) { out.append("<br>"); col = 0; }
+            else if (col > 0) { out.append(' '); col++; }
+            out.append(w.replace("&", "&amp;").replace("<", "&lt;"));
+            col += w.length();
+        }
+        return out.toString();
+    }
+
     /** v5: a human-readable label for the state-tax line in the per-row tax
      *  tooltip, reflecting the selected profile's rules for the given year
      *  (e.g. "Arizona 2.5% (excludes Social Security)"). */
     private String stateTaxLabel(int simYear) {
         TaxEngine.StateTaxProfile p = TaxEngine.stateProfile(selectedStateCode());
         TaxEngine.StateTaxYear sty = p.forYear(simYear);
+        if (sty.rules != null) {   // v12 2026-10-05: framework state
+            TaxEngine.StateRules R = sty.rules;
+            if (R.start == TaxEngine.StateStart.NONE) return p.displayName + " (no income tax)";
+            if (R.bracketsMfj == null)
+                return String.format("%s %.2f%%", p.displayName, R.flatRate * 100.0);
+            return p.displayName + (R.bracketsIndexed ? " (flat above a zero bracket)" : " (graduated)");
+        }
         StringBuilder sb = new StringBuilder(p.displayName);
         if (sty.brackets == null)
             sb.append(String.format(" %.2f%%", sty.flatRate * 100.0));
@@ -8458,6 +8591,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             int    magiInt = 0, taxableSSInt = 0, ordTaxInt = 0, irmaaInt = 0,
                     fedInt = 0, stateInt = 0, convCeilInt = 0;
             int    mmIntTaxInt = 0;   // v12
+            int    stStartInt = 0, stSubInt = 0, stExclInt = 0, stDedInt = 0, stTaxableInt = 0;
+            boolean stParts = false;  // v12 2026-10-05: framework-state breakdown present
             String bracketStr = "--";
             boolean convByIrmaa = false;
             if (drawing && inp.computedTax) {
@@ -8528,6 +8663,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         inp.irmaaThreshMode, inflFactor, lookbackY);
                 TaxEngine.StateTaxProfile stProfile =
                         TaxEngine.stateProfile(inp.stateCode);
+                // v12 2026-10-05: per-person context for a framework state (ages,
+                // each person's SS, the Traditional split, qualifying streams).
+                TaxEngine.StateCtx stCtx = stateCtx(inp, calYear, manAge, womanAge,
+                        manSS, womanSS, tradDraw,
+                        nonExemptTaxable(inp.pensionStream, inp, calYear, ssInflNow, fPen),
+                        nonExemptTaxable(inp.annuityStream, inp, calYear, ssInflNow, fAnn));
                 TaxEngine.TaxResult tr = TaxEngine.compute(
                         grossSS, ordinaryBeforeConv, magiTwoYrPrior,
                         manAge >= 65, womanAge >= 65, inflFactor, irmaaTF,
@@ -8536,7 +8677,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         // Custom profile that also excludes retirement income cannot
                         // subtract the same dollars twice.
                         fsYear, stProfile, calYear, tradDraw,
-                        streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil));
+                        streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil), stCtx);
 
                 tax          = tr.totalTax;                 // living-expenses tax
                 // v12 2026-10-03: the part of this year's Tax (est) the MM interest
@@ -8547,7 +8688,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                             grossSS, ordinaryBeforeConv - mmInterest, magiTwoYrPrior,
                             manAge >= 65, womanAge >= 65, inflFactor, irmaaTF,
                             fsYear, stProfile, calYear, tradDraw,
-                            streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil));
+                            streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil), stCtx);
                     mmIntTaxInt = (int) Math.max(0, tr.totalTax - trNoInt.totalTax);
                 }
                 taxableSSInt = (int) tr.taxableSS;
@@ -8556,12 +8697,20 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 fedInt       = (int) tr.fedTax;
                 stateInt     = (int) tr.stateTax;
                 bracketStr   = tr.topBracket;
+                if (tr.stateParts != null) {   // v12: framework-state breakdown
+                    stStartInt   = (int) tr.stateParts.start;
+                    stSubInt     = (int) tr.stateParts.ssSub;
+                    stExclInt    = (int) tr.stateParts.excl;
+                    stDedInt     = (int) tr.stateParts.ded;
+                    stTaxableInt = (int) tr.stateParts.taxable;
+                    stParts      = true;
+                }
 
                 // ---- Conversion tax: stacked marginal on top of living taxable
                 //      income, funded FROM the conversion. Net-to-Roth = conv -
                 //      convTax. The conversion tax leaves the asset base.
                 double[] ctax = TaxEngine.conversionTax(
-                        tr.taxableIncome, conv, inflFactor, fsYear,
+                        tr, conv, inflFactor, fsYear,
                         stProfile, calYear, tradDraw);
                 convTaxThisYear = (int) ctax[0];
                 convNetToRoth   = (int) (conv - ctax[0]);
@@ -8650,6 +8799,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             row.mmInterestTax = mmIntTaxInt;
             row.fedTax        = fedInt;
             row.stateTax      = stateInt;
+            row.stParts       = stParts;          // v12 2026-10-05
+            row.stStart       = stStartInt;
+            row.stSub         = stSubInt;
+            row.stExcl        = stExclInt;
+            row.stDed         = stDedInt;
+            row.stTaxable     = stTaxableInt;
             row.topBracket    = bracketStr;
             row.convBoundByIrmaa = convByIrmaa;
             row.convCeiling   = convCeilInt;
@@ -9391,6 +9546,51 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 detInflAt(inp, inp.militaryStream.startYear()));
     }
 
+    /** v12 2026-10-05: one stream's taxable part, or 0 when the user marked it
+     *  state-exempt (that income is already subtracted on its own). */
+    private static double nonExemptTaxable(FixedStream s, SimInputs inp, int calYear,
+                                           double inflNow, double startFactor) {
+        return s.stateExempt() ? 0 : taxablePart(s, inp, calYear, inflNow, startFactor);
+    }
+
+    /** v12: nonExemptTaxable on the deterministic basis (conversion sizing). */
+    private static double nonExemptTaxableDet(FixedStream s, SimInputs inp, int calYear) {
+        return nonExemptTaxable(s, inp, calYear, detInflAt(inp, calYear),
+                detInflAt(inp, s.startYear()));
+    }
+
+    /**
+     * v12 2026-10-05: who is on this year's STATE return and with what -- ages,
+     * each person's Social Security, the survivor-adjusted Traditional split
+     * (User Traditional share %, Tax Engine card) and the pension/annuity income a
+     * state exclusion can reach. The decedent in a survivor year, and the spouse
+     * when filing Single, are not present. Ignored by the legacy (Custom) path.
+     */
+    static TaxEngine.StateCtx stateCtx(SimInputs inp, int calYear, int manAge, int womanAge,
+                                       double manSS, double womanSS, double tradDraw,
+                                       double pensionTaxable, double annuityTaxable) {
+        TaxEngine.StateCtx c = new TaxEngine.StateCtx();
+        boolean surv = isSurvivorYear(inp, calYear);
+        double hs = inp.hisRmdShare, ws = inp.herRmdShare;
+        if (surv) {
+            c.manPresent   = inp.deathWho != 1;
+            c.womanPresent = inp.deathWho == 1;
+        } else if (filingFor(inp, calYear) == TaxEngine.FilingStatus.SINGLE) {
+            c.manPresent = true; c.womanPresent = false;
+        } else {
+            c.manPresent = true; c.womanPresent = true;
+        }
+        if (!c.womanPresent) { hs = 1; ws = 0; }
+        if (!c.manPresent)   { hs = 0; ws = 1; }
+        c.manAge = manAge;   c.womanAge = womanAge;
+        c.manSS  = manSS;    c.womanSS  = womanSS;
+        c.manTradShare = hs; c.womanTradShare = ws;
+        c.tradDraw       = tradDraw;
+        c.pensionTaxable = pensionTaxable;
+        c.annuityTaxable = annuityTaxable;
+        return c;
+    }
+
     /** v11: human-readable COLA description for one stream. */
     private static String colaDesc(FixedStream s) {
         if (s.colaMode() == 2)
@@ -9553,6 +9753,15 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         double ordinaryBeforeConv = Math.max(rmd, Math.min(wdActual, Math.max(0, trad))) + ann  // v6 FIX
                 + mmInterest;   // v12: interest raises the base the conversion stacks on
         TaxEngine.StateTaxProfile stProfile = TaxEngine.stateProfile(inp.stateCode);
+        // v12 2026-10-05: a framework state sees the actual Traditional portion of
+        // the draw (RMD floor), as the display loop does; the legacy Custom path
+        // keeps retirementOrdinary = rmd exactly as before.
+        TaxEngine.StateCtx stCtx = stateCtx(inp, calYear, manAge, womanAge,
+                manSSSurv(inp, y, iNow, iManStart, iWomanStart),
+                womanSSSurv(inp, y, iNow, iManStart, iWomanStart),
+                Math.max(rmd, Math.min(wdActual, Math.max(0, trad))),
+                nonExemptTaxableDet(inp.pensionStream, inp, calYear),
+                nonExemptTaxableDet(inp.annuityStream, inp, calYear));
         TaxEngine.TaxResult tr = TaxEngine.compute(grossSS, ordinaryBeforeConv,
                 magiBeforeForConv(grossSS, ordinaryBeforeConv, inflFactor, fs),
                 manAge >= 65, womanAge >= 65, inflFactor,
@@ -9560,8 +9769,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 // v11: retirementOrdinary stays rmd ONLY; the stream exemption
                 // travels in its own parameter (see stateTaxLiving).
                 fs, stProfile, calYear, rmd,
-                streamsStateExemptDet(inp, calYear));
-        double[] ctax = TaxEngine.conversionTax(tr.taxableIncome, convGross,
+                streamsStateExemptDet(inp, calYear), stCtx);
+        double[] ctax = TaxEngine.conversionTax(tr, convGross,
                 inflFactor, fs, stProfile, calYear, rmd);
         return convGross - ctax[0];
     }
@@ -10725,7 +10934,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         static final double AZ_STATE_RATE = 0.025;
 
         // ====================================================================
-        //  STATE TAX (v5) -- per-state, per-year, with year-history.
+        //  STATE TAX -- per-state, per-year, with year-history.
         //
         //  Each state is a StateTaxProfile holding a year -> StateTaxYear map.
         //  forYear(simYear) returns the most recent entry at or before simYear
@@ -10733,11 +10942,99 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         //  the latest prior year's rules -- a documented fallback. To update for
         //  a new tax year, append one StateTaxYear; no code change is needed.
         //
-        //  Two profiles ship: ARIZONA (flat 2.5%, SS excluded -- reproduces the
-        //  pre-v5 hardcoded behavior exactly) and CUSTOM (user-entered flat rate
-        //  + two flags). Bracketed state tax is scaffolded (bracketedTax) for a
-        //  future progressive state but is unused by the shipped flat profiles.
+        //  v12 2026-10-05: STATE TAX FRAMEWORK. A StateTaxYear now carries either
+        //  (a) the LEGACY rule set (rules == null): start from federal taxable
+        //      income, subtract SS / exempt streams / an optional retirement
+        //      exclusion, flat rate. Only Custom uses it, unchanged; or
+        //  (b) a StateRules record built from each state's own law: its own
+        //      starting point (federal AGI or federal taxable income), its own
+        //      deduction, per-person age-65 and personal exemptions, Social
+        //      Security by age, a per-person retirement exclusion (optionally
+        //      sharing its cap with SS), and a flat, bracketed or zero-bracket rate.
+        //  Rules verified Oct 2026 against statutes, forms and agency pages; see
+        //  the Assumptions & Methods tab (section 3b) and the project doc
+        //  state-tax-rules-2026.md for every source.
+        //
+        //  The living tax and the conversion's tax come from ONE calculation:
+        //  conversion state tax = state(living + conversion) - state(living). That
+        //  stacks a conversion on top of living income in a graduated state
+        //  (Oklahoma) instead of restarting it at the 0% bracket, and keeps a
+        //  shared exclusion cap from being spent twice.
         // ====================================================================
+
+        /** v12: where the state calculation starts. */
+        enum StateStart { NONE, FED_AGI, FED_TAXABLE }
+        /** v12: the state's standard deduction. */
+        enum StateDed { NONE, FIXED, FEDERAL_BASIC, FEDERAL_WITH_65 }
+        /** v12: Social Security treatment. EXEMPT_BY_AGE is Colorado's rule. */
+        enum StateSS { TAXED, EXEMPT, EXEMPT_BY_AGE }
+
+        /**
+         * v12 2026-10-05: one state's rules for one tax year. Dollar amounts are
+         * NOMINAL (fixed in law) unless the matching *Indexed flag is set -- Bob's
+         * decision D1: a statutory amount the legislature has not indexed is held
+         * at its legal value, exactly as the code already holds the SS provisional-
+         * income thresholds. Built with the fluent setters in the registry below;
+         * never mutated after the static initializer.
+         */
+        static final class StateRules {
+            StateStart start = StateStart.NONE;
+            StateDed   ded   = StateDed.NONE;
+            double  dedMfj, dedSingle;            // FIXED deduction amounts
+            boolean dedIndexed;                   // FIXED amounts inflate with prices
+            double  age65ExemptEach;              // per present person 65+ (AZ $2,100), nominal
+            double  personalExemptEach;           // per present person (OK $1,000), nominal
+            StateSS ss = StateSS.TAXED;
+            double  ssAgiMfj, ssAgiSingle;        // EXEMPT_BY_AGE: 55-64 full-exemption AGI test
+            double  exclCapAnyAge;                // per-person exclusion cap, no age test (OK)
+            double  exclCap55, exclCap65;         // per-person cap at 55-64 / 65+ (CO)
+            boolean exclSharesSS;                 // cap reduced by that person's SS subtraction (CO)
+            boolean pensionQualifies = true;      // pension stream counts toward the exclusion
+            boolean annuityQualifies;             // annuity stream counts (decision D3: CO yes, OK no)
+            boolean conversionsQualify;           // decision D2: false everywhere (unverified)
+            double  flatRate;                     // used when bracketsMfj == null
+            double[][] bracketsMfj, bracketsSingle; // {lo, hi, rate}; hi may be +INF
+            boolean bracketsIndexed;              // ID zero bracket: CPI-indexed; OK: fixed
+            boolean seniorPassThrough;            // follows the federal senior deduction; inert
+            // while that deduction is unmodeled (sec. 4)
+            String  verified = "";                // "Verified Oct 2026 ..." line for tooltips
+            String  unverified = "";              // what has no official source, or ""
+
+            StateRules start(StateStart s)                  { start = s; return this; }
+            StateRules fixedDed(double mfj, double single)  { ded = StateDed.FIXED; dedMfj = mfj; dedSingle = single; return this; }
+            StateRules ded(StateDed d)                      { ded = d; return this; }
+            StateRules age65Exempt(double each)             { age65ExemptEach = each; return this; }
+            StateRules personalExempt(double each)          { personalExemptEach = each; return this; }
+            StateRules ss(StateSS s)                        { ss = s; return this; }
+            StateRules ssAgiTest(double mfj, double single) { ssAgiMfj = mfj; ssAgiSingle = single; return this; }
+            StateRules exclAnyAge(double cap)               { exclCapAnyAge = cap; return this; }
+            StateRules exclByAge(double cap55, double cap65, boolean sharesSS) {
+                exclCap55 = cap55; exclCap65 = cap65; exclSharesSS = sharesSS; return this;
+            }
+            StateRules annuityQualifies(boolean b)          { annuityQualifies = b; return this; }
+            StateRules flat(double rate)                    { flatRate = rate; return this; }
+            StateRules brackets(double[][] mfj, double[][] single, boolean indexed) {
+                bracketsMfj = mfj; bracketsSingle = single; bracketsIndexed = indexed; return this;
+            }
+            StateRules seniorPassThrough(boolean b)         { seniorPassThrough = b; return this; }
+            StateRules verified(String v)                   { verified = v; return this; }
+            StateRules unverified(String u)                 { unverified = u; return this; }
+
+            boolean hasExclusion() { return exclCapAnyAge > 0 || exclCap55 > 0 || exclCap65 > 0; }
+
+            /** Stable text of every rule, for the SS Optimizer fingerprint. */
+            String signature() {
+                return start + "|" + ded + "|" + dedMfj + "|" + dedSingle + "|" + dedIndexed
+                        + "|" + age65ExemptEach + "|" + personalExemptEach + "|" + ss
+                        + "|" + ssAgiMfj + "|" + ssAgiSingle + "|" + exclCapAnyAge
+                        + "|" + exclCap55 + "|" + exclCap65 + "|" + exclSharesSS
+                        + "|" + pensionQualifies + "|" + annuityQualifies + "|" + conversionsQualify
+                        + "|" + flatRate + "|" + java.util.Arrays.deepToString(bracketsMfj)
+                        + "|" + java.util.Arrays.deepToString(bracketsSingle)
+                        + "|" + bracketsIndexed + "|" + seniorPassThrough;
+            }
+        }
+
         static final class StateTaxYear {
             final int      year;
             final double   flatRate;                 // used when brackets == null
@@ -10747,6 +11044,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             final double   retirementExclusionCap;   // base-yr $ cap on that exclusion (0 = unlimited)
             final double   stateStdDeduction;        // base-yr $ state standard deduction (0 = none)
             final String   note;                     // provenance / caveat, shown in the tooltip
+            final StateRules rules;                  // v12: null = LEGACY rule set (Custom)
 
             StateTaxYear(int year, double flatRate, double[][] brackets,
                          boolean taxesSocialSecurity, boolean excludesRetirementIncome,
@@ -10759,12 +11057,34 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 this.retirementExclusionCap = retirementExclusionCap;
                 this.stateStdDeduction = stateStdDeduction;
                 this.note = note;
+                this.rules = null;
+            }
+
+            /** v12: a year governed by a StateRules record. The legacy fields are
+             *  filled only so nothing that reads them can trip on a null. */
+            StateTaxYear(int year, StateRules rules, String note) {
+                this.year = year;
+                this.flatRate = rules.flatRate;
+                this.brackets = null;
+                this.taxesSocialSecurity = rules.ss == StateSS.TAXED;
+                this.excludesRetirementIncome = rules.hasExclusion();
+                this.retirementExclusionCap = 0;
+                this.stateStdDeduction = 0;
+                this.note = note;
+                this.rules = rules;
+            }
+
+            String signature() {
+                if (rules != null) return year + ":" + rules.signature();
+                return year + ":legacy|" + flatRate + "|" + java.util.Arrays.deepToString(brackets)
+                        + "|" + taxesSocialSecurity + "|" + excludesRetirementIncome
+                        + "|" + retirementExclusionCap + "|" + stateStdDeduction;
             }
         }
 
         static final class StateTaxProfile {
-            final String code;         // "AZ", "CUSTOM"
-            final String displayName;  // "Arizona", "Custom (flat rate)"
+            final String code;         // "AZ", "CO", ..., "CUSTOM"
+            final String displayName;  // "Arizona", ..., "Custom (flat rate)"
             final java.util.NavigableMap<Integer, StateTaxYear> byYear = new java.util.TreeMap<>();
 
             StateTaxProfile(String code, String displayName) {
@@ -10780,24 +11100,127 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 java.util.Map.Entry<Integer, StateTaxYear> e = byYear.floorEntry(simYear);
                 return (e != null) ? e.getValue() : byYear.firstEntry().getValue();
             }
+
+            /** v12: every year's rules as one string -- the SS Optimizer fingerprint
+             *  hashes it, so editing a state's data (or the Custom fields) orphans
+             *  batch rows scored under the old rules instead of resuming over them. */
+            String signature() {
+                StringBuilder sb = new StringBuilder(code);
+                for (StateTaxYear y : byYear.values()) sb.append(';').append(y.signature());
+                return sb.toString();
+            }
         }
 
-        // -- Registry. Insertion order drives the UI dropdown order. ----------
+        static final double INF = Double.POSITIVE_INFINITY;
+
+        // -- Registry. Insertion order drives the UI dropdown order; Arizona is
+        //    first and therefore the default selection. ------------------------
         static final java.util.Map<String, StateTaxProfile> STATE_REGISTRY =
                 new java.util.LinkedHashMap<>();
         // The CUSTOM profile is mutable: UI edits rebuild its single StateTaxYear.
         static StateTaxProfile customProfile;
 
         static {
-            // ARIZONA -- flat 2.5%, Social Security excluded from the state base,
-            // no retirement-income exclusion. Byte-for-byte the prior behavior.
+            // ARIZONA -- 2.5% flat on federal AGI less Social Security, Arizona's own
+            // standard deduction and $2,100 per taxpayer 65+.
+            //   ARS 43-1041: deduction adjusted "in the same manner in which the
+            //     federal basic standard deduction is adjusted" -> the federal BASIC
+            //     amount ($32,200 MFJ / $16,100 single in 2026), never the 65+ add-on.
+            //   ARS 43-1023: $2,100 per taxpayer 65+ by year end; not indexed.
+            //   ARS 43-1022 para. 35: subtracts the federal senior deduction actually
+            //     taken (TY2025+) -- inert here because that deduction is unmodeled.
+            //   Form 140 line 30: Social Security exempt. IRA/401(k) taxed.
+            // v12 2026-10-05: replaces the old approximation (federal taxable income
+            // less taxable SS), which borrowed the federal $1,650/spouse add-on instead
+            // of the $2,100 exemption and overstated AZ tax ~$22.50/yr with both 65+.
             STATE_REGISTRY.put("AZ", new StateTaxProfile("AZ", "Arizona")
-                    .add(new StateTaxYear(2026, 0.025, null,
-                            /*taxesSS*/ false, /*exclRetire*/ false, /*cap*/ 0,
-                            /*stateStdDed*/ 0,
-                            "Arizona flat 2.5%; Social Security excluded from the state base.")));
+                    .add(new StateTaxYear(2026, new StateRules()
+                            .start(StateStart.FED_AGI).ded(StateDed.FEDERAL_BASIC)
+                            .age65Exempt(2_100).ss(StateSS.EXEMPT).flat(0.025)
+                            .seniorPassThrough(true)
+                            .verified("Verified Oct 2026: ARS 43-1041, 43-1023, 43-1022; 2025 Form 140."),
+                            "Arizona flat 2.5% on federal AGI less Social Security, the federal basic "
+                                    + "standard deduction and $2,100 per taxpayer 65+.")));
 
-            // CUSTOM -- user-entered flat rate + two flags. Defaults to a benign
+            // COLORADO -- 4.40% on federal taxable income (the federal deduction,
+            // 65+ add-on and senior deduction ride along; only overtime is added
+            // back, HB25-1296). SS: full subtraction at 65+, at 55-64 only if AGI
+            // <= $95,000 MFJ / $75,000 single (HB24-1142), else inside the $20,000
+            // cap. Pension/annuity/IRA: $24,000 per person 65+, $20,000 at 55-64,
+            // REDUCED by that person's SS subtraction (CDOR). 2026-27 rate per LCS
+            // June 2026 forecast; the forecast 4.36% for 2028 is ignored (D4).
+            STATE_REGISTRY.put("CO", new StateTaxProfile("CO", "Colorado")
+                    .add(new StateTaxYear(2026, new StateRules()
+                            .start(StateStart.FED_TAXABLE)
+                            .ss(StateSS.EXEMPT_BY_AGE).ssAgiTest(95_000, 75_000)
+                            .exclByAge(20_000, 24_000, true).annuityQualifies(true)
+                            .flat(0.044).seniorPassThrough(true)
+                            .verified("Verified Oct 2026: CDOR Social Security/pension topic page; "
+                                    + "LCS June 2026 forecast; HB24-1142; HB25-1296.")
+                            .unverified("Roth conversions vs the pension subtraction: not addressed "
+                                    + "(modeled as NOT qualifying)."),
+                            "Colorado 4.40% on federal taxable income less Social Security (by age) "
+                                    + "and the $24,000 / $20,000 per-person pension subtraction, which SS uses up first.")));
+
+            // FLORIDA -- no personal income tax (Florida DOR FAQ).
+            STATE_REGISTRY.put("FL", new StateTaxProfile("FL", "Florida")
+                    .add(new StateTaxYear(2026, new StateRules()
+                            .verified("Verified Oct 2026: Florida DOR - \"Florida does not impose a "
+                                    + "personal income tax.\""),
+                            "Florida: no personal income tax.")));
+
+            // IDAHO -- 5.3% above a zero bracket (Idaho Code 63-3024, CPI-indexed;
+            // TY2025 $9,622 MFJ / $4,811 single used as the base-year figure until
+            // the TY2026 amount is published). Federal AGI start; standard deduction
+            // identical to federal incl. the 65+ add-on; SS subtracted (Form 39R line
+            // 7); IRAs taxed (the retirement benefits deduction covers only listed
+            // government/military pensions -- use a stream's state-exempt box).
+            STATE_REGISTRY.put("ID", new StateTaxProfile("ID", "Idaho")
+                    .add(new StateTaxYear(2026, new StateRules()
+                            .start(StateStart.FED_AGI).ded(StateDed.FEDERAL_WITH_65)
+                            .ss(StateSS.EXEMPT)
+                            .brackets(new double[][]{{0, 9_622, 0.0}, {9_622, INF, 0.053}},
+                                    new double[][]{{0, 4_811, 0.0}, {4_811, INF, 0.053}}, true)
+                            .seniorPassThrough(true)
+                            .verified("Verified Oct 2026: Idaho Code 63-3024; 2025 Form 40 instructions; "
+                                    + "Form 39R; H 559; STC conformity release.")
+                            .unverified("2026 zero bracket not yet published (2025 figure used, indexed)."),
+                            "Idaho 5.3% above the zero bracket; federal AGI less Social Security and "
+                                    + "the federal standard deduction incl. the 65+ add-on.")));
+
+            // NEVADA -- no personal income tax (NV Dept. of Taxation; Nev. Const.
+            // Art. 10 sec. 1(9)).
+            STATE_REGISTRY.put("NV", new StateTaxProfile("NV", "Nevada")
+                    .add(new StateTaxYear(2026, new StateRules()
+                            .verified("Verified Oct 2026: Nevada Dept. of Taxation; Nev. Const. "
+                                    + "Art. 10 sec. 1(9)."),
+                            "Nevada: no personal income tax.")));
+
+            // OKLAHOMA -- HB 2764 brackets from TY2026 (68 O.S. 2355(D)), fixed in
+            // dollars; revenue-triggered 0.25-pt cuts not modeled. Federal AGI start;
+            // SS subtracted; $10,000 per-person retirement exclusion (OAC
+            // 710:50-15-49: IRC 401/403/457/408 qualify, no age test); fixed $12,700 /
+            // $6,350 standard deduction; $1,000 per person exemption. The extra 65+
+            // exemption needs AGI <= $25,000 and is omitted. Private annuity not a
+            // listed source (D3); conversions modeled as NOT qualifying (D2).
+            STATE_REGISTRY.put("OK", new StateTaxProfile("OK", "Oklahoma")
+                    .add(new StateTaxYear(2026, new StateRules()
+                            .start(StateStart.FED_AGI).fixedDed(12_700, 6_350)
+                            .personalExempt(1_000).ss(StateSS.EXEMPT)
+                            .exclAnyAge(10_000).annuityQualifies(false)
+                            .brackets(new double[][]{{0, 7_500, 0.0}, {7_500, 9_800, 0.025},
+                                            {9_800, 14_400, 0.035}, {14_400, INF, 0.045}},
+                                    new double[][]{{0, 3_750, 0.0}, {3_750, 4_900, 0.025},
+                                            {4_900, 7_200, 0.035}, {7_200, INF, 0.045}}, false)
+                            .verified("Verified Oct 2026: OTC 2025 Legislative Update (HB 2764); "
+                                    + "2025 Form 511 packet; OAC 710:50-15-49.")
+                            .unverified("Roth conversions vs the $10,000 exclusion: not addressed "
+                                    + "(modeled as NOT qualifying)."),
+                            "Oklahoma 0-4.5% graduated on federal AGI less Social Security, a $10,000 "
+                                    + "per-person retirement exclusion, a $12,700 deduction and $1,000 per person.")));
+
+            // CUSTOM -- user-entered flat rate + two flags, LEGACY rule set (rules ==
+            // null), byte-for-byte the pre-framework behavior. Defaults to a benign
             // 0% / tax-SS / no-exclusion state; rebuilt from the UI via setCustom.
             customProfile = new StateTaxProfile("CUSTOM", "Custom (flat rate)")
                     .add(new StateTaxYear(BASE_YEAR_DEFAULT, 0.0, null,
@@ -10822,8 +11245,31 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             return (p != null) ? p : STATE_REGISTRY.get("AZ");
         }
 
+        /**
+         * v12 2026-10-05: who is on this year's state return, per person. Built by
+         * the caller (it knows ages, each person's Social Security, the User
+         * Traditional share % and the survivor year). A person who is not on the
+         * return -- the decedent in a survivor year, the spouse when filing Single
+         * -- has present = false and contributes nothing.
+         */
+        static final class StateCtx {
+            boolean manPresent, womanPresent;
+            int     manAge, womanAge;
+            double  manSS, womanSS;          // GROSS SS; taxable SS is split pro rata
+            double  manTradShare, womanTradShare;  // survivor-adjusted share of Traditional
+            double  tradDraw;                // Traditional ordinary income (RMD floor) this year
+            double  pensionTaxable;          // pension stream, taxable and NOT state-exempt
+            double  annuityTaxable;          // annuity stream, taxable and NOT state-exempt
+        }
+
+        /** v12: the components behind one state figure, for the Tax (est) tooltip. */
+        static final class StateParts {
+            double start, ssSub, excl, ded, taxable, tax;
+        }
+
         /** State tax on the living-expenses base for one sim year, honoring the
-         *  profile's SS and retirement-exclusion flags.
+         *  profile's SS and retirement-exclusion flags. LEGACY rule set only
+         *  (Custom); framework states go through stateTaxRules().
          *  @param federalTaxableIncome federal taxable income (after fed deductions)
          *  @param taxableSS            taxable portion of Social Security (federal)
          *  @param retirementOrdinary   retirement ordinary income eligible for a
@@ -10860,8 +11306,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                     : bracketedTax(base, sty.brackets, inflFactor);
         }
 
-        /** Progressive state tax over inflation-indexed brackets. Scaffolding
-         *  for a future bracketed state; unused by the shipped flat profiles. */
+        /** Progressive state tax over brackets scaled by inflFactor (pass 1.0 for
+         *  brackets that are fixed in law). */
         static double bracketedTax(double taxable, double[][] brackets, double inflFactor) {
             double tax = 0;
             for (double[] b : brackets) {
@@ -10872,14 +11318,133 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             return tax;
         }
 
+        /**
+         * v12 2026-10-05: state tax under a StateRules record, for living income
+         * plus an optional Roth conversion. Call with conversion = 0 for the living
+         * tax; the conversion's own state tax is the difference of two calls.
+         *
+         * @param agiLiving       federal AGI proxy WITHOUT the conversion (taxable
+         *                        SS + ordinary income, i.e. TaxResult.magi)
+         * @param taxableSS       federal taxable Social Security (both spouses)
+         * @param streamExempt    stream income the user marked state-exempt
+         * @param conversion      Roth conversion stacked on top (0 = living only)
+         * @param man65/woman65   the flags the federal deduction used (FEDERAL_WITH_65
+         *                        mirrors the federal figure exactly)
+         * @param out             optional; receives the components (may be null)
+         */
+        static double stateTaxRules(StateRules R, double agiLiving, double taxableSS,
+                                    double streamExempt, double conversion, StateCtx c,
+                                    boolean man65, boolean woman65,
+                                    double inflFactor, FilingStatus fs, StateParts out) {
+            if (R.start == StateStart.NONE) {
+                if (out != null) { out.start = out.ssSub = out.excl = out.ded = out.taxable = out.tax = 0; }
+                return 0;
+            }
+            boolean mfj = fs == FilingStatus.MFJ;
+            double agi = agiLiving + conversion;
+            double start = (R.start == StateStart.FED_AGI) ? agi
+                    : Math.max(0, agi - totalDeduction(man65, woman65, inflFactor, fs));
+
+            // Taxable SS split between the spouses in proportion to gross benefits.
+            double gm = c.manPresent ? c.manSS : 0, gw = c.womanPresent ? c.womanSS : 0;
+            double gT = gm + gw;
+            double tssM = (gT > 0) ? taxableSS * gm / gT : 0;
+            double tssW = (gT > 0) ? taxableSS - tssM : 0;
+
+            // -- Social Security subtraction, per person ---------------------
+            double ssM = 0, ssW = 0;
+            switch (R.ss) {
+                case EXEMPT -> { ssM = tssM; ssW = tssW; }
+                case EXEMPT_BY_AGE -> {
+                    double thr = mfj ? R.ssAgiMfj : R.ssAgiSingle;
+                    ssM = ssByAge(R, c.manPresent,   c.manAge,   tssM, agi, thr);
+                    ssW = ssByAge(R, c.womanPresent, c.womanAge, tssW, agi, thr);
+                }
+                default -> { }
+            }
+
+            // -- Retirement exclusion, per person (nominal caps, decision D1) --
+            double excl = 0;
+            if (R.hasExclusion()) {
+                double capM = exclCap(R, c.manPresent,   c.manAge,   ssM);
+                double capW = exclCap(R, c.womanPresent, c.womanAge, ssW);
+                double trad = c.tradDraw + (R.conversionsQualify ? conversion : 0);
+                double eM = Math.min(trad * c.manTradShare,   capM);
+                double eW = Math.min(trad * c.womanTradShare, capW);
+                // Pension (and, where it qualifies, annuity) income has no owner in
+                // the model; it fills whatever cap headroom is left.
+                double pooled = (R.pensionQualifies ? c.pensionTaxable : 0)
+                        + (R.annuityQualifies ? c.annuityTaxable : 0);
+                double room = Math.max(0, capM - eM) + Math.max(0, capW - eW);
+                excl = eM + eW + Math.min(pooled, room);
+            }
+
+            // -- Deductions and exemptions ---------------------------------------
+            double ded = 0;
+            switch (R.ded) {
+                case FIXED -> ded = (mfj ? R.dedMfj : R.dedSingle) * (R.dedIndexed ? inflFactor : 1.0);
+                case FEDERAL_BASIC -> ded = infl(mfj ? STD_DED_MFJ_2026 : STD_DED_SINGLE_2026, inflFactor);
+                case FEDERAL_WITH_65 -> ded = totalDeduction(man65, woman65, inflFactor, fs);
+                default -> { }
+            }
+            int present = (c.manPresent ? 1 : 0) + (c.womanPresent ? 1 : 0);
+            int over65  = ((c.manPresent && c.manAge >= 65) ? 1 : 0)
+                    + ((c.womanPresent && c.womanAge >= 65) ? 1 : 0);
+            ded += R.age65ExemptEach * over65 + R.personalExemptEach * present;
+
+            double taxable = Math.max(0, start - ssM - ssW - streamExempt - excl - ded);
+            double tax;
+            if (R.bracketsMfj == null) {
+                tax = taxable * R.flatRate;
+            } else {
+                double[][] b = mfj ? R.bracketsMfj : R.bracketsSingle;
+                tax = bracketedTax(taxable, b, R.bracketsIndexed ? inflFactor : 1.0);
+            }
+            if (out != null) {
+                out.start = start; out.ssSub = ssM + ssW + streamExempt; out.excl = excl;
+                out.ded = ded; out.taxable = taxable; out.tax = tax;
+            }
+            return tax;
+        }
+
+        /** Colorado-style SS subtraction for one person. */
+        private static double ssByAge(StateRules R, boolean present, int age,
+                                      double tss, double agi, double agiThresh) {
+            if (!present || tss <= 0) return 0;
+            if (age >= 65) return tss;
+            if (age >= 55) return (agi <= agiThresh) ? tss : Math.min(tss, R.exclCap55);
+            return 0;
+        }
+
+        /** Per-person exclusion cap, less that person's SS subtraction when the
+         *  state makes the two share one cap (Colorado). */
+        private static double exclCap(StateRules R, boolean present, int age, double ssSub) {
+            if (!present) return 0;
+            double cap = R.exclCapAnyAge;
+            if (cap <= 0) cap = (age >= 65) ? R.exclCap65 : (age >= 55 ? R.exclCap55 : 0);
+            if (R.exclSharesSS) cap -= ssSub;
+            return Math.max(0, cap);
+        }
+
+        /** v12: the highest rate a stacked dollar can meet under these rules --
+         *  used only by the SS-bridge sizer, which has no per-person context. */
+        static double topMarginalRate(StateRules R, FilingStatus fs) {
+            if (R.start == StateStart.NONE) return 0;
+            if (R.bracketsMfj == null) return R.flatRate;
+            double[][] b = (fs == FilingStatus.MFJ) ? R.bracketsMfj : R.bracketsSingle;
+            return b[b.length - 1][2];
+        }
+
         /** State tax on a Roth conversion (a separate Traditional distribution),
-         *  honoring the retirement-exclusion flag. If the state excludes
-         *  retirement income, the conversion is excluded up to remaining cap
-         *  headroom (unlimited cap -> the conversion is fully state-exempt). */
+         *  honoring the retirement-exclusion flag. LEGACY rule set only (Custom).
+         *  If the state excludes retirement income, the conversion is excluded up
+         *  to remaining cap headroom (unlimited cap -> fully state-exempt). */
         static double stateTaxConversion(StateTaxYear sty, double conversion,
                                          double retirementOrdinaryAlreadyCounted,
                                          double inflFactor) {
             if (conversion <= 0) return 0;
+            if (sty.rules != null)   // v12: framework state, no per-person context here
+                return conversion * topMarginalRate(sty.rules, FilingStatus.MFJ);
             double taxablePortion = conversion;
             if (sty.excludesRetirementIncome) {
                 if (sty.retirementExclusionCap <= 0) {
@@ -10894,7 +11459,6 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                     ? taxablePortion * sty.flatRate
                     : bracketedTax(taxablePortion, sty.brackets, inflFactor);
         }
-
         // -- Result holder -----------------------------------------------------
         static class TaxResult {
             double taxableSS;      // portion of gross SS that is taxable
@@ -10907,6 +11471,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             int    irmaaTier;
             String topBracket;
             double totalTax;       // fedTax + stateTax + irmaaCost
+            // v12 2026-10-05: what conversionTax() needs to stack a conversion on
+            // the SAME state calculation, plus the components for the tooltip.
+            boolean man65, woman65;
+            double  streamStateExempt;
+            StateCtx   stateCtx;   // null on the legacy (Custom) path
+            StateParts stateParts; // null on the legacy (Custom) path
         }
 
         /** Scale a base-year (2026) dollar boundary to simulation-year nominal
@@ -11093,8 +11663,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                  FilingStatus fs,
                                  StateTaxProfile stateProfile, int simYear,
                                  double retirementOrdinary,
-                                 double streamStateExempt) {
+                                 double streamStateExempt,
+                                 StateCtx stateCtx) {
             TaxResult r = new TaxResult();
+            r.man65 = man65; r.woman65 = woman65;
+            r.streamStateExempt = streamStateExempt;
             r.taxableSS     = taxableSocialSecurity(grossSS, ordinaryOther, inflFactor, fs);
             r.ordinaryOther = ordinaryOther;
             r.magi          = r.taxableSS + ordinaryOther;
@@ -11102,12 +11675,19 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double ded      = totalDeduction(man65, woman65, inflFactor, fs);
             r.taxableIncome = Math.max(0, r.magi - ded);
             r.fedTax        = fedTax(r.taxableIncome, inflFactor, fs);
-            // State tax via the selected profile's rules for this year. For
-            // Arizona (SS excluded, no retirement exclusion) this is exactly the
-            // prior azBase * 2.5% computation; other profiles apply their flags.
+            // State tax via the selected profile's rules for this year. v12: a
+            // framework state (rules != null) runs its own law through
+            // stateTaxRules(); Custom keeps the legacy calculation unchanged.
             StateTaxYear sty = stateProfile.forYear(simYear);
-            r.stateTax      = stateTaxLiving(sty, r.taxableIncome, r.taxableSS,
-                    retirementOrdinary, streamStateExempt, inflFactor);
+            if (sty.rules != null && stateCtx != null) {
+                r.stateCtx   = stateCtx;
+                r.stateParts = new StateParts();
+                r.stateTax   = stateTaxRules(sty.rules, r.magi, r.taxableSS, streamStateExempt,
+                        0, stateCtx, man65, woman65, inflFactor, fs, r.stateParts);
+            } else {
+                r.stateTax   = stateTaxLiving(sty, r.taxableIncome, r.taxableSS,
+                        retirementOrdinary, streamStateExempt, inflFactor);
+            }
 
             // IRMAA THRESHOLDS index per the chosen mode; the surcharge AMOUNT
             // still tracks general inflation (Medicare costs rise with prices).
@@ -11202,10 +11782,40 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double fedWith = fedTax(base + conversion, inflFactor, fs);
             double fedBase = fedTax(base, inflFactor, fs);
             double fedConv = Math.max(0, fedWith - fedBase);
-            // State tax on the conversion via the selected profile (Arizona:
-            // flat 2.5%, fully taxable; a retirement-excluding state may exempt).
+            // State tax on the conversion via the selected profile (Custom: legacy
+            // flags). v12: this overload is now reached only by the SS-bridge sizer
+            // and the Custom path; a framework state has no per-person context here,
+            // so it charges the state's top marginal rate on the stacked dollars.
             StateTaxYear sty = stateProfile.forYear(simYear);
-            double stConv  = stateTaxConversion(sty, conversion, retirementOrdinary, inflFactor);
+            double stConv  = (sty.rules != null)
+                    ? conversion * topMarginalRate(sty.rules, fs)
+                    : stateTaxConversion(sty, conversion, retirementOrdinary, inflFactor);
+            return new double[]{ fedConv + stConv, fedConv, stConv };
+        }
+
+        /**
+         * v12 2026-10-05: conversion tax stacked on a living-expenses TaxResult.
+         * Federal is unchanged (stacked marginal). For a framework state the state
+         * part is state(living + conversion) - state(living) from the SAME rules and
+         * per-person context, so a graduated state stacks correctly and an exclusion
+         * cap is not spent twice. The legacy (Custom) path is the old calculation.
+         */
+        static double[] conversionTax(TaxResult living, double conversion,
+                                      double inflFactor, FilingStatus fs,
+                                      StateTaxProfile stateProfile, int simYear,
+                                      double retirementOrdinary) {
+            if (conversion <= 0) return new double[]{0, 0, 0};
+            StateTaxYear sty = stateProfile.forYear(simYear);
+            if (sty.rules == null || living.stateCtx == null)
+                return conversionTax(living.taxableIncome, conversion, inflFactor, fs,
+                        stateProfile, simYear, retirementOrdinary);
+            double base = Math.max(0, living.taxableIncome);
+            double fedConv = Math.max(0, fedTax(base + conversion, inflFactor, fs)
+                    - fedTax(base, inflFactor, fs));
+            double stWith = stateTaxRules(sty.rules, living.magi, living.taxableSS,
+                    living.streamStateExempt, conversion, living.stateCtx,
+                    living.man65, living.woman65, inflFactor, fs, null);
+            double stConv = Math.max(0, stWith - living.stateTax);
             return new double[]{ fedConv + stConv, fedConv, stConv };
         }
     }
@@ -11385,6 +11995,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         int  living, medical, tax, totalSpend, totalIncome, surplus;
         // v3 tax engine detail
         int  irmaa, conversion, magi, taxableSS, ordinaryTax, fedTax, stateTax;
+        // v12 2026-10-05: framework-state breakdown for the Tax (est) tooltip (nominal $):
+        // starting income, SS + exempt-stream subtraction, retirement exclusion,
+        // deductions/exemptions, state taxable income. stParts = false on Custom.
+        boolean stParts;
+        int  stStart, stSub, stExcl, stDed, stTaxable;
         // v12 2026-10-03: money-market interest this year (nominal, taxable) and
         // the Tax (est) it added -- the row's tax with the interest minus the
         // same tax without it. Both 0 when the reserve is empty.
