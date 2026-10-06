@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Monday, October 05, 2026 at 11:40 AM MST (UTC-7)
+// Last modified: Monday, October 05, 2026 at 03:46 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -110,7 +110,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Monday, October 05, 2026 at 11:40 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, October 05, 2026 at 03:46 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -210,6 +210,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     private JCheckBox  chkCustomExclRetire; // custom: state excludes retirement income
     private JSpinner   spCustomExclCap;     // custom: retirement-exclusion cap ($, 0=unlimited)
     private JToggleButton tglConvMode;      // selected = fill-to-target, unselected = flat $
+    private JCheckBox chkConvEnabled;       // v12: master on/off for Roth conversions
     private JSpinner   spConvFlat;          // flat annual conversion $ (flat mode)
     private JSpinner   spConvBuffer;        // MAGI buffer below IRMAA cliff (fill mode)
     private JSpinner   spConvCap;           // max conversion cap (fill mode; 0 = uncapped)
@@ -1208,6 +1209,21 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "when 'Exclude retirement income' is checked in Custom mode.</html>");
         spCustomExclCap.addChangeListener(e -> syncCustomStateProfile());
 
+        // v12 2026-10-05: master switch. Unchecked = no Roth conversions anywhere
+        // (table and every simulation path) -- a clean no-conversion baseline,
+        // replacing the old workaround of a $1 cap (0 means NO LIMIT in Fill mode).
+        chkConvEnabled = new JCheckBox("Perform Roth conversions", true);
+        chkConvEnabled.setBackground(Color.WHITE);
+        chkConvEnabled.setToolTipText("<html><b>Perform Roth conversions</b><br>"
+                + "<b>Checked (default):</b> conversions run exactly as set below<br>"
+                + "(Fill to MAGI target or Flat $ amount).<br>"
+                + "<b>Unchecked:</b> no conversions at all -- in the table and in every<br>"
+                + "simulation path. Roth Conv and Conv Tax show dashes and MAGI is<br>"
+                + "living income only. Use it for a clean no-conversion baseline.<br><br>"
+                + "Saved with the scenario; older scenario files load as checked.<br>"
+                + "The IRMAA settings below still apply either way.</html>");
+        chkConvEnabled.addActionListener(e -> refreshTaxEngineEnabled());
+
         tglConvMode = new JToggleButton("Fill to MAGI target", true);
         tglConvMode.setToolTipText("<html><b>Roth conversion sizing mode</b><br>"
                 + "<b>Selected (Fill to MAGI target):</b> each year converts the largest amount<br>"
@@ -1413,6 +1429,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // section, collapsed by default (rarely edited). All persistence keys and
         // tooltips unchanged -- only the visual grouping moved.
         inner.add(card("Roth Conversion & IRMAA Surcharge", new Object[]{
+                null,                      chkConvEnabled,   // v12
                 "Conversion mode",         tglConvMode,
                 "Flat conversion ($/yr)",  spConvFlat,
                 "Fill: IRMAA tier ceiling", cmbFillIrmaaTier,
@@ -2982,7 +2999,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "sees only two numbers -- the withdrawal and the balance -- and is therefore blind to Social "
                 + "Security timing, taxes, the spending smile, and mortality. It is retained deliberately: it is "
                 + "the only engine in this tool that produces a lived cut series (initial real spend, worst real "
-                + "spend, percent cut, years to recover), which is why the Stress Test runs on it.</p>"
+                + "spend, percent cut, years to recover), which is why the Stress Test runs on it. Those "
+                + "figures are measured on the guardrail withdrawal <i>before</i> the go-go multiplier, so "
+                + "the planned step-down when go-go ends is not mistaken for a cut.</p>"
 
                 + "<p><b>Pro PoS Table tab (preferred).</b> This tab holds Probability of Success (PoS) constant "
                 + "and re-solves the maximum sustainable withdrawal on every run. The dollar amount floats to "
@@ -3002,8 +3021,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "the upper band and <font color='#A32D2D'><b>red</b></font> at or below the lower "
                 + "band, and both the Wd % cell tooltip and the Rate drift column tooltip still report "
                 + "the numbers behind the colour. Only the ability to move the band was withdrawn. The "
-                + "values remain part of the saved plan fingerprint, so hiding the card does not "
-                + "invalidate any stored SS Optimizer batch.</p>"
+                + "two values are deliberately <b>excluded</b> from the SS Optimizer's plan fingerprint "
+                + "&mdash; they are advisory and change no result &mdash; so neither hiding the card nor "
+                + "the band's value can invalidate a stored SS Optimizer batch.</p>"
 
                 + "<p><b>Income Lab (risk-based guardrails).</b> IL defines its trigger in risk space: a PoS "
                 + "level, which folds in taxes, Social Security timing, longevity, mortality, and inflation. It "
@@ -3515,6 +3535,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "balance grow until RMDs force larger distributions that, stacked on two full SS checks, can "
                 + "land in the 24% bracket and trip IRMAA tiers. Conversion is rate arbitrage and cliff "
                 + "avoidance, not tax avoidance.</p>"
+                + "<p><b>Perform Roth conversions (on/off).</b> The checkbox at the top of the Roth Conversion "
+                + "&amp; IRMAA Surcharge card is the master switch. Unchecked, no conversion happens anywhere "
+                + "&mdash; not in the table and not in any simulation path &mdash; so Roth Conv and Conv Tax "
+                + "show dashes and MAGI is living income only: a clean no-conversion baseline. (It replaces "
+                + "the old workaround of a $1 cap; in Fill mode a cap of 0 means no limit.) Checked is the "
+                + "default and behaves exactly as before; older scenario files load checked.</p>"
                 + "<p><b>Conversion sizing &mdash; two modes:</b></p>"
                 + "<ul>"
                 + "<li><b>Flat $ amount:</b> a fixed conversion applied every drawing year.</li>"
@@ -3911,6 +3937,15 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "dates against one another, which needs a future they all share, not a random one. "
                 + "Forecasting is what the Pro PoS and GK tabs are for, and there the checkbox works exactly "
                 + "as it always has &mdash; a fresh future costs seconds.</p>"
+                // v12 2026-10-05
+                + "<p><b>The batch always scores in Random.</b> Whatever is selected on the Historical "
+                + "Stress Scenario card, the SS Optimizer scores every combination against the ordinary "
+                + "random distribution, and treats <i>Sequence starts N years in</i> as 0. A claim date is a "
+                + "one-time, long-term decision; it should not be chosen on one abnormal historical crisis. "
+                + "When a crisis is selected, the status line says so &mdash; <i>scored in Random (Dot-com "
+                + "Crash on the stress card ignored)</i> &mdash; and the stress card itself is left as you set "
+                + "it for the Pro PoS, GK and Stress Test tabs. Zeroing the offset also keeps the fingerprint "
+                + "identical to a Random batch made with offset 0, so the crisis card never forces a rerun.</p>"
                 + "<p>This also makes a finished batch permanently re-readable. Click any row to apply its "
                 + "claim dates and run the Pro tab; tick <i>Re-randomize each run</i> first and you get that "
                 + "same claim pair under a different future, which is the cheap way to ask whether your top "
@@ -4666,7 +4701,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
 
         // == Results table =================================================
         String[] cols = {
-                "Historical Scenario", "Starts yr", "Initial Spend", "Worst-Yr Spend (real)",
+                "Historical Scenario", "Starts yr", "Initial Base Spend", "Worst-Yr Base Spend (real)",
                 "Max Cut %", "# Guardrail Cuts", "Yrs to Recover",
                 "Final Balance", "Survived"
         };
@@ -4679,18 +4714,24 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 switch (col) {
                     case 0: return "<html>The historical crisis the guardrail plan was run through.<br>"
                             + "After the sequence ends, remaining years use your random distribution.</html>";
-                    case 1: return "<html>Spending in the first drawing year (after the go-go multiplier).<br>"
-                            + "This is the baseline the recovery metric returns to.</html>";
-                    case 2: return "<html>The lowest spending year during the crisis, in <b>real</b> (today's<br>"
-                            + "dollars) terms -- so an inflation-driven nominal rise is not mistaken for<br>"
-                            + "'no cut'. This is the trough of the guardrail adjustment.</html>";
-                    case 3: return "<html>Peak-to-trough spending cut: (initial - worst) / initial, in real<br>"
-                            + "terms. How deep the temporary spending reduction went.</html>";
+                    case 1: return "<html>The guardrail withdrawal in the first drawing year, <b>before</b> the<br>"
+                            + "go-go multiplier. This is the baseline the recovery metric returns to.<br><br>"
+                            + "<b>Why before the multiplier (v12):</b> the planned step-down when go-go<br>"
+                            + "ends is a spending choice, not a cut. Measured after the multiplier, it<br>"
+                            + "counted as a cut, and 'recovery' meant returning to the go-go level --<br>"
+                            + "which by design never happens. Only guardrail moves count here.</html>";
+                    case 2: return "<html>The lowest base (pre-go-go) withdrawal year during the crisis, in<br>"
+                            + "<b>real</b> (today's dollars) terms -- so an inflation-driven nominal rise is<br>"
+                            + "not mistaken for 'no cut'. This is the trough of the guardrail adjustment.</html>";
+                    case 3: return "<html>Peak-to-trough cut in the base withdrawal: (initial - worst) / initial,<br>"
+                            + "in real terms, before the go-go multiplier. How deep the guardrail<br>"
+                            + "reduction went.</html>";
                     case 4: return "<html>Number of years the Capital Preservation Rule (CPR) cut the<br>"
                             + "withdrawal 10%. Each is a guardrail adjustment triggered by the crisis.</html>";
-                    case 5: return "<html>Years from the spending trough until real spending returned to the<br>"
-                            + "initial level. 'not recovered' means spending stayed reduced through the<br>"
-                            + "remaining horizon. Income Lab emphasizes this recovery timeline.</html>";
+                    case 5: return "<html>Years from the trough until the real base withdrawal (before the go-go<br>"
+                            + "multiplier) returned to its initial level. 'not recovered' means it stayed<br>"
+                            + "reduced through the remaining horizon. Income Lab emphasizes this<br>"
+                            + "recovery timeline.</html>";
                     case 6: return "<html>Portfolio balance at the end of the full horizon (nominal).</html>";
                     case 7: return "<html><b>Yes</b> = the portfolio never depleted through the full horizon.<br>"
                             + "A guardrail plan that survives with reduced-then-restored spending is a<br>"
@@ -4777,10 +4818,15 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             int    worstIdx = -1;
             int    cutCount = 0;
 
+            // v12 2026-10-05: measured on wdGK -- the guardrail withdrawal BEFORE the
+            // go-go multiplier. Measured on wdActual, the planned go-go step-down in
+            // year 11 counted as a "cut", and "recovery" meant climbing back to the
+            // go-go level, which by design never happens -- so plans with $1M+ left
+            // reported "not recovered". Only guardrail (CPR/PR) moves count now.
             for (int i = 0; i < rows.size(); i++) {
                 GkRow r = rows.get(i);
                 if (!r.drawing) continue;
-                double realSpend = (r.inflFactor > 0) ? r.wdActual / r.inflFactor : r.wdActual;
+                double realSpend = (r.inflFactor > 0) ? r.wdGK / r.inflFactor : r.wdGK;
                 if (initialIdx < 0) { initialRealSpend = realSpend; initialIdx = i; }
                 if (realSpend < worstRealSpend) { worstRealSpend = realSpend; worstIdx = i; }
                 if (r.ruleFlags != null && r.ruleFlags.contains("CPR")) cutCount++;
@@ -4797,7 +4843,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 for (int i = worstIdx + 1; i < rows.size(); i++) {
                     GkRow r = rows.get(i);
                     if (!r.drawing) continue;
-                    double realSpend = (r.inflFactor > 0) ? r.wdActual / r.inflFactor : r.wdActual;
+                    double realSpend = (r.inflFactor > 0) ? r.wdGK / r.inflFactor : r.wdGK;   // v12
                     if (realSpend >= initialRealSpend) {
                         yrsToRecover = rows.get(i).calYear - rows.get(worstIdx).calYear;
                         break;
@@ -4955,11 +5001,24 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         int fullPaths, fullFan, binIters;
         long seed;
         // v11 2026-09-27: `real` is gone. The scorer always works in today's dollars.
+        // v12 2026-10-05: name of the stress scenario the batch overrode, or null.
+        String stressIgnored;
     }
 
     private BatchCfg readBatchCfg() {
         BatchCfg c = new BatchCfg();
         c.base        = readInputs();
+        // v12 2026-10-05: THE BATCH ALWAYS SCORES IN RANDOM. A claim date is a one-time,
+        // long-term decision; it must be judged against the ordinary distribution of
+        // futures, never against one abnormal historical crisis that happens to be
+        // selected on the Historical Stress Scenario card. The offset is zeroed too:
+        // it does nothing in Random, but it is hashed, so leaving it would give an
+        // identical plan a different fingerprint and force a needless full rerun.
+        // c.base is a fresh copy from readInputs(), so the card itself is untouched.
+        c.stressIgnored = (c.base.scenarioIndex > 0)
+                ? HistoricalScenarios.SCENARIO_NAMES[c.base.scenarioIndex].split(" \\(")[0] : null;
+        c.base.scenarioIndex = 0;
+        c.base.seqOffset     = 0;
         c.manBY       = c.base.manBirthYear;   c.manBM   = c.base.manBirthMonth;
         c.womanBY     = c.base.womanBirthYear; c.womanBM = c.base.womanBirthMonth;
         c.manPIA      = c.base.manPIA;         c.womanPIA = c.base.womanPIA;
@@ -5034,7 +5093,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             SwingUtilities.invokeLater(() -> tfOptFingerprint.setText(fpShown));
         // Still published as text as well, so the headless run prints it to stdout.
         publish.accept("Results file: " + resultsFile.getAbsolutePath()
-                + "   |   fingerprint: " + fp);
+                + "   |   fingerprint: " + fp
+                + (c.stressIgnored != null
+                ? "   |   scored in Random (" + c.stressIgnored + " on the stress card ignored)"
+                : ""));
         java.util.Map<String, SsOptResult> onDisk = loadBatchResults(fp);
         int rowsInFile = countBatchRows(resultsFile);
         if (!onDisk.isEmpty()) {
@@ -5368,6 +5430,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 String n = f.getName();
                 if (FP_EXCLUDE.contains(n)) continue;
                 f.setAccessible(true);
+                // v12 2026-10-05: convEnabled joins the hash only when it is OFF. ON is
+                // how every build before it behaved, so leaving it out keeps every
+                // existing batch file's fingerprint -- and its rows -- valid.
+                if (n.equals("convEnabled") && Boolean.TRUE.equals(f.get(in))) continue;
                 sb.append(n).append('=').append(f.get(in)).append(';');
             }
         } catch (Exception ex) { return "nofp"; }
@@ -6461,19 +6527,22 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         if (spTaxInflation != null) spTaxInflation.setEnabled(!computed);
 
         // Engine controls: live ONLY when the computed engine is ON.
-        if (tglConvMode != null)     tglConvMode.setEnabled(computed);
+        // v12: the conversion controls additionally need "Perform Roth conversions".
+        boolean conv = computed && (chkConvEnabled == null || chkConvEnabled.isSelected());
+        if (chkConvEnabled != null)  chkConvEnabled.setEnabled(computed);
+        if (tglConvMode != null)     tglConvMode.setEnabled(conv);
         if (cmbIrmaaMode != null)    cmbIrmaaMode.setEnabled(computed);
         if (cmbFilingStatus != null) cmbFilingStatus.setEnabled(computed);
 
         boolean fillMode = (tglConvMode != null) && tglConvMode.isSelected();
         // Flat conversion is live only in computed + flat mode.
-        if (spConvFlat != null)   spConvFlat.setEnabled(computed && !fillMode);
+        if (spConvFlat != null)   spConvFlat.setEnabled(conv && !fillMode);
         // Fill buffer + cap + the v7 ceiling dropdowns are live only in
         // computed + fill mode.
-        if (spConvBuffer != null) spConvBuffer.setEnabled(computed && fillMode);
-        if (spConvCap != null)    spConvCap.setEnabled(computed && fillMode);
-        if (cmbFillIrmaaTier != null) cmbFillIrmaaTier.setEnabled(computed && fillMode);
-        if (cmbFillBracket != null)   cmbFillBracket.setEnabled(computed && fillMode);
+        if (spConvBuffer != null) spConvBuffer.setEnabled(conv && fillMode);
+        if (spConvCap != null)    spConvCap.setEnabled(conv && fillMode);
+        if (cmbFillIrmaaTier != null) cmbFillIrmaaTier.setEnabled(conv && fillMode);
+        if (cmbFillBracket != null)   cmbFillBracket.setEnabled(conv && fillMode);
         // The Edit thresholds dialog is live whenever the computed engine is on
         // (it edits base tables the whole engine reads, not just fill mode).
         if (btnEditThresholds != null) btnEditThresholds.setEnabled(computed);
@@ -7095,6 +7164,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         props.setProperty("spending.baseTax",       String.valueOf(iv(spBaseTax)));
         props.setProperty("spending.taxInflation",  String.valueOf(dv(spTaxInflation)));
         props.setProperty("tax.computed",           String.valueOf(chkComputedTax.isSelected()));
+        props.setProperty("tax.convEnabled",        String.valueOf(chkConvEnabled.isSelected()));  // v12
         props.setProperty("tax.convFillMode",       String.valueOf(tglConvMode.isSelected()));
         props.setProperty("tax.convFlat",           String.valueOf(iv(spConvFlat)));
         props.setProperty("tax.convBuffer",         String.valueOf(iv(spConvBuffer)));
@@ -7280,6 +7350,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         setSpinnerD(spTaxInflation,       props, "spending.taxInflation",  warnings);
         if (props.getProperty("tax.computed") != null)
             chkComputedTax.setSelected(Boolean.parseBoolean(props.getProperty("tax.computed")));
+        // v12: absent in older files -> checked, which is how they always behaved.
+        chkConvEnabled.setSelected(props.getProperty("tax.convEnabled") == null
+                || Boolean.parseBoolean(props.getProperty("tax.convEnabled")));
         if (props.getProperty("tax.convFillMode") != null) {
             boolean fill = Boolean.parseBoolean(props.getProperty("tax.convFillMode"));
             tglConvMode.setSelected(fill);
@@ -7896,6 +7969,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         i.baseTax            = iv(spBaseTax);
         i.taxInflation       = dv(spTaxInflation)    / 100.0;
         i.computedTax        = chkComputedTax.isSelected();
+        i.convEnabled        = chkConvEnabled.isSelected();   // v12
         i.convFillMode       = tglConvMode.isSelected();
         i.convFlat           = iv(spConvFlat);
         i.convBuffer         = iv(spConvBuffer);
@@ -8431,6 +8505,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 } else {
                     conv = inp.convFlat;
                 }
+                if (!inp.convEnabled) { conv = 0; convCeilInt = 0; }   // v12: conversions off
                 // v6: the conversion can never exceed the Traditional balance
                 // actually available on the displayed median split -- otherwise
                 // the Roth Conv column would show a conversion the Trad Bal
@@ -9450,6 +9525,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + mmInterest;
         double taxSSpre = TaxEngine.taxableSocialSecurity(grossSS, ordinaryBeforeConv, inflFactor, fs);
         double magiBeforeConv = taxSSpre + ordinaryBeforeConv;
+        if (!inp.convEnabled) return 0;   // v12: conversions off
         if (inp.convFillMode) {
             double[] fill = TaxEngine.fillConversion(magiBeforeConv, inp.convBuffer,
                     manAge >= 65, womanAge >= 65, inp.convCap, inflFactor, fs,
@@ -11205,6 +11281,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         int baseTax; double taxInflation;
         // v3 tax engine
         boolean computedTax;
+        boolean convEnabled = true; // v12: false = no Roth conversions anywhere
         boolean convFillMode;       // true = fill-to-target, false = flat
         int convFlat, convBuffer, convCap;
         int irmaaThreshMode;        // 0=frozen 1=chained-CPI 2=full-CPI
