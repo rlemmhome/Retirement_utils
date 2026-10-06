@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Sunday, October 04, 2026 at 05:19 PM MST (UTC-7)
+// Last modified: Monday, October 05, 2026 at 11:40 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -110,7 +110,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Sunday, October 04, 2026 at 05:19 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, October 05, 2026 at 11:40 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1506,8 +1506,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         spSeqOffset = spinI(0, 0, 20, 1, "0");
         spSeqOffset.setToolTipText("<html><b>Sequence starts N years in (v6)</b><br>"
                 + "Shifts the historical crisis N years into the projection. Years<br>"
-                + "before it use ordinary random draws; the sequence then replays<br>"
-                + "in full from that point.<br><br>"
+                + "before it use ordinary random draws (the GK loop uses the mean);<br>"
+                + "the sequence then replays in full from that point.<br><br>"
                 + "<b>0 (default):</b> the crisis lands in year 1 -- maximum remaining<br>"
                 + "runway, but no surplus banked yet.<br><br>"
                 + "<b>Why shift it:</b> year 1 is not your worst case. A crisis a few<br>"
@@ -1517,8 +1517,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "because the elevated spending has already ended.<br><br>"
                 + "Try 0, 5 and 10 on the same sequence -- the spread between them<br>"
                 + "is your real sequence-of-returns exposure.<br><br>"
-                + "Applies everywhere the sequence does: the Pro PoS fan paths, the<br>"
-                + "PoS solver, the GK loop, and the Stress Test tab.</html>");
+                + "Applies to the Pro PoS fan paths and median table, the GK loop,<br>"
+                + "and the Stress Test tab.<br><br>"
+                + "<b>The PoS solver never sees the crisis (v12).</b> It sizes each<br>"
+                + "year's withdrawal from the random distribution only, so the crisis<br>"
+                + "hits a plan made without hindsight -- a true stress test. The<br>"
+                + "reported Actual PoS then shows how often the plan survives it.</html>");
 
         spColaShortfall = spinD(0.2, 0.0, 2.0, 0.1, "0.0#");
         spColaShortfall.setToolTipText("<html><b>COLA shortfall (%/yr) -- v6</b><br>"
@@ -8672,7 +8676,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double cumInflFactor = 1.0;  // year-0 spend = W0 (no inflation); chained thereafter
 
             for (int y = 0; y < horizon; y++) {
-                double[] ri2 = getReturnAndInflation(inp, y, rng);
+                // v12: the solver is BLIND to any historical stress sequence -- it
+                // always draws from the random distribution. A stress test should
+                // hit a plan sized without hindsight; the crisis replays only in
+                // the fan paths and the displayed median path. (Previously the
+                // sequence was indexed from each re-solve point, so the solver saw
+                // a crash that receded one year every year.) Random-mode draws are
+                // unchanged: same RNG, same two gaussians, same order.
+                double[] ri2 = getRandomReturnAndInflation(inp, rng);
                 double ret   = ri2[0];
                 double infl  = ri2[1];
                 if (y > 0) cumInflFactor *= (1 + infl);  // chain per-year draws (matches GK convention)
@@ -9545,11 +9556,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double goGoMult   = (goGoRemaining > 0) ? inp.goGoMultiplier : 1.0;
 
             // Resolve this year's return and inflation from historical scenario or random mean
+            // v12: honor 'Sequence starts N years in' (seqOffset), matching
+            // getReturnAndInflation(). Years before the offset and after the
+            // sequence ends use the mean, as before. Offset 0 is unchanged.
             double[][] histSeq = HistoricalScenarios.getSequence(inp.scenarioIndex);
-            double yearReturn = (histSeq != null && y < histSeq.length)
-                    ? histSeq[y][1] : inp.nomReturn;
-            double yearInfl   = (histSeq != null && y < histSeq.length)
-                    ? histSeq[y][2] : inp.inflation;
+            int histIdx = y - Math.max(0, inp.seqOffset);
+            boolean inSeq = histSeq != null && histIdx >= 0 && histIdx < histSeq.length;
+            double yearReturn = inSeq ? histSeq[histIdx][1] : inp.nomReturn;
+            double yearInfl   = inSeq ? histSeq[histIdx][2] : inp.inflation;
 
             // Cumulative inflation factor from actual per-year inflation
             if (y == 0) inflFactor = 1.0;
@@ -10172,6 +10186,15 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         if (seq != null && simYear >= off && (simYear - off) < seq.length) {
             return new double[]{ seq[simYear - off][1], seq[simYear - off][2] };
         }
+        return getRandomReturnAndInflation(inp, rng);
+    }
+
+    /**
+     * v12: Returns {equityReturn, inflation} from the random distribution only,
+     * ignoring any historical stress sequence. Used by the PoS solver so it
+     * sizes the withdrawal without foreknowledge of the crisis.
+     */
+    private double[] getRandomReturnAndInflation(SimInputs inp, SeededRng rng) {
         double ret  = inp.nomReturn + inp.stdDev * rng.nextGaussian();
         double infl = Math.max(0, inp.inflation + inp.inflationStdDev * rng.nextGaussian());
         return new double[]{ ret, infl };
