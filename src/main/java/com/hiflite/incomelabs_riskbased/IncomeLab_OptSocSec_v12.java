@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Tuesday, October 06, 2026 at 07:23 PM MST (UTC-7)
+// Last modified: Wednesday, October 07, 2026 at 11:30 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -110,7 +110,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Tuesday, October 06, 2026 at 07:23 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Wednesday, October 07, 2026 at 11:30 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -3700,7 +3700,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "which is more cautious &mdash; conservative), (b) skips the inflation adjustment entirely in a "
                 + "down-plus-high-rate year rather than capping it at 6% (conservative), and (c) applies this "
                 + "application's <b>go-go/slow-go spending multiplier on top of the GK-rule withdrawal</b> "
-                + "(Actual wd = GK withdrawal &times; go-go multiplier), which the 2006 spec has no concept of. "
+                + "(Actual wd = GK withdrawal &times; the go-go or slow-go multiplier for that year), which the "
+                + "2006 spec has no concept of. "
                 + "Deviation (c) is a front-loading overlay, NOT conservative: it deliberately raises early "
                 + "withdrawals so the GK tab's spending shape is comparable to the Pro PoS tab. <b>To run a GK "
                 + "simulation true to the textbook spec, set the go-go and slow-go durations (go-go years and "
@@ -3708,13 +3709,15 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "withdrawal shown is the pure rule output. Note those durations are <b>shared inputs</b> that "
                 + "also drive the Pro PoS and Stress Test tabs, so restore your normal go-go/slow-go settings "
                 + "afterward.</p>"
-                + "<p><b>The GK tab does not implement slow-go.</b> Unlike the Pro PoS engine, which has a full "
-                + "three-tier go-go / slow-go / no-go curve, the GK engine reads only the go-go duration and "
-                + "multiplier. The slow-go multiplier and slow-go duration are inert on this tab &mdash; setting "
-                + "them changes nothing in the GK simulation. (Zeroing the slow-go years for a pure-GK run is "
-                + "therefore harmless but, on the GK tab specifically, unnecessary; it matters for the shared "
-                + "Pro PoS and Stress Test tabs.) The GK tab is provided as a comparison overlay and as the "
-                + "engine behind the Stress Test tab &mdash; it is NOT the recommended planning method.</p>"
+                + "<p><b>The GK tab uses the full go-go / slow-go / no-go curve</b> (since October 7, 2026). "
+                + "It reads the same four inputs as the Pro PoS engine &mdash; the go-go and slow-go multipliers "
+                + "and durations on the Annual Spending card &mdash; through the same year windows, so both tabs "
+                + "and the Stress Test spend on one schedule. Slow-go rows are shaded the same paler green as on "
+                + "the Pro PoS tab. Before that date the GK engine applied go-go only and ran slow-go years at "
+                + "1.0&times;. The guardrail rules still judge the GK withdrawal itself; the multiplier scales "
+                + "only Actual wd, which is what leaves the portfolio. The GK tab is provided as a comparison "
+                + "overlay and as the engine behind the Stress Test tab &mdash; it is NOT the recommended "
+                + "planning method.</p>"
                 + "<p><b>The core problem with ALL withdrawal-rate methods.</b> The 4% rule and its dynamic "
                 + "descendants (including Guyton-Klinger) share a fundamental flaw in how they define success. "
                 + "A withdrawal-rate method takes a percentage of the CURRENT balance, and 'success' is "
@@ -4898,7 +4901,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             int    cutCount = 0;
 
             // v12 2026-10-05: measured on wdGK -- the guardrail withdrawal BEFORE the
-            // go-go multiplier. Measured on wdActual, the planned go-go step-down in
+            // go-go multiplier (and, since 2026-10-07, the slow-go multiplier). Measured on wdActual, the planned go-go step-down in
             // year 11 counted as a "cut", and "recovery" meant climbing back to the
             // go-go level, which by design never happens -- so plans with $1M+ left
             // reported "not recovered". Only guardrail (CPR/PR) moves count now.
@@ -9879,7 +9882,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             boolean firstDrawYear = calYear == inp.withdrawStartYear;
 
             int goGoRemaining = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
-            double goGoMult   = (goGoRemaining > 0) ? inp.goGoMultiplier : 1.0;
+            // v12 2026-10-07: the full go-go / slow-go / no-go curve, from the SAME
+            // helper the Pro PoS engine uses and the same four Annual Spending inputs.
+            // Before, GK applied go-go only and ran slow-go years at 1.0x, so the GK
+            // and Stress Test tabs spent less in those years than Pro PoS showed.
+            double goGoMult   = spendMultFor(inp, y, startY);
 
             // Resolve this year's return and inflation from historical scenario or random mean
             // v12: honor 'Sequence starts N years in' (seqOffset), matching
@@ -9981,6 +9988,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             row.manRmd = (int) manRmd; row.womanRmd = (int) womanRmd;
             row.combRmd = (int) combRmd; row.rmdOverage = rmdOverage;
             row.drawing = drawing; row.goGoActive = goGoRemaining > 0;
+            // v12 2026-10-07: slow-go window, keyed exactly as the Pro PoS row is.
+            int yFromStartGk = y - startY;
+            row.slowGoActive = (goGoRemaining <= 0)
+                    && inp.slowGoDuration > 0
+                    && yFromStartGk >= inp.goGoDuration
+                    && yFromStartGk < inp.goGoDuration + inp.slowGoDuration;
             row.preAnchor = false;
 
             double nextBal = Math.max(0, bal * (1 + yearReturn) - wdActual);
@@ -10285,6 +10298,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             private final Color AMBER_FG   = new Color(130, 80, 0);
             private final Color GOGO_BG    = new Color(232, 248, 240);
             private final Color GOGO_WD_BG = new Color(180, 230, 205);
+            // v12 2026-10-07: slow-go tier, the same paler greens as the Pro PoS table.
+            private final Color SLOWGO_BG    = new Color(243, 250, 246);
+            private final Color SLOWGO_WD_BG = new Color(214, 240, 226);
             private final Color PMR_BG     = new Color(255, 235, 185);  // gold -- freeze
             private final Color PMR_FG     = new Color(120, 70, 0);
             private final Color CPR_BG     = new Color(255, 210, 210);  // red -- cut
@@ -10302,9 +10318,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                     boolean goGo      = row < rows.size() && rows.get(row).goGoActive;
                     GkRow gr          = row < rows.size() ? rows.get(row) : null;
                     boolean preAnchor = gr != null && gr.preAnchor;
+                    boolean slowGo    = gr != null && gr.slowGoActive;   // v12 2026-10-07
 
                     Color defaultBg = preAnchor ? BENGEN_BG
                             : goGo ? GOGO_BG
+                            : slowGo ? SLOWGO_BG
                             : (row % 2 == 0 ? Color.WHITE : new Color(248, 248, 245));
                     c.setBackground(defaultBg);
                     c.setForeground(preAnchor ? BENGEN_FG : Color.BLACK);
@@ -10315,6 +10333,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         c.setBackground(GOGO_WD_BG); c.setForeground(new Color(0, 90, 50));
                     } else if ((col == 3 || col == 4) && goGo && preAnchor) {
                         c.setBackground(new Color(200, 190, 240)); c.setForeground(new Color(60, 30, 120));
+                    } else if ((col == 3 || col == 4) && slowGo && !preAnchor) {   // v12 2026-10-07
+                        c.setBackground(SLOWGO_WD_BG); c.setForeground(new Color(0, 80, 60));
                     } else if (col == 7) {
                         if      (preAnchor)               { c.setBackground(BENGEN_BG); c.setForeground(BENGEN_FG); }
                         else if (flags.contains("CPR"))   { c.setBackground(CPR_BG);    c.setForeground(CPR_FG); }
@@ -10396,7 +10416,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // -- but those inputs are shared with the Pro PoS and Stress Test tabs, so the
         // banner warns to restore them afterward. See Assumptions section 8.
         JLabel gkPureNote = new JLabel("<html><i><b>Pure Guyton-Klinger note:</b> the go-go and slow-go "
-                + "multipliers scale the withdrawals shown here (Actual wd = GK withdrawal x go-go multiplier). "
+                + "multipliers scale the withdrawals shown here (Actual wd = GK withdrawal x go-go or slow-go multiplier). "
                 + "The 2006 Guyton-Klinger spec has no go-go concept. To run a simulation true to the spec, set "
                 + "the <b>go-go years</b> and <b>slow-go years</b> (durations) to <b>0</b> in the input panel. "
                 + "Note that these are shared inputs that also drive the Pro PoS and Stress Test tabs -- "
@@ -10711,6 +10731,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         int  investmentGrowth, balDelta;
         int  balDeltaReal;          // v6: true real-dollar change (see EnhRow)
         boolean drawing, goGoActive, preAnchor;
+        boolean slowGoActive;       // v12 2026-10-07: middle spending tier, after go-go
     }
 
     static class GkResults {
