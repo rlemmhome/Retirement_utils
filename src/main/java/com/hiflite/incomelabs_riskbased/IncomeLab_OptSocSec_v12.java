@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Wednesday, October 07, 2026 at 11:30 AM MST (UTC-7)
+// Last modified: Wednesday, October 07, 2026 at 02:50 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -67,7 +67,7 @@ import java.util.List;
  *     Computed federal + STATE + IRMAA on the Pro PoS median path. The Tax
  *     column is the LIVING-EXPENSES tax: taxable Social Security (provisional-
  *     income formula) + ordinary income (max(RMD, Traditional draw) + annuity)
- *     minus the MFJ + age-65 standard deduction, through inflation-indexed 2026
+ *     minus the MFJ + age-65 standard deduction, through chained-CPI-indexed 2026
  *     brackets + the selected STATE tax + IRMAA (costed, 2-year MAGI lookback).
  *
  *     STATE TAX (v5; framework v12 2026-10-05): the state is selectable --
@@ -110,7 +110,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Wednesday, October 07, 2026 at 11:30 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Wednesday, October 07, 2026 at 02:50 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1146,7 +1146,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "When ON, the Tax column is COMPUTED each year from taxable income:<br>"
                 + "&nbsp;&nbsp;taxable Social Security (provisional-income formula)<br>"
                 + "&nbsp;&nbsp;+ ordinary income (max(RMD, Traditional draw) + annuity + conversion)<br>"
-                + "&nbsp;&nbsp;- standard deduction (MFJ + age-65 add-ons), all inflation-indexed<br>"
+                + "&nbsp;&nbsp;- standard deduction (MFJ + age-65 add-ons), indexed as the law does (chained CPI)<br>"
                 + "then run through the MFJ brackets + the selected state tax + IRMAA surcharge.<br><br>"
                 + "When OFF, reverts to the legacy flat 'Base tax' escalator<br>"
                 + "(baseTax * (1+taxInflation)^year). See the Assumptions &amp; Methods tab.<br><br>"
@@ -1241,8 +1241,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "leaving headroom so an income surprise does not trip the surcharge.<br>"
                 + "Default $13,000 (targets ~$205,000 MAGI in 2026 dollars).<br><br>"
                 + "<b>Inflation-indexed</b> (v12): enter it in 2026 dollars; each year it grows<br>"
-                + "with inflation exactly as the threshold does, so the cushion -- and the<br>"
-                + "MAGI target -- hold steady in today's dollars for the whole horizon.</html>");
+                + "with inflation, as the threshold does under Full CPI (current law), so the<br>"
+                + "cushion -- and the MAGI target -- hold steady in today's dollars.</html>");
         spConvCap    = spinI(40_000, 0, 1_000_000, 1_000, "#,###");
         spConvCap.setToolTipText("<html><b>Roth conversion cap ($/yr)</b><br>"
                 + "Used in <b>Fill to MAGI target</b> mode. The computed fill is never<br>"
@@ -1253,22 +1253,28 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "withdrawal (and shrink go-go spending, which is a multiple of it).<br>"
                 + "Default $40,000.</html>");
 
+        // v12 2026-10-07: labels corrected and the default moved to Full CPI. The
+        // statute (42 U.S.C. 1395r(i)(5)) indexes IRMAA thresholds to the regular
+        // CPI-U, so Full CPI IS current law; chained is the conservative option.
+        // Index order is unchanged (0 Frozen, 1 Chained, 2 Full) so saved scenarios
+        // keep the setting they were saved with.
         cmbIrmaaMode = new JComboBox<>(new String[]{
-                "Frozen (nominal 2026)", "Chained-CPI (current law)", "Full CPI" });
-        cmbIrmaaMode.setSelectedIndex(1); // default: chained-CPI
-        cmbIrmaaMode.setToolTipText("<html><b>IRMAA threshold indexing mode</b><br>"
+                "Frozen (stress)", "Chained-CPI (conservative)", "Full CPI (current law)" });
+        cmbIrmaaMode.setSelectedIndex(TaxEngine.IRMAA_FULL); // default: current law
+        cmbIrmaaMode.setToolTipText("<html><b>IRMAA threshold growth</b><br>"
                 + "How the IRMAA income cliffs move over the horizon. The surcharge<br>"
                 + "AMOUNT always tracks general inflation; this controls only the<br>"
-                + "THRESHOLDS.<br><br>"
-                + "<b>Chained-CPI (default, current law):</b> thresholds grow at inflation<br>"
-                + "minus ~0.3%/yr, matching how the first four IRMAA tiers have been<br>"
-                + "indexed since 2020.<br>"
-                + "<b>Frozen (nominal 2026):</b> thresholds never move -- the conservative<br>"
-                + "stress case, matching the 2007-2019 freeze and Medicare funding-<br>"
-                + "pressure risk. Surfaces late-life RMD-driven IRMAA most clearly.<br>"
-                + "<b>Full CPI:</b> thresholds grow at your full inflation assumption -- the<br>"
-                + "most optimistic (thresholds outrun income, IRMAA rarely triggers).<br><br>"
-                + "See the Assumptions &amp; Methods tab.</html>");
+                + "THRESHOLDS. The conversion fill aims at the threshold of the mode<br>"
+                + "you pick, so the fill and the surcharge test always agree.<br><br>"
+                + "<b>Full CPI (default, current law):</b> thresholds grow with your<br>"
+                + "inflation assumption. The law indexes them to the regular CPI-U<br>"
+                + "(42 U.S.C. 1395r(i)(5)). The top tier ($750,000 MFJ) is not indexed<br>"
+                + "until 2028.<br>"
+                + "<b>Chained-CPI (conservative):</b> thresholds grow about 0.3%/yr<br>"
+                + "slower than the law says, so IRMAA bites a little sooner.<br>"
+                + "<b>Frozen (stress):</b> thresholds never move -- what happens if<br>"
+                + "Congress stops indexing. Surfaces late-life RMD-driven IRMAA.<br><br>"
+                + "See section 6 of the Assumptions &amp; Methods tab.</html>");
 
         // v7: IRMAA-tier ceiling selector. Index maps directly to the IRMAA
         // upper-boundary array index used in fillConversion. Index 0 = the first
@@ -2215,8 +2221,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "&nbsp;&nbsp;IRMAA surcharge:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;= Total living-expenses tax:&nbsp;<b>%s</b><br><br>"
                                         + "%s"   // v12: dollar-basis note
-                                        + "Brackets, standard deduction (MFJ + age-65) and IRMAA<br>"
-                                        + "thresholds are 2026 statutory values, inflation-indexed.<br>"
+                                        + "Brackets and standard deduction (MFJ + age-65) are 2026<br>"
+                                        + "statutory values grown with the chained CPI, as the law<br>"
+                                        + "indexes them; IRMAA thresholds per your selected mode.<br>"
                                         + "SS taxability via the provisional-income formula. See the<br>"
                                         + "Assumptions &amp; Methods tab.</html>",
                                 CURRENCY.format(Math.round(er.taxableSS / d)),
@@ -2251,7 +2258,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "Assessed on your MAGI from <b>2 years prior</b> (the IRMAA<br>"
                                         + "lookback). Because your conversions and later RMDs raise<br>"
                                         + "MAGI, they can trip a higher tier two years out. Thresholds<br>"
-                                        + "are 2026 values, inflation-indexed. See Assumptions &amp; Methods.</html>",
+                                        + "are 2026 values, grown per your IRMAA threshold-growth mode. See Assumptions &amp; Methods.</html>",
                                 CURRENCY.format(Math.round(er.irmaa / d)));
                     }
                     case COL_MAGI -> {
@@ -2533,14 +2540,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                             + "When the computed tax engine is ON, this is derived each year from<br>"
                             + "taxable income: taxable Social Security (provisional-income formula)<br>"
                             + "+ ordinary income (max(RMD, Traditional draw) + annuity + conversion),<br>"
-                            + "minus the MFJ + age-65 standard deduction, run through inflation-indexed<br>"
+                            + "minus the MFJ + age-65 standard deduction, run through chained-CPI-indexed<br>"
                             + "2026 brackets, plus the selected STATE tax and the IRMAA surcharge.<br>"
                             + "(State defaults to Arizona; Colorado, Florida, Idaho, Nevada, Oklahoma<br>"
                             + "and Custom are on the Tax Engine card.) When OFF, reverts to the legacy flat escalator. Hover<br>"
                             + "a cell for that year's breakdown. See the Assumptions &amp; Methods tab.</html>";
                     case COL_IRMAA -> "<html><b>IRMAA -- Medicare Part B + D surcharge (per couple)</b><br>"
                             + "Assessed on your MAGI from 2 years prior (the IRMAA lookback).<br>"
-                            + "2026 tier thresholds, inflation-indexed. Conversions and later RMDs<br>"
+                            + "2026 tier thresholds, grown per your threshold-growth mode. Conversions and later RMDs<br>"
                             + "raise MAGI and can trip a higher tier two years out. Included in Tax.<br>"
                             + "Hover a cell for the amount and tier detail.</html>";
                     case COL_MAGI -> "<html><b>MAGI -- Modified Adjusted Gross Income this year</b><br>"
@@ -3187,10 +3194,24 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec3'></a>3. Tax engine (v3) &mdash; federal + state + IRMAA</h3>"
                 + "<p>When 'Use computed tax engine' is ON, the Tax column is computed each year rather than "
-                + "escalated from a flat figure. All 2026 statutory dollar boundaries are <b>inflation-indexed "
-                + "forward</b> using the same cumulative inflation factor the median path carries &mdash; this "
-                + "mirrors how the IRS adjusts brackets, the standard deduction, and IRMAA thresholds via "
-                + "chained-CPI, and prevents artificial bracket creep over a multi-decade horizon.</p>"
+                + "escalated from a flat figure. Every 2026 statutory dollar figure grows forward the way "
+                + "<b>its own law</b> indexes it, using the cumulative inflation factor the path carries "
+                + "(your inflation assumption stands in for the regular CPI-U):</p>"
+                + "<ul>"
+                + "<li><b>Federal brackets, standard deduction and age-65 add-on:</b> the <b>chained</b> CPI-U, "
+                + "about 0.3%/yr below regular inflation (IRC 1(f)(3), 1(f)(6)). Arizona's and Idaho's deductions "
+                + "follow the federal amount, so they follow its chained indexing too. (Before October 7, 2026 "
+                + "these grew with full inflation, which let the brackets outrun the law and understated federal "
+                + "tax by roughly $530/yr in today's dollars after 10 years and $1,630/yr after 30 at a $230,000 "
+                + "MAGI.)</li>"
+                + "<li><b>IRMAA thresholds:</b> the regular CPI-U by law; the threshold-growth selector (section "
+                + "6) also offers conservative and stress settings.</li>"
+                + "<li><b>Idaho's zero bracket:</b> the regular CPI-U (Idaho Code 63-3024).</li>"
+                + "<li><b>Never indexed:</b> the Social Security provisional-income thresholds (section 5) and "
+                + "the fixed-dollar state amounts in section 3b.</li>"
+                + "</ul>"
+                + "<p>Where the law is known the model follows it; where it is not, it takes the conservative "
+                + "choice and says so.</p>"
 
                 + "<p><b>Filing status (v4).</b> A 'Filing status' selector switches the entire tax basis "
                 + "between <b>Married filing jointly</b> (default) and <b>Single</b>. Changing it swaps the "
@@ -3200,7 +3221,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "$12,400 / $50,400 / $105,700 / $201,775 / $256,225 / $640,600; SS provisional $25,000 / "
                 + "$34,000; IRMAA thresholds $109,000 / $137,000 / $171,000 / $205,000 / $500,000). In Single "
                 + "mode the age-65 add-on follows the <b>User/primary person's age</b>; the spouse age is "
-                + "ignored, because a single filer has one taxpayer.</p>"
+                + "ignored, because a single filer has one taxpayer. The <b>Death event</b> on the Tax Engine card "
+                + "is different: its survivor years file Single automatically, and the add-on follows the "
+                + "<b>survivor's own age</b> &mdash; the Spouse's when the User is the one who died (corrected "
+                + "October 7, 2026; before then the User's age was used even after the User's death).</p>"
                 + "<p><b>Using Single for a survivor year.</b> This flag changes ONLY the tax math &mdash; it "
                 + "does not alter accounts, Social Security streams, or RMDs. To model the death of one spouse, "
                 + "load the saved joint scenario, consolidate the decedent's Traditional/Roth balances into the "
@@ -3365,7 +3389,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec4'></a>4. Standard deduction &mdash; what IS and is NOT modeled</h3>"
-                + "<p><b>Modeled (permanent provisions, inflation-indexed):</b></p>"
+                + "<p><b>Modeled (permanent provisions, indexed to the chained CPI-U as the law requires):</b></p>"
                 + "<ul>"
                 + "<li>Base MFJ standard deduction: $32,200 (2026)</li>"
                 + "<li>Additional age-65 standard deduction: $1,650 per qualifying spouse (2026, per IRS "
@@ -3431,18 +3455,19 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "</ul>"
                 + "<p>IRMAA is a cliff: one dollar over a threshold triggers the full tier jump &mdash; which is "
                 + "why the conversion fill leaves a buffer (section 7).</p>"
-                + "<p><b>IRMAA threshold growth (user toggle):</b> unlike federal tax brackets (fully CPI-indexed), "
-                + "IRMAA thresholds have a poor indexing history &mdash; they were frozen in nominal dollars from "
-                + "2007 to 2019, and only the first four tiers have been indexed (to chained-CPI) since 2020; the "
-                + "top tier remains frozen. So the tool lets you choose how the thresholds move:</p>"
+                + "<p><b>IRMAA threshold growth (user toggle).</b> By law (42 U.S.C. 1395r(i)(5), checked October "
+                + "7, 2026) the thresholds rise each year with the <b>regular CPI-U</b> &mdash; the average for the "
+                + "12 months ending in August of the prior year &mdash; rounded to the nearest $1,000. The top tier "
+                + "($500,000 single / $750,000 MFJ) is not indexed until 2028. Note the contrast with the federal tax "
+                + "brackets, which the law indexes to the slower <i>chained</i> CPI-U (section 3). Indexing has also "
+                + "been suspended by Congress in the past. The selector:</p>"
                 + "<ul>"
-                + "<li><b>Chained-CPI (default, current law):</b> thresholds grow at inflation minus ~0.3%/yr, "
-                + "matching post-2020 indexing.</li>"
-                + "<li><b>Frozen (nominal 2026):</b> thresholds never move &mdash; the conservative stress case, "
-                + "matching the 2007-2019 freeze and the real risk that Medicare funding pressure leads to future "
-                + "freezes. This surfaces late-life RMD-driven IRMAA most clearly.</li>"
-                + "<li><b>Full CPI:</b> thresholds grow at your full inflation assumption &mdash; the most "
-                + "optimistic, since thresholds then outrun nominal income and IRMAA rarely triggers.</li>"
+                + "<li><b>Full CPI (default, current law):</b> thresholds grow with your inflation assumption.</li>"
+                + "<li><b>Chained-CPI (conservative):</b> thresholds grow about 0.3%/yr slower than the law says, "
+                + "so IRMAA bites a little sooner. (Earlier versions labeled this one &quot;current law&quot;; that "
+                + "was wrong and was corrected October 7, 2026.)</li>"
+                + "<li><b>Frozen (stress):</b> thresholds never move &mdash; what happens if Congress stops "
+                + "indexing. This surfaces late-life RMD-driven IRMAA most clearly.</li>"
                 + "</ul>"
                 + "<p>The surcharge AMOUNT always tracks general inflation regardless of mode (Medicare costs rise "
                 + "with prices); the toggle affects only the income THRESHOLDS. An all-dashes IRMAA column means "
@@ -3483,16 +3508,15 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "work stoppage is a life-changing event that can be reported to Social Security on Form SSA-44 "
                 + "to ask for the surcharge to be redetermined on current income (verify with SSA).</p>"
                 + "<p><b>The fill sizes against THIS year's threshold, not the premium year's.</b> Each year's "
-                + "conversion is sized against the IRMAA threshold for the year the conversion happens, indexed "
-                + "with your general inflation rate &mdash; not against the threshold of the premium year two years "
-                + "later that the MAGI is actually judged by. Under <b>Full CPI</b> threshold growth the "
-                + "premium-year threshold is always the higher one, so this adds roughly two years of indexing as "
-                + "extra margin on top of your buffer. Under the <b>Chained-CPI</b> default it is higher for about "
-                + "the first 16 years; after that chained-CPI's slower growth overtakes the two-year head start, "
-                + "and the buffer absorbs the difference &mdash; at a 2.3% inflation assumption the total real "
-                + "cushion below the cliff narrows from about $21,000 early on to about $5,000 by year 30, still "
-                + "clear of it. The fill indexes its ceiling with general inflation in <b>every</b> threshold-growth "
-                + "mode, including Frozen.</p>"
+                + "conversion is sized against the IRMAA threshold for the year the conversion happens &mdash; "
+                + "grown by the threshold-growth mode you selected &mdash; not against the threshold of the premium "
+                + "year two years later that the MAGI is actually judged by. The premium-year threshold is never "
+                + "lower, so this adds margin on top of your buffer. At a 2.3% inflation assumption the real "
+                + "cushion below the cliff is about <b>$23,100</b> under Full CPI (the $13,000 buffer plus two years "
+                + "of indexing), about $23,100 early to $22,400 by year 30 under Chained-CPI, and exactly your "
+                + "<b>$13,000</b> buffer under Frozen. (Before October 7, 2026 the fill grew the threshold with "
+                + "general inflation in every mode, which in Frozen mode aimed above the frozen line and tripped the "
+                + "surcharge from about year 5.)</p>"
                 + "<p><b>Both spouses' surcharges are counted.</b> Once both of you are enrolled in Medicare, a tier "
                 + "breach costs the surcharge <b>twice</b> &mdash; once per person. The tool uses the per-couple "
                 + "(per-person &times; 2) MFJ schedule in section 6, so the cost it shows for crossing a cliff is "
@@ -3617,10 +3641,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<li><b>Flat $ amount:</b> a fixed conversion applied every drawing year.</li>"
                 + "<li><b>Fill to MAGI target:</b> each year converts the largest amount that keeps MAGI under "
                 + "the binding ceiling &mdash; the lower of (a) the IRMAA Tier-0 cliff minus your buffer and "
-                + "(b) the 22%&rarr;24% bracket edge &mdash; then capped by the cap input. Both ceilings are "
-                + "inflation-indexed, <b>and so is the buffer</b>: enter it in 2026 dollars and it grows with "
-                + "inflation exactly as the threshold does, so the cushion and the MAGI target hold steady in "
-                + "today's dollars for the whole horizon. (Held in nominal dollars, as before v12, a $13,000 "
+                + "(b) the 22%&rarr;24% bracket edge &mdash; then capped by the cap input. The IRMAA cliff grows "
+                + "per your threshold-growth mode and the bracket edge with the chained CPI, as the law indexes "
+                + "each. <b>The buffer is inflation-indexed</b>: enter it in 2026 dollars and it grows with "
+                + "inflation, as the threshold does under Full CPI (current law), so under that default the "
+                + "cushion and the MAGI target hold steady in today's dollars for the whole horizon. (Held in "
+                + "nominal dollars, as before v12, a $13,000 "
                 + "buffer eroded to about $8,400 of real cushion by 2044 and the target crept upward.) In "
                 + "practice the IRMAA cliff usually binds first; the table reports which ceiling bound the "
                 + "conversion each year.</li>"
@@ -4193,8 +4219,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
      *   5  2026-10-06  the SS-bridge sizer no longer charges state tax on the benefit
      *                  in states that exempt Social Security, so every bridge year is
      *                  sized slightly larger (Arizona included).
+     *   6  2026-10-07  federal brackets, standard deduction and age-65 add-on grow
+     *                  with the CHAINED CPI as the law indexes them (they grew with
+     *                  full inflation); the conversion fill aims at the IRMAA
+     *                  threshold of the selected mode; a survivor Spouse's age-65
+     *                  add-on follows her own age. Every scored row moves.
      */
-    private static final int SCORER_VERSION = 5;
+    private static final int SCORER_VERSION = 6;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -8657,12 +8688,18 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         grossSS, ordinaryBeforeConv, inflFactor, fsYear);
                 double magiBeforeConv = taxSSpre + ordinaryBeforeConv;
 
+                // v12 2026-10-07: chained factor for the federal figures; survivor-
+                // aware age-65 flag for the filer.
+                double fedF = TaxEngine.fedIndexFactor(inflFactor, y);
+                boolean p65 = primary65(inp, calYear, manAge, womanAge);
                 double conv;
                 if (inp.convFillMode) {
                     double[] fill = TaxEngine.fillConversion(
                             magiBeforeConv, inp.convBuffer,
-                            manAge >= 65, womanAge >= 65,
-                            inp.convCap, inflFactor, fsYear,
+                            p65, womanAge >= 65,
+                            inp.convCap, inflFactor, fedF,
+                            TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, y),
+                            fsYear,
                             inp.fillIrmaaTierIdx, inp.fillBracketIdx);
                     conv        = fill[0];
                     convCeilInt = (int) fill[1];
@@ -8701,7 +8738,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         nonExemptTaxable(inp.annuityStream, inp, calYear, ssInflNow, fAnn));
                 TaxEngine.TaxResult tr = TaxEngine.compute(
                         grossSS, ordinaryBeforeConv, magiTwoYrPrior,
-                        manAge >= 65, womanAge >= 65, inflFactor, irmaaTF,
+                        p65, womanAge >= 65, inflFactor, fedF, irmaaTF,
                         // v11: retirementOrdinary stays tradDraw ONLY. A stream's
                         // state exemption travels in its own parameter below, so a
                         // Custom profile that also excludes retirement income cannot
@@ -8716,7 +8753,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 if (mmInterest > 0) {
                     TaxEngine.TaxResult trNoInt = TaxEngine.compute(
                             grossSS, ordinaryBeforeConv - mmInterest, magiTwoYrPrior,
-                            manAge >= 65, womanAge >= 65, inflFactor, irmaaTF,
+                            p65, womanAge >= 65, inflFactor, fedF, irmaaTF,
                             fsYear, stProfile, calYear, tradDraw,
                             streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil), stCtx);
                     mmIntTaxInt = (int) Math.max(0, tr.totalTax - trNoInt.totalTax);
@@ -9361,8 +9398,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double taxSSwith    = TaxEngine.taxableSocialSecurity(stackBase + grown, 0, inflFactor, fs);
             double taxSSwithout = TaxEngine.taxableSocialSecurity(stackBase,         0, inflFactor, fs);
             double ssTaxableDelta = Math.max(0, taxSSwith - taxSSwithout);
+            double fedF = TaxEngine.fedIndexFactor(inflFactor, y);   // v12 2026-10-07
             double[] ssTax = TaxEngine.conversionTax(taxSSwithout, ssTaxableDelta,
-                    inflFactor, fs, stProfile, calYear, 0);
+                    inflFactor, fedF, fs, stProfile, calYear, 0);
             // v12 2026-10-06: the STATE part of the tax the benefit would have caused
             // counts only where the state taxes this person's Social Security. Before,
             // it was charged everywhere -- 2.5% of the taxable-SS increase in Arizona,
@@ -9377,7 +9415,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double b = grown;
             for (int pass = 0; pass < 3; pass++) {
                 double[] bt = TaxEngine.conversionTax(taxSSwithout, b,
-                        inflFactor, fs, stProfile, calYear, 0);
+                        inflFactor, fedF, fs, stProfile, calYear, 0);
                 double net = b - bt[0];
                 if (net <= 1) break;
                 b = b * (netTarget / net);
@@ -9699,6 +9737,18 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 ? TaxEngine.FilingStatus.SINGLE : inp.filingStatus;
     }
 
+    /**
+     * v12 2026-10-07: is the FILER (first age flag the tax engine reads) 65 or
+     * older? On a joint return that is the User. In a survivor year the return is
+     * Single and the filer is the SURVIVOR -- the Spouse when the User died. Before
+     * this date the User's age was always used, so a survivor Spouse under 65 got
+     * the $2,050 single age-65 add-on whenever the deceased User had reached 65.
+     */
+    static boolean primary65(SimInputs inp, int calYear, int manAge, int womanAge) {
+        if (isSurvivorYear(inp, calYear) && inp.deathWho == 1) return womanAge >= 65;
+        return manAge >= 65;
+    }
+
     // Survivor-aware Social Security. In a survivor year the decedent's benefit
     // stops and the survivor keeps the LARGER of the two benefits (standard
     // survivor rule). We compute both raw benefits, then in survivor years route
@@ -9772,7 +9822,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         if (!inp.convEnabled) return 0;   // v12: conversions off
         if (inp.convFillMode) {
             double[] fill = TaxEngine.fillConversion(magiBeforeConv, inp.convBuffer,
-                    manAge >= 65, womanAge >= 65, inp.convCap, inflFactor, fs,
+                    primary65(inp, calYear, manAge, womanAge), womanAge >= 65, inp.convCap,
+                    inflFactor, TaxEngine.fedIndexFactor(inflFactor, y),            // v12 2026-10-07
+                    TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, y), fs,
                     inp.fillIrmaaTierIdx, inp.fillBracketIdx);
             return fill[0];
         }
@@ -9808,7 +9860,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 nonExemptTaxableDet(inp.annuityStream, inp, calYear));
         TaxEngine.TaxResult tr = TaxEngine.compute(grossSS, ordinaryBeforeConv,
                 magiBeforeForConv(grossSS, ordinaryBeforeConv, inflFactor, fs),
-                manAge >= 65, womanAge >= 65, inflFactor,
+                primary65(inp, calYear, manAge, womanAge), womanAge >= 65, inflFactor,
+                TaxEngine.fedIndexFactor(inflFactor, y),                            // v12 2026-10-07
                 TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, Math.max(0, y - 2)),
                 // v11: retirementOrdinary stays rmd ONLY; the stream exemption
                 // travels in its own parameter (see stateTaxLiving).
@@ -10887,10 +10940,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     //  State tax is pluggable via the StateTaxProfile registry (v5); Arizona
     //  (flat 2.5%, SS-excluded) is the default and reproduces the prior fixed
     //  behavior, and a user-configurable Custom flat-rate profile is provided.
-    //  Base-year (2026) statutory values are inflation-indexed forward each
-    //  simulation year using the same inflation factor the median path already
-    //  carries, mirroring how the IRS adjusts brackets, the standard deduction,
-    //  and IRMAA thresholds via chained-CPI. See the Assumptions & Methods tab
+    //  Base-year (2026) statutory values are indexed forward each simulation
+    //  year the way their own law indexes them (v12 2026-10-07): federal
+    //  brackets / standard deduction / age-65 add-on on the CHAINED CPI-U
+    //  (fedIndexFactor), IRMAA thresholds per the selected mode (current law =
+    //  regular CPI-U), the surcharge amounts with general inflation. See the
+    //  Assumptions & Methods tab
     //  for sourcing and the deductions actually modeled vs. deliberately omitted.
     //
     //  Verified 2026 figures (IRS Rev. Proc. 2025-32; SSA):
@@ -11399,12 +11454,16 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
          * @param conversion      Roth conversion stacked on top (0 = living only)
          * @param man65/woman65   the flags the federal deduction used (FEDERAL_WITH_65
          *                        mirrors the federal figure exactly)
+         * @param inflFactor      general (CPI-U) factor: Idaho's zero bracket, indexed
+         *                        FIXED amounts
+         * @param fedFactor       chained factor: anything that follows a federal figure
          * @param out             optional; receives the components (may be null)
          */
         static double stateTaxRules(StateRules R, double agiLiving, double taxableSS,
                                     double streamExempt, double conversion, StateCtx c,
                                     boolean man65, boolean woman65,
-                                    double inflFactor, FilingStatus fs, StateParts out) {
+                                    double inflFactor, double fedFactor,
+                                    FilingStatus fs, StateParts out) {
             if (R.start == StateStart.NONE) {
                 if (out != null) { out.start = out.ssSub = out.excl = out.ded = out.taxable = out.tax = 0; }
                 return 0;
@@ -11412,7 +11471,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             boolean mfj = fs == FilingStatus.MFJ;
             double agi = agiLiving + conversion;
             double start = (R.start == StateStart.FED_AGI) ? agi
-                    : Math.max(0, agi - totalDeduction(man65, woman65, inflFactor, fs));
+                    : Math.max(0, agi - totalDeduction(man65, woman65, fedFactor, fs));
 
             // Taxable SS split between the spouses in proportion to gross benefits.
             double gm = c.manPresent ? c.manSS : 0, gw = c.womanPresent ? c.womanSS : 0;
@@ -11453,8 +11512,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double ded = 0;
             switch (R.ded) {
                 case FIXED -> ded = (mfj ? R.dedMfj : R.dedSingle) * (R.dedIndexed ? inflFactor : 1.0);
-                case FEDERAL_BASIC -> ded = infl(mfj ? STD_DED_MFJ_2026 : STD_DED_SINGLE_2026, inflFactor);
-                case FEDERAL_WITH_65 -> ded = totalDeduction(man65, woman65, inflFactor, fs);
+                // v12 2026-10-07: deductions that follow the federal amount follow its
+                // chained indexing too (Arizona's by ARS 43-1041, Idaho's by conformity).
+                case FEDERAL_BASIC -> ded = infl(mfj ? STD_DED_MFJ_2026 : STD_DED_SINGLE_2026, fedFactor);
+                case FEDERAL_WITH_65 -> ded = totalDeduction(man65, woman65, fedFactor, fs);
                 default -> { }
             }
             int present = (c.manPresent ? 1 : 0) + (c.womanPresent ? 1 : 0);
@@ -11558,6 +11619,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             // the SAME state calculation, plus the components for the tooltip.
             boolean man65, woman65;
             double  streamStateExempt;
+            double  fedFactor;     // v12 2026-10-07: chained factor the federal figures used
             StateCtx   stateCtx;   // null on the legacy (Custom) path
             StateParts stateParts; // null on the legacy (Custom) path
         }
@@ -11676,11 +11738,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             return b;
         }
 
-        /** Total deduction (base std ded + age-65 add-on), inflation-indexed.
+        /** Total deduction (base std ded + age-65 add-on), indexed by the factor
+         *  passed -- the CHAINED factor (fedIndexFactor) since 2026-10-07.
          *  MFJ: add-on per qualifying spouse (man65, woman65). SINGLE: one
-         *  add-on, driven by the primary/User person's age (man65); the spouse
-         *  flag is ignored because a single filer has one taxpayer. OBBBA
-         *  senior bonus deliberately omitted (see Assumptions tab). */
+         *  add-on, driven by the FILER's age in man65 -- callers pass primary65(),
+         *  which is the survivor's age in a survivor year; the second flag is
+         *  ignored because a single filer has one taxpayer. OBBBA senior bonus
+         *  deliberately omitted (see Assumptions tab). */
         static double totalDeduction(boolean man65, boolean woman65,
                                      double inflFactor, FilingStatus fs) {
             if (fs == FilingStatus.SINGLE) {
@@ -11701,6 +11765,25 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
 
         // Chained-CPI runs ~0.3 percentage points/yr below regular CPI.
         static final double CHAINED_CPI_LAG = 0.003;
+
+        /**
+         * v12 2026-10-07: growth factor for the FEDERAL brackets, standard deduction
+         * and age-65 add-on. By law (IRC 1(f)(3), 1(f)(6)) these are indexed to the
+         * CHAINED CPI-U, which runs about 0.3%/yr below the regular CPI-U that the
+         * model's inflation represents. Before this date they grew with full
+         * inflation, which let the brackets outrun the law -- understating federal
+         * tax by roughly $530/yr in today's dollars after 10 years and $1,630/yr
+         * after 30 at a $230,000 MAGI.
+         *
+         * Same chained derivation as the IRMAA Chained-CPI mode. Never below 1.0
+         * (the law adjusts only upward). Thresholds that are NOT federal -- IRMAA
+         * (CPI-U by law), Idaho's zero bracket (CPI-U by law), the IRMAA surcharge
+         * amounts -- keep their own factors.
+         */
+        static double fedIndexFactor(double inflFactor, int y) {
+            if (CHAINED_CPI_LAG == 0.0) return inflFactor;   // test hook: lag 0 = full CPI
+            return irmaaThreshFactor(IRMAA_CHAINED, inflFactor, y);
+        }
 
         /**
          * Factor to index IRMAA THRESHOLDS this simulation year, per the chosen
@@ -11742,7 +11825,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         static TaxResult compute(double grossSS, double ordinaryOther,
                                  double magiTwoYrPrior,
                                  boolean man65, boolean woman65,
-                                 double inflFactor, double irmaaThreshFactor,
+                                 double inflFactor, double fedFactor,
+                                 double irmaaThreshFactor,
                                  FilingStatus fs,
                                  StateTaxProfile stateProfile, int simYear,
                                  double retirementOrdinary,
@@ -11751,13 +11835,15 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             TaxResult r = new TaxResult();
             r.man65 = man65; r.woman65 = woman65;
             r.streamStateExempt = streamStateExempt;
+            r.fedFactor = fedFactor;   // v12 2026-10-07
             r.taxableSS     = taxableSocialSecurity(grossSS, ordinaryOther, inflFactor, fs);
             r.ordinaryOther = ordinaryOther;
             r.magi          = r.taxableSS + ordinaryOther;
 
-            double ded      = totalDeduction(man65, woman65, inflFactor, fs);
+            // v12 2026-10-07: federal deduction and brackets on the CHAINED factor.
+            double ded      = totalDeduction(man65, woman65, fedFactor, fs);
             r.taxableIncome = Math.max(0, r.magi - ded);
-            r.fedTax        = fedTax(r.taxableIncome, inflFactor, fs);
+            r.fedTax        = fedTax(r.taxableIncome, fedFactor, fs);
             // State tax via the selected profile's rules for this year. v12: a
             // framework state (rules != null) runs its own law through
             // stateTaxRules(); Custom keeps the legacy calculation unchanged.
@@ -11766,7 +11852,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 r.stateCtx   = stateCtx;
                 r.stateParts = new StateParts();
                 r.stateTax   = stateTaxRules(sty.rules, r.magi, r.taxableSS, streamStateExempt,
-                        0, stateCtx, man65, woman65, inflFactor, fs, r.stateParts);
+                        0, stateCtx, man65, woman65, inflFactor, fedFactor, fs, r.stateParts);
             } else {
                 r.stateTax   = stateTaxLiving(sty, r.taxableIncome, r.taxableSS,
                         retirementOrdinary, streamStateExempt, inflFactor);
@@ -11778,7 +11864,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double[] tbl = irmaaSurcharge(fs);
             r.irmaaCost = tbl[Math.min(r.irmaaTier, tbl.length - 1)] * inflFactor;
 
-            r.topBracket = topBracket(r.taxableIncome, inflFactor, fs);
+            r.topBracket = topBracket(r.taxableIncome, fedFactor, fs);
             r.totalTax   = r.fedTax + r.stateTax + r.irmaaCost;
             return r;
         }
@@ -11806,6 +11892,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         static double[] fillConversion(double magiBeforeConv, double buffer,
                                        boolean man65, boolean woman65,
                                        double userCap, double inflFactor,
+                                       double fedFactor, double irmaaFillFactor,
                                        FilingStatus fs,
                                        int irmaaTierIdx, int bracketCeilIdx) {
             double[] thr = irmaaThresh(fs);
@@ -11814,15 +11901,21 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             // inflation-indexed like the threshold it sits under. Held nominal, it
             // eroded in real terms -- $13,000 shrank to ~$8,400 of real cushion by
             // 2044 on a 1.55 inflation factor, and the MAGI target crept upward.
-            double irmaaCeil = infl(thr[ti], inflFactor) - infl(buffer, inflFactor);
+            // v12 2026-10-07: the threshold grows by the SELECTED IRMAA mode
+            // (irmaaFillFactor = irmaaThreshFactor(mode, inflFactor, y)), the same
+            // rule the surcharge test applies. Before, it always grew with full
+            // inflation, so in Frozen mode the fill aimed above the frozen line and
+            // tripped IRMAA from about year 5. Full CPI (current law) is unchanged.
+            // The buffer is a 2026-dollar cushion and still grows with prices.
+            double irmaaCeil = infl(thr[ti], irmaaFillFactor) - infl(buffer, inflFactor);
             // Bracket edge is a TAXABLE-income figure; convert to MAGI by adding
             // back the deduction so both ceilings are compared in MAGI.
-            double ded        = totalDeduction(man65, woman65, inflFactor, fs);
+            double ded        = totalDeduction(man65, woman65, fedFactor, fs);   // v12: chained
             double[][] brk    = brackets(fs);
             int bi = Math.max(0, Math.min(bracketCeilIdx, brk.length - 1));
             // brackets(fs)[bi][1] is the UPPER edge (taxable) of bracket bi.
             double bracketCeilTaxable = brk[bi][1];
-            double bracketCeil = infl(bracketCeilTaxable, inflFactor) + ded;
+            double bracketCeil = infl(bracketCeilTaxable, fedFactor) + ded;      // v12: chained
             double bindingCeil = Math.min(irmaaCeil, bracketCeil);
             boolean irmaaBinds = irmaaCeil <= bracketCeil;
             double conv = Math.max(0, bindingCeil - magiBeforeConv);
@@ -11857,13 +11950,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // cap and the headroom must not be spent twice. Different rules, different
         // treatment; the asymmetry is the correct answer, not a missing parameter.
         static double[] conversionTax(double livingTaxableIncome, double conversion,
-                                      double inflFactor, FilingStatus fs,
+                                      double inflFactor, double fedFactor, FilingStatus fs,
                                       StateTaxProfile stateProfile, int simYear,
                                       double retirementOrdinary) {
             if (conversion <= 0) return new double[]{0, 0, 0};
             double base = Math.max(0, livingTaxableIncome);
-            double fedWith = fedTax(base + conversion, inflFactor, fs);
-            double fedBase = fedTax(base, inflFactor, fs);
+            double fedWith = fedTax(base + conversion, fedFactor, fs);   // v12 2026-10-07: chained
+            double fedBase = fedTax(base, fedFactor, fs);
             double fedConv = Math.max(0, fedWith - fedBase);
             // State tax on the conversion via the selected profile (Custom: legacy
             // flags). v12: this overload is now reached only by the SS-bridge sizer
@@ -11890,14 +11983,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             if (conversion <= 0) return new double[]{0, 0, 0};
             StateTaxYear sty = stateProfile.forYear(simYear);
             if (sty.rules == null || living.stateCtx == null)
-                return conversionTax(living.taxableIncome, conversion, inflFactor, fs,
-                        stateProfile, simYear, retirementOrdinary);
+                return conversionTax(living.taxableIncome, conversion, inflFactor,
+                        living.fedFactor, fs, stateProfile, simYear, retirementOrdinary);
             double base = Math.max(0, living.taxableIncome);
-            double fedConv = Math.max(0, fedTax(base + conversion, inflFactor, fs)
-                    - fedTax(base, inflFactor, fs));
+            double fedConv = Math.max(0, fedTax(base + conversion, living.fedFactor, fs)
+                    - fedTax(base, living.fedFactor, fs));
             double stWith = stateTaxRules(sty.rules, living.magi, living.taxableSS,
                     living.streamStateExempt, conversion, living.stateCtx,
-                    living.man65, living.woman65, inflFactor, fs, null);
+                    living.man65, living.woman65, inflFactor, living.fedFactor, fs, null);
             double stConv = Math.max(0, stWith - living.stateTax);
             return new double[]{ fedConv + stConv, fedConv, stConv };
         }
