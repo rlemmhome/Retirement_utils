@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Monday, October 05, 2026 at 10:27 PM MST (UTC-7)
+// Last modified: Tuesday, October 06, 2026 at 07:23 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -110,7 +110,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Monday, October 05, 2026 at 10:27 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, October 06, 2026 at 07:23 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -3328,8 +3328,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "state's guidance addresses conversions. Treating them as not qualifying is the conservative "
                 + "choice: at most it overstates Oklahoma tax by $450 per person per year, and in Colorado "
                 + "the cap is normally used up by Social Security anyway.</li>"
-                + "<li><b>The annuity stream counts toward Colorado's subtraction</b> (the law names annuities) "
-                + "<b>but not Oklahoma's</b> (private annuities are not among its listed sources). The pension "
+                + "<li><b>The annuity stream counts toward Colorado's subtraction</b> (the law names annuities). "
+                + "<b>In Oklahoma it counts only when it is held in an IRA</b> &mdash; set <i>Taxable portion (%)</i> "
+                + "to 100 on the Annuity (non-COLA) card &mdash; because an IRA payout is an IRC 408 distribution; "
+                + "a non-qualified annuity is not among Oklahoma's listed sources (revised October 6, 2026). The pension "
                 + "stream counts in both. Because the model does not track which spouse owns a stream, pension "
                 + "and annuity income fills whatever exclusion room the two spouses have left after their "
                 + "Traditional withdrawals.</li>"
@@ -3347,12 +3349,17 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "state such as Oklahoma (rather than restarting it at the 0% bracket), and it lets living "
                 + "income and the conversion share one exclusion cap without spending it twice. For a flat-rate "
                 + "state the result is the same as before. The Social Security bridge sizer, which has no "
-                + "per-person detail, charges the state's top rate.</p>"
+                + "per-person detail, charges the state's top rate on the IRA draw that funds the bridge. "
+                + "When it works out the after-tax value of the delayed benefit it is replacing, it charges "
+                + "state tax on that benefit only where the state taxes Social Security (Colorado: under "
+                + "age 65, since the bridge cannot apply Colorado's income test). Before October 6, 2026 it "
+                + "charged state tax there in every state, which sized the bridge slightly too small.</p>"
                 + "<p><b>Hover the Tax (est) cell</b> of any year for the state line's components: starting "
                 + "income, Social Security and exempt streams, the retirement exclusion, deductions and "
                 + "exemptions, and the state taxable income.</p>"
                 + "<p><b>SS Optimizer.</b> The batch fingerprint now includes the selected state's rules "
-                + "(including the Custom rate and flags), and the scorer version moved to 4. Rows scored under "
+                + "(including the Custom rate and flags), and the scorer version moved to 4 (5 after the "
+                + "October 6, 2026 bridge correction). Rows scored under "
                 + "the old Arizona calculation, or under a different Custom rate, are not resumed &mdash; the "
                 + "next batch reruns from scratch.</p>"
 
@@ -4180,8 +4187,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
      *                  framework state stacks a conversion on living income. The
      *                  fingerprint also carries the active state's rules signature
      *                  from this version on (Bob asked for both).
+     *   5  2026-10-06  the SS-bridge sizer no longer charges state tax on the benefit
+     *                  in states that exempt Social Security, so every bridge year is
+     *                  sized slightly larger (Arizona included).
      */
-    private static final int SCORER_VERSION = 4;
+    private static final int SCORER_VERSION = 5;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -6953,16 +6963,28 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
      *  tooltip, reflecting the selected profile's rules for the given year
      *  (e.g. "Arizona 2.5% (excludes Social Security)"). */
     private String stateTaxLabel(int simYear) {
-        TaxEngine.StateTaxProfile p = TaxEngine.stateProfile(selectedStateCode());
-        TaxEngine.StateTaxYear sty = p.forYear(simYear);
+        // v12 2026-10-06: label from the state the DISPLAYED run used. Reading the
+        // dropdown put the wrong name on correct numbers whenever the selection had
+        // changed since the run (found in testing: "Colorado" over Oklahoma's figures).
+        String name;
+        TaxEngine.StateTaxYear sty;
+        if (lastResults != null && lastResults.stateYears != null && !lastResults.stateYears.isEmpty()) {
+            name = lastResults.stateName;
+            java.util.Map.Entry<Integer, TaxEngine.StateTaxYear> e = lastResults.stateYears.floorEntry(simYear);
+            sty = (e != null) ? e.getValue() : lastResults.stateYears.firstEntry().getValue();
+        } else {
+            TaxEngine.StateTaxProfile p = TaxEngine.stateProfile(selectedStateCode());
+            name = p.displayName;
+            sty  = p.forYear(simYear);
+        }
         if (sty.rules != null) {   // v12 2026-10-05: framework state
             TaxEngine.StateRules R = sty.rules;
-            if (R.start == TaxEngine.StateStart.NONE) return p.displayName + " (no income tax)";
+            if (R.start == TaxEngine.StateStart.NONE) return name + " (no income tax)";
             if (R.bracketsMfj == null)
-                return String.format("%s %.2f%%", p.displayName, R.flatRate * 100.0);
-            return p.displayName + (R.bracketsIndexed ? " (flat above a zero bracket)" : " (graduated)");
+                return String.format("%s %.2f%%", name, R.flatRate * 100.0);
+            return name + (R.bracketsIndexed ? " (flat above a zero bracket)" : " (graduated)");
         }
-        StringBuilder sb = new StringBuilder(p.displayName);
+        StringBuilder sb = new StringBuilder(name);
         if (sty.brackets == null)
             sb.append(String.format(" %.2f%%", sty.flatRate * 100.0));
         else
@@ -7994,7 +8016,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             @Override protected ProResults doInBackground() {
                 // No publish() calls -- scheduler handles all UI updates
                 simProgressCallback = null;  // disable legacy callback
-                return simulatePro(readInputs(), seed, solvePaths, fanPaths, binIters);
+                ProResults r = simulatePro(readInputs(), seed, solvePaths, fanPaths, binIters);
+                // v12 2026-10-06: snapshot the state the run used (see ProResults).
+                TaxEngine.StateTaxProfile sp = TaxEngine.stateProfile(r.inp.stateCode);
+                r.stateName  = sp.displayName;
+                r.stateYears = new java.util.TreeMap<>(sp.byYear);
+                return r;
             }
             @Override protected void done() {
                 progressScheduler.shutdownNow();
@@ -9333,7 +9360,16 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double ssTaxableDelta = Math.max(0, taxSSwith - taxSSwithout);
             double[] ssTax = TaxEngine.conversionTax(taxSSwithout, ssTaxableDelta,
                     inflFactor, fs, stProfile, calYear, 0);
-            double netTarget = grown - ssTax[0];
+            // v12 2026-10-06: the STATE part of the tax the benefit would have caused
+            // counts only where the state taxes this person's Social Security. Before,
+            // it was charged everywhere -- 2.5% of the taxable-SS increase in Arizona,
+            // which exempts SS -- so the after-tax target, and the bridge, came out
+            // slightly too small. The IRA draw that funds the bridge (below) is still
+            // fully taxed, state included.
+            int personAge = calYear - (isMan ? inp.manBirthYear : inp.womanBirthYear);
+            double ssTaxCost = TaxEngine.stateTaxesSS(stProfile.forYear(calYear), personAge)
+                    ? ssTax[0] : ssTax[0] - ssTax[2];
+            double netTarget = grown - ssTaxCost;
 
             double b = grown;
             for (int pass = 0; pass < 3; pass++) {
@@ -9588,6 +9624,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         c.tradDraw       = tradDraw;
         c.pensionTaxable = pensionTaxable;
         c.annuityTaxable = annuityTaxable;
+        // v12 2026-10-06: a qualified annuity (held in an IRA) is fully taxable from the
+        // first payment; a non-qualified one has a taxable portion under 100% or a
+        // switch year. Oklahoma counts only the qualified kind (IRC 408).
+        c.annuityInIra = inp.annuityStream.taxablePct() >= 100.0
+                && inp.annuityStream.fullyTaxableFrom() == 0;
         return c;
     }
 
@@ -10990,7 +11031,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double  exclCap55, exclCap65;         // per-person cap at 55-64 / 65+ (CO)
             boolean exclSharesSS;                 // cap reduced by that person's SS subtraction (CO)
             boolean pensionQualifies = true;      // pension stream counts toward the exclusion
-            boolean annuityQualifies;             // annuity stream counts (decision D3: CO yes, OK no)
+            boolean annuityQualifies;             // annuity stream counts (decision D3: CO yes)
+            boolean annuityQualifiesIfIra;        // v12 2026-10-06: counts only when it is a
+            // qualified (IRA) annuity -- OK, IRC 408
             boolean conversionsQualify;           // decision D2: false everywhere (unverified)
             double  flatRate;                     // used when bracketsMfj == null
             double[][] bracketsMfj, bracketsSingle; // {lo, hi, rate}; hi may be +INF
@@ -11012,6 +11055,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 exclCap55 = cap55; exclCap65 = cap65; exclSharesSS = sharesSS; return this;
             }
             StateRules annuityQualifies(boolean b)          { annuityQualifies = b; return this; }
+            StateRules annuityQualifiesIfIra(boolean b)     { annuityQualifiesIfIra = b; return this; }
             StateRules flat(double rate)                    { flatRate = rate; return this; }
             StateRules brackets(double[][] mfj, double[][] single, boolean indexed) {
                 bracketsMfj = mfj; bracketsSingle = single; bracketsIndexed = indexed; return this;
@@ -11028,7 +11072,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         + "|" + age65ExemptEach + "|" + personalExemptEach + "|" + ss
                         + "|" + ssAgiMfj + "|" + ssAgiSingle + "|" + exclCapAnyAge
                         + "|" + exclCap55 + "|" + exclCap65 + "|" + exclSharesSS
-                        + "|" + pensionQualifies + "|" + annuityQualifies + "|" + conversionsQualify
+                        + "|" + pensionQualifies + "|" + annuityQualifies + "|" + annuityQualifiesIfIra
+                        + "|" + conversionsQualify
                         + "|" + flatRate + "|" + java.util.Arrays.deepToString(bracketsMfj)
                         + "|" + java.util.Arrays.deepToString(bracketsSingle)
                         + "|" + bracketsIndexed + "|" + seniorPassThrough;
@@ -11201,13 +11246,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             // SS subtracted; $10,000 per-person retirement exclusion (OAC
             // 710:50-15-49: IRC 401/403/457/408 qualify, no age test); fixed $12,700 /
             // $6,350 standard deduction; $1,000 per person exemption. The extra 65+
-            // exemption needs AGI <= $25,000 and is omitted. Private annuity not a
-            // listed source (D3); conversions modeled as NOT qualifying (D2).
+            // exemption needs AGI <= $25,000 and is omitted. A private (non-qualified)
+            // annuity is not a listed source (D3); an annuity held in an IRA is an IRC 408
+            // distribution and counts (v12 2026-10-06). Conversions do NOT qualify (D2).
             STATE_REGISTRY.put("OK", new StateTaxProfile("OK", "Oklahoma")
                     .add(new StateTaxYear(2026, new StateRules()
                             .start(StateStart.FED_AGI).fixedDed(12_700, 6_350)
                             .personalExempt(1_000).ss(StateSS.EXEMPT)
-                            .exclAnyAge(10_000).annuityQualifies(false)
+                            .exclAnyAge(10_000).annuityQualifies(false).annuityQualifiesIfIra(true)
                             .brackets(new double[][]{{0, 7_500, 0.0}, {7_500, 9_800, 0.025},
                                             {9_800, 14_400, 0.035}, {14_400, INF, 0.045}},
                                     new double[][]{{0, 3_750, 0.0}, {3_750, 4_900, 0.025},
@@ -11217,7 +11263,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                             .unverified("Roth conversions vs the $10,000 exclusion: not addressed "
                                     + "(modeled as NOT qualifying)."),
                             "Oklahoma 0-4.5% graduated on federal AGI less Social Security, a $10,000 "
-                                    + "per-person retirement exclusion, a $12,700 deduction and $1,000 per person.")));
+                                    + "per-person retirement exclusion (IRA withdrawals, pensions, and an annuity "
+                                    + "held in an IRA), a $12,700 deduction and $1,000 per person.")));
 
             // CUSTOM -- user-entered flat rate + two flags, LEGACY rule set (rules ==
             // null), byte-for-byte the pre-framework behavior. Defaults to a benign
@@ -11260,6 +11307,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double  tradDraw;                // Traditional ordinary income (RMD floor) this year
             double  pensionTaxable;          // pension stream, taxable and NOT state-exempt
             double  annuityTaxable;          // annuity stream, taxable and NOT state-exempt
+            boolean annuityInIra;            // v12 2026-10-06: Taxable portion 100%, no switch year
         }
 
         /** v12: the components behind one state figure, for the Tax (est) tooltip. */
@@ -11373,8 +11421,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 double eW = Math.min(trad * c.womanTradShare, capW);
                 // Pension (and, where it qualifies, annuity) income has no owner in
                 // the model; it fills whatever cap headroom is left.
+                boolean annCounts = R.annuityQualifies || (R.annuityQualifiesIfIra && c.annuityInIra);
                 double pooled = (R.pensionQualifies ? c.pensionTaxable : 0)
-                        + (R.annuityQualifies ? c.annuityTaxable : 0);
+                        + (annCounts ? c.annuityTaxable : 0);
                 double room = Math.max(0, capM - eM) + Math.max(0, capW - eW);
                 excl = eM + eW + Math.min(pooled, room);
             }
@@ -11424,6 +11473,19 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             if (cap <= 0) cap = (age >= 65) ? R.exclCap65 : (age >= 55 ? R.exclCap55 : 0);
             if (R.exclSharesSS) cap -= ssSub;
             return Math.max(0, cap);
+        }
+
+        /** v12 2026-10-06: does this state tax a person's Social Security at this age?
+         *  Used by the SS-bridge sizer, which has no AGI to apply Colorado's 55-64
+         *  income test -- so under 65 Colorado is treated as taxing it (conservative). */
+        static boolean stateTaxesSS(StateTaxYear sty, int age) {
+            if (sty.rules == null) return sty.taxesSocialSecurity;      // Custom: its checkbox
+            if (sty.rules.start == StateStart.NONE) return false;      // no income tax
+            return switch (sty.rules.ss) {
+                case TAXED -> true;
+                case EXEMPT -> false;
+                case EXEMPT_BY_AGE -> age < 65;
+            };
         }
 
         /** v12: the highest rate a stacked dollar can meet under these rules --
@@ -12036,6 +12098,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         double actualPoS;
         int medianFinalBalance, fanPathCount;
         GkResults gkResults;
+        // v12 2026-10-06: the state this run was computed with -- its display name
+        // and a COPY of its year->rules map (the Custom profile is rebuilt in place
+        // when its fields change). The Tax (est) tooltip labels from this, not from
+        // the State dropdown, which may have moved since the run. Set by the Pro
+        // PoS worker only; null when absent (the tooltip then falls back).
+        String stateName;
+        java.util.NavigableMap<Integer, TaxEngine.StateTaxYear> stateYears;
     }
 
     // ========================================================================
