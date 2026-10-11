@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Wednesday, October 07, 2026 at 02:50 PM MST (UTC-7)
+// Last modified: Sunday, October 11, 2026 at 09:30 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -110,7 +110,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Wednesday, October 07, 2026 at 02:50 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, October 11, 2026 at 09:30 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -171,6 +171,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     private JSpinner spWomanPIA, spWomanSSStartYear, spWomanSSStartMonth;
     private JLabel   lblSSBenefitNote;
     private JSpinner spSSCola;
+    // v12 2026-10-10: the calendar year both PIAs are dated (the year of the SSA
+    // statement they came from). The engine grows each PIA from this year to the
+    // simulation start at the fixed SS COLA. See ssPreSimFactor().
+    private JSpinner spPiaAsOfYear;
     // v11: three guaranteed-income streams, indexed STREAM_ANNUITY / _PENSION /
     // _MILITARY. Arrays rather than 39 individually named fields: every control
     // behaves identically across the three cards, only the defaults differ, so
@@ -386,7 +390,15 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     private int lastOptManPIA, lastOptWomanPIA;
     private boolean optResultsStale = false;  // true if inputs changed after optimizer ran
     private final java.util.concurrent.atomic.AtomicLong simCount = new java.util.concurrent.atomic.AtomicLong(0);
-    private          long simTotal    = 0;
+    // v12 2026-10-11: the readout's work counters. simCount (above) is the number of
+    // Monte Carlo trial paths actually run; simPathYears is the upper bound on the
+    // years those paths simulated (a trial path stops early when it depletes). Both
+    // are fed ONLY by the Pro PoS run's own thread (proRunThread), so an SS
+    // Optimizer batch running behind it can never inflate the Pro tab's readout.
+    // Replaces simTotal, a pre-run formula that ignored the fan paths' reduced
+    // solver and so overstated the work about 18x (and mixed two units).
+    private final java.util.concurrent.atomic.AtomicLong simPathYears = new java.util.concurrent.atomic.AtomicLong(0);
+    private volatile Thread proRunThread = null;
     private volatile java.util.function.LongConsumer simProgressCallback = null;
 
     // Calibration: stores past run times to estimate duration of next run
@@ -747,6 +759,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         spBinaryIters.addChangeListener(refreshRunTooltip);
         spMcFanPaths.addChangeListener(refreshRunTooltip);
         spHorizon.addChangeListener(refreshRunTooltip);
+        // v12 2026-10-11: the estimate counts drawing years only, so it also depends
+        // on the two start years. Tooltip refresh only -- no optimizer-stale marking
+        // is added here (those inputs already have their own listeners).
+        ChangeListener runTipOnly = e -> updateRunTooltip();
+        spSimStartYear.addChangeListener(runTipOnly);
+        spWithdrawStartYear.addChangeListener(runTipOnly);
 
         // v11 2026-09-27: default raised 4.0% -> 5.4%.
         spGkPreRate = spinD(5.4, 1.0, 10.0, 0.1, "0.0#");
@@ -870,6 +888,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         spManPIA.setToolTipText("<html><b>User's Primary Insurance Amount (PIA)</b><br>"
                 + "Monthly SS benefit payable at Full Retirement Age (FRA).<br>"
                 + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
+                + "Enter it in the dollars of the <b>PIA as-of year</b> below -- the year<br>"
+                + "of the statement. SSA raises the PIA by every COLA from age 62<br>"
+                + "on, whether or not you have claimed, so the engine grows it each<br>"
+                + "year from the as-of year onward, before AND after the claim date.<br>"
+                + "Refresh it (and the as-of year) each January.<br><br>"
                 + "Reduced if claiming before FRA; increased if after FRA.<br>"
                 + "FRA = 67 for those born 1960 or later.</html>");
         spManSSStartYear   = spinI(2027,  2020, 2040, 1, "#");
@@ -878,6 +901,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         spWomanPIA.setToolTipText("<html><b>Spouse's Primary Insurance Amount (PIA)</b><br>"
                 + "Monthly SS benefit payable at Full Retirement Age (FRA).<br>"
                 + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
+                + "Enter it in the dollars of the <b>PIA as-of year</b> below -- the year<br>"
+                + "of the statement. SSA raises the PIA by every COLA from age 62<br>"
+                + "on, whether or not you have claimed, so the engine grows it each<br>"
+                + "year from the as-of year onward, before AND after the claim date.<br>"
+                + "Refresh it (and the as-of year) each January.<br><br>"
                 + "Reduced if claiming before FRA; increased if after FRA.<br>"
                 + "FRA = 67 for those born 1960 or later.</html>");
         spWomanSSStartYear = spinI(2027,  2020, 2040, 1, "#");
@@ -935,6 +963,30 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "recover, which is what current law actually specifies.</html>");
 
         spSSCola           = spinD(2.4,   0.0,  5.0,  0.1, "0.0#");
+        spSSCola.setToolTipText("<html><b>SS COLA (%/yr)</b><br>"
+                + "The annual cost-of-living raise applied to Social Security.<br><br>"
+                + "<b>Gap years (always):</b> grows each PIA from its <i>PIA as-of year</i><br>"
+                + "to the simulation start year. Simulated inflation does not exist<br>"
+                + "before the start year, so this fixed rate is used there. Enter<br>"
+                + "SSA's announced COLA here if you want the gap year exact.<br><br>"
+                + "<b>From the start year on:</b> used only when <i>SS COLA tracks<br>"
+                + "simulated inflation</i> (Historical Stress Scenario card) is OFF.<br>"
+                + "When it is ON, benefits follow the simulated inflation instead.</html>");
+        // v12 2026-10-10: PIA as-of year. Default is the current calendar year, which
+        // is the year of any statement downloaded today. Clamped at use, never here,
+        // so a scenario saved with a later sim start still loads its stored value.
+        spPiaAsOfYear      = spinI(LocalDate.now().getYear(), 2020, 2040, 1, "#");
+        spPiaAsOfYear.setToolTipText("<html><b>PIA as-of year (both PIAs)</b><br>"
+                + "The calendar year the two PIAs above are dated -- the year of the<br>"
+                + "SSA statement they came from (a statement shows the PIA with every<br>"
+                + "COLA through the latest one).<br><br>"
+                + "If it is earlier than the <b>Simulation start year</b> (Portfolio &amp;<br>"
+                + "Simulation card), each PIA is grown by the <b>SS COLA</b> for every<br>"
+                + "year in between. Example: a 2026 PIA of $3,788 in a 2027-start<br>"
+                + "simulation starts at $3,788 x 1.024 = $3,879.<br><br>"
+                + "A year AFTER the simulation start is treated as the start year<br>"
+                + "(no growth). Scenarios saved before this input existed load with<br>"
+                + "it equal to their simulation start year, so they are unchanged.</html>");
         lblSSBenefitNote   = new JLabel(" ");
         lblSSBenefitNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblSSBenefitNote.setForeground(new Color(80, 100, 60));
@@ -942,7 +994,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         ChangeListener ssListener = e -> updateSSBenefitNote();
         for (JSpinner sp : new JSpinner[]{
                 spManPIA, spManBirthYear, spManBirthMonth, spManSSStartYear, spManSSStartMonth,
-                spWomanPIA, spWomanBirthYear, spWomanBirthMonth, spWomanSSStartYear, spWomanSSStartMonth })
+                spWomanPIA, spWomanBirthYear, spWomanBirthMonth, spWomanSSStartYear, spWomanSSStartMonth,
+                spPiaAsOfYear })
             sp.addChangeListener(ssListener);
 
         inner.add(card("Social Security", new Object[]{
@@ -952,6 +1005,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 "Spouse PIA (monthly at FRA, $)",   spWomanPIA,
                 "Spouse SS start year",             spWomanSSStartYear,
                 "Spouse SS start month",            spWomanSSStartMonth,
+                "PIA as-of year (both)",            spPiaAsOfYear,
                 "SS COLA (%/yr)",                  spSSCola,
                 "SS bridge mode (v9)",             cmbBridgeMode,
                 "SS haircut % (v6, stress)",       spSSHaircutPct,
@@ -1503,16 +1557,21 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
 
         // == Historical Stress Scenario card =====================================
         chkSSColaTracksInfl = new JCheckBox("SS COLA tracks simulated inflation");
-        chkSSColaTracksInfl.setSelected(false);   // default OFF: preserves saved scenarios
+        // v12 2026-10-10: default ON for a fresh session (Bob's choice: the actual COLA
+        // is set from CPI-W, so on a Monte Carlo path it should move with that path's
+        // inflation). A saved scenario keeps the value it was saved with; one with no
+        // key (pre-v6) still loads OFF via the load fallback, so none changes.
+        chkSSColaTracksInfl.setSelected(true);
         chkSSColaTracksInfl.setToolTipText("<html><b>SS COLA tracks simulated inflation (v6)</b><br>"
-                + "<b>Off (default):</b> Social Security compounds at your fixed SS COLA<br>"
-                + "input. Reproduces every pre-v6 scenario exactly and keeps a<br>"
-                + "deliberately conservative COLA assumption for random runs.<br><br>"
-                + "<b>On:</b> Social Security instead grows with the SIMULATED inflation,<br>"
-                + "holding constant real purchasing power -- which is what CPI<br>"
-                + "indexing actually does under current law. On stochastic runs each<br>"
-                + "fan path uses ITS OWN inflation, so the PoS calculation is affected<br>"
-                + "too, not just the displayed table.<br><br>"
+                + "<b>On (default for new scenarios):</b> Social Security grows with the<br>"
+                + "SIMULATED inflation, holding constant real purchasing power -- which<br>"
+                + "is what CPI indexing actually does under current law. On stochastic<br>"
+                + "runs each fan path uses ITS OWN inflation, so the PoS calculation is<br>"
+                + "affected too, not just the displayed table. Growth runs from the<br>"
+                + "simulation start year, before and after each claim date.<br><br>"
+                + "<b>Off:</b> Social Security compounds at the fixed <b>SS COLA</b> input<br>"
+                + "(Social Security card) instead, whatever inflation a path draws.<br>"
+                + "Every saved scenario keeps the setting it was saved with.<br><br>"
                 + "<b>Turn this ON for historical stress sequences.</b> With a fixed 2.4%<br>"
                 + "COLA against 1966-82 inflation (~5.4%/yr), modelled SS loses about<br>"
                 + "60% of its real value over 30 years -- an artifact, not a risk. That<br>"
@@ -1543,7 +1602,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         spColaShortfall.setToolTipText("<html><b>COLA shortfall (%/yr) -- v6</b><br>"
                 + "A constant annual haircut on the inflation-tracked COLA, so Social<br>"
                 + "Security drifts slowly DOWN in real terms instead of holding flat.<br>"
-                + "Only applies when <i>SS COLA tracks simulated inflation</i> is on.<br><br>"
+                + "Only applies when <i>SS COLA tracks simulated inflation</i> is on.<br>"
+                + "It compounds every year from the simulation start year, before<br>"
+                + "and after each claim date, exactly like the COLA it trims.<br><br>"
                 + "<b>Why a shortfall exists:</b> SS is indexed to <b>CPI-W</b>, which weights a<br>"
                 + "working-age wage-earner basket. Retirees spend proportionally more<br>"
                 + "on healthcare and housing, which inflate faster. The BLS<br>"
@@ -3106,7 +3167,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<p><b>Fan chart paths</b> (default <b>500</b>; range <b>20&ndash;2,500</b>). Separately from the solver, this "
                 + "many full lifetime paths are drawn to render the fan chart and to compute the <b>Actual PoS</b> metric in the "
                 + "top strip. Each fan path re-solves its withdrawal annually against its own evolving balance, so a fan path is "
-                + "the <b>most expensive kind of path</b> in the engine; fewer of them make the fan and the PoS reading noisier "
+                + "the <b>most expensive kind of path</b> in the engine. To keep that affordable, a fan path's annual re-solve "
+                + "uses a <b>reduced solver</b>: solve paths &divide; 8 (minimum 20) and at most 10 binary-search iterations "
+                + "&mdash; at the defaults, 125 paths &times; 10 iterations instead of 1,000 &times; 25. The median table "
+                + "and the year-1 withdrawal use the full settings. Fewer fan paths make the fan and the PoS reading noisier "
                 + "without biasing them. Accuracy ladder: <b>50</b> = rough but usable for a quick check; <b>100</b> = ~4&times; "
                 + "faster than default but visibly choppier; <b>400</b> = smooth fan, stable PoS. The default <b>500</b> is a "
                 + "half-step above that for the steadiest run-to-run PoS readout. The displayed year-by-year table is the median "
@@ -3119,8 +3183,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<p><b>How they fit together.</b> Solve paths and binary-search iterations are the <i>inner</i> cost, paid "
                 + "at every displayed year to find that year's sustainable draw (solve paths &times; iterations MC runs per "
                 + "year); fan paths are the <i>outer</i> layer that turns the solved policy into the chart and the PoS "
-                + "number. The SS Optimizer's ranking scan (section 11) deliberately uses its own reduced path counts for a "
-                + "fast first pass, then re-verifies the top candidates at full fidelity.</p>"
+                + "number. The SS Optimizer (section 11) scores every combination with one run at these same full "
+                + "settings; there is no reduced-fidelity scan.</p>"
+                + "<p><b>What the readout counts (v12 2026-10-11).</b> The status bar reports the Monte Carlo trial "
+                + "paths the run actually executed, and an upper bound on the years those paths simulated (a trial path "
+                + "stops early when it depletes). Before this date it printed a pre-run formula that charged every fan "
+                + "path the full solver, overstating the work about 18&times; &mdash; for example ~509M where about "
+                + "28M paths were actually run. Hover the Run button for the estimate's breakdown.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec2'></a>2. Market assumptions &mdash; forward capital-market basis (2026 CMAs)</h3>"
                 + "<p>Prior versions used the 1961-2024 historical average as the primary basis. The current "
@@ -3176,7 +3245,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "volatility while using a forward mean is standard practice. Volatility, not average return, "
                 + "dominates sequence-of-returns risk and the sustainable withdrawal.</li>"
                 + "<li>Inflation standard deviation: 2.73% (1961-2024 historical CPI).</li>"
-                + "<li>Social Security COLA: 2.4% (matches SSA Trustees intermediate assumption).</li>"
+                + "<li>Social Security COLA: 2.4% (matches SSA Trustees intermediate assumption). Always "
+                + "used for the gap years from the PIA as-of year to the simulation start year; from the "
+                + "start year on, used only when <i>SS COLA tracks simulated inflation</i> is off (it is on "
+                + "by default for new scenarios). See section 9.</li>"
                 + "</ul>"
 
                 + "<p><b>Historical basis (available as a stress case).</b> The 1961-2024 historical averages "
@@ -3783,26 +3855,49 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<p><b>RMDs:</b> SECURE 2.0, begin at age 75 (born after 1960), computed from the IRS Uniform "
                 + "Lifetime Table on median Traditional-account balances.</p>"
 
-                + "<p><b>Death event (mid-projection).</b> A death-event input causes one spouse to die at a "
-                + "chosen age; from that year forward the survivor holds the combined portfolio (Traditional "
-                + "and Roth balances consolidated), the decedent's Social Security stream ends (survivor "
-                + "keeps the larger of the two benefits), and living expenses are reduced by the "
-                + "survivor-spend-cut percentage (default 20%). This is a Pro-engine mechanism that runs the "
-                + "surviving-spouse half of the horizon inline; it does <b>not</b> switch the tax basis to "
-                + "Single. For proper survivor tax modeling, use the Single filing status described in "
-                + "section 3a as a separate scenario.</p>"
+                + "<p><b>Death event (mid-projection).</b> The <i>Death event</i> and <i>Year of death</i> inputs "
+                + "(Tax Engine (v3) card) make one spouse die in a chosen calendar year. Beginning the year "
+                + "<b>after</b> the death year: the survivor holds the combined portfolio (Traditional and Roth "
+                + "balances consolidated); the decedent's Social Security stream ends and the survivor keeps the "
+                + "larger of the two benefits; RMDs follow the survivor's age; living expenses fall by the "
+                + "survivor-spend-cut percentage (default 20%) and medical is halved, since it is per-person; and "
+                + "the tax basis <b>switches to Single</b> automatically, including the Single brackets, standard "
+                + "deduction, IRMAA thresholds and the survivor's own age-65 add-on. This is a Pro-engine "
+                + "mechanism that runs the surviving-spouse years inline &mdash; no separate Single-mode scenario "
+                + "(section 3a) is needed to model them.</p>"
 
-                + "<p><b>SS COLA shortfall.</b> The tool models the Social Security COLA as lagging general "
-                + "inflation slightly (default 0.2%/yr shortfall vs CPI, adjustable). This captures the "
+                + "<p><b>SS growth before and after claiming (v12 2026-10-10).</b> SSA raises a worker's PIA "
+                + "by every COLA from age 62 on, whether or not benefits have been claimed. The engine "
+                + "therefore grows each benefit every year from the simulation start year &mdash; before "
+                + "and after each claim date &mdash; rather than holding it flat until the claim year. The "
+                + "PIAs you enter are dated the <b>PIA as-of year</b> (Social Security card): the year of the "
+                + "SSA statement they came from, which already includes every COLA through the latest one. "
+                + "When the as-of year is earlier than the simulation start year, each PIA is first grown by "
+                + "the fixed SS COLA for the years in between (simulated inflation does not exist before the "
+                + "start year). From the start year on, benefits follow the simulated inflation when "
+                + "<i>SS COLA tracks simulated inflation</i> (Historical Stress Scenario card) is on, and "
+                + "the fixed SS COLA when it is off. The SS bridge grows the same way. Refresh both PIAs "
+                + "and the as-of year from ssa.gov/myaccount each January, after the new COLA takes "
+                + "effect. Before this date the benefit was held flat until the claim year, which "
+                + "understated every delayed claim by the COLAs in between (about 12.6% for a five-year "
+                + "delay at 2.4%) and biased the SS Optimizer toward claiming early.</p>"
+
+                + "<p><b>SS COLA shortfall.</b> When <i>SS COLA tracks simulated inflation</i> is on, the tool "
+                + "models the Social Security COLA as lagging general inflation slightly (default 0.2%/yr "
+                + "shortfall vs CPI, adjustable; Historical Stress Scenario card). This captures the "
                 + "well-documented under-indexing of the SSA's basket relative to the retiree spending "
                 + "basket, and produces a small but compounding real-benefit erosion over a 30-year "
-                + "horizon.</p>"
+                + "horizon. Like the COLA it trims, it compounds every year from the simulation start "
+                + "year, before and after each claim date.</p>"
 
                 + "<p><b>SS benefit haircut (v6 stress input).</b> A haircut percentage and start year lets "
-                + "you stress-test a legislated cut &mdash; commonly used to model the 2033 Trust Fund "
-                + "depletion projection where scheduled benefits would fall to ~77% of promised. Set the "
-                + "percentage to 0 to disable. The haircut applies to both spouses' benefits from the "
-                + "chosen year onward and is layered on top of the COLA shortfall.</p>"
+                + "you stress-test the automatic benefit cut that current law imposes when the OASI trust fund "
+                + "is depleted &mdash; no legislation is required for it. CBO's 2026 projection puts depletion "
+                + "in <b>2032</b>, with payroll tax then covering about <b>72%</b> of scheduled benefits &mdash; "
+                + "roughly a <b>28% cut</b> (set 28% from 2032, matching the haircut tooltip). The 2026 Trustees "
+                + "Report is milder: depletion in late 2032 with 78% payable. Set the percentage to 0 to "
+                + "disable. The haircut applies to both spouses' benefits from the chosen year onward and is "
+                + "layered on top of the COLA shortfall.</p>"
 
                 + "<p><b>SS bridge modes (v9).</b> The pre-claim &quot;bridge&quot; income schedule the "
                 + "engine uses in years before a spouse claims their benefit has three modes:</p>"
@@ -3855,11 +3950,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<p>The SS Optimizer scans (User claim month) x (Spouse claim month) combinations and "
                 + "<b>scores each one by running the real Pro engine</b> read-only. There is no separate deterministic "
                 + "scorer -- every combination is a genuine Monte Carlo Pro simulation, so the taxes, bridge, RMDs, "
-                + "conversions and everything else the Pro tab computes are all in play. The scan runs at reduced "
-                + "fidelity (the <i>Scan paths</i> / <i>fan</i> inputs) for fast ranking; the top rows are then "
-                + "<b>re-verified at your full Pro-tab fidelity</b> and marked <i>full</i>, so their numbers are precise.</p>"
+                + "conversions and everything else the Pro tab computes are all in play. Each combination is "
+                + "scored once, at your <b>full Pro-tab fidelity</b> (see <i>How each combination is scored</i>, "
+                + "below).</p>"
 
-                + "<p><b>Objective &mdash; feasibility, then survivor floor.</b> A combination is <i>feasible</i> when "
+                + "<p><b>Objective &mdash; feasibility, then final-years draws.</b> A combination is <i>feasible</i> when "
                 + "it satisfies all of these:</p>"
                 + "<ul>"
                 + "<li><b>Stays green</b> every year at or above the <i>Green Surplus/Gap</i> (subject to terminal grace, "
@@ -3868,11 +3963,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<li><b>Slow-go headroom</b> in every slow-go year at or above the <i>Slow-go floor</i>.</li>"
                 + "<li><b>PoS</b> holds at or above your <i>Target probability of success</i>.</li>"
                 + "</ul>"
-                + "<p>Among <b>feasible</b> combinations, the optimizer maximizes <b>JoAnn's (the spouse's) survivor "
-                + "floor</b> -- the annual benefit the surviving spouse would keep for life, which is the larger of "
-                + "the two claimed benefits. This directly rewards delaying the higher earner when the portfolio "
-                + "can carry it, and it replaces the old go-go-guaranteed-income proxy that was retired because it "
-                + "structurally forced early claiming.</p>"
+                + "<p>Among <b>feasible</b> combinations, the optimizer ranks highest the one that draws the most "
+                + "from the portfolio across the <b>final 5 years</b> of the plan &mdash; how much the plan can still "
+                + "pay out at the far end of life. <i>How rows are ranked</i> and <i>Why that measure</i>, below, "
+                + "give the full order and the reasoning. The survivor's Social Security and survivor spendable "
+                + "figures are shown in their own columns but do not rank the table.</p>"
 
                 + "<p><b>Travel floors are cushions, not travel budgets.</b> Your go-go and slow-go multipliers "
                 + "(e.g. 1.5x, 1.3x) already inflate spending during those years -- travel money lives in the "
@@ -4084,11 +4179,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "to open the full explanation: the verdict, an <i>all four tests</i> table showing value, floor, "
                 + "margin and result for the Green Surplus/Gap, both travel floors and PoS with the binding one "
                 + "highlighted, a <i>why it ranks here</i> section, every failing year, and any terminal-grace "
-                + "forgiveness. The <i>why it ranks here</i> section shows the score arithmetic term by term "
-                + "&mdash; survivor floor, worst miss, penalty, resulting score &mdash; so a row's position is "
-                + "always traceable to numbers you can see. When a row has the smallest miss in the table yet "
-                + "still ranks low, the dialog says so and points at the <i>Penalty</i> control, since weighting "
-                + "nearness more heavily is exactly the lever for that preference.</p>"
+                + "forgiveness. The <i>why it ranks here</i> section shows the two blocks &mdash; PASS (funds every "
+                + "floor and the PoS target) above FAIL &mdash; with the row counts of each and which block this row "
+                + "is in. A <i>what is being maximized</i> section then shows this row's final-5-year draws (the "
+                + "ranking), ending balance (the tie-break), and its spendable and Survivor SS figures, so a row's "
+                + "position is always traceable to numbers you can see. There is no score formula and no penalty "
+                + "weight: a row either funds the floors or it does not.</p>"
 
                 + "<p><b>Clicks on the results table (v11).</b> Left-click <i>Rank</i>, <i>User SS Start</i> or "
                 + "<i>Spouse SS Start</i> to apply those dates and re-run. Left-click the <i>Why</i> cell, or "
@@ -4224,8 +4320,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
      *                  full inflation); the conversion fill aims at the IRMAA
      *                  threshold of the selected mode; a survivor Spouse's age-65
      *                  add-on follows her own age. Every scored row moves.
+     *   7  2026-10-10  Social Security grows from the simulation start year (and
+     *                  from the PIA as-of year before it), not from each claim
+     *                  year, so every delayed claim is paid the COLAs it accrues
+     *                  before claiming; the SS bridge grows the same way. Every
+     *                  combination with a claim after the start year moves.
      */
-    private static final int SCORER_VERSION = 6;
+    private static final int SCORER_VERSION = 7;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -7298,6 +7399,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         props.setProperty("man.pia",                String.valueOf(iv(spManPIA)));
         props.setProperty("woman.pia",              String.valueOf(iv(spWomanPIA)));
         props.setProperty("ss.cola",                String.valueOf(dv(spSSCola)));
+        props.setProperty("ss.piaAsOfYear",         String.valueOf(iv(spPiaAsOfYear)));   // v12 2026-10-10
         // v9: bridge is now a 3-way mode. Write the new key. Also write the legacy
         // ss.bridgeDelayed boolean so an older build can still open the file
         // sensibly: SIM_START and FIRST_CLAIM both map to "true" (bridge on),
@@ -7465,6 +7567,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         setSpinnerI(spManPIA,             props, "man.pia",                warnings);
         setSpinnerI(spWomanPIA,           props, "woman.pia",              warnings);
         setSpinnerD(spSSCola,             props, "ss.cola",                warnings);
+        // v12 2026-10-10: a scenario saved before the as-of year existed had its PIA
+        // treated as sim-start-year dollars. Loading it with as-of = its own sim start
+        // year reproduces exactly that, so the old scenario's PIA is not regrown.
+        if (props.getProperty("ss.piaAsOfYear") != null)
+            setSpinnerI(spPiaAsOfYear,    props, "ss.piaAsOfYear",         warnings);
+        else
+            spPiaAsOfYear.setValue(iv(spSimStartYear));
         // v9: prefer the new 3-way key. If it is absent (an older file), fall back
         // to the legacy boolean: a file that had the v6 bridge ON reproduces the
         // v6 behavior (FIRST_CLAIM), and a file that had it OFF loads as NONE.
@@ -8006,11 +8115,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         final int binIters    = iv(spBinaryIters);
         final int horizon     = iv(spHorizon);
 
-        simTotal = (long) fanPaths * horizon * binIters * solvePaths
-                + (long) horizon * binIters * solvePaths * (horizon + 1) / 2;
+        // v12 2026-10-11: estimate from the engine's actual call pattern (see
+        // estimateProWork); the completion message reports the real counters.
+        final long[] est = estimateProWork(horizon,
+                iv(spWithdrawStartYear) - iv(spSimStartYear), solvePaths, binIters, fanPaths);
+        final String estStr = fmtWork(est[0]) + " Monte Carlo paths (up to ~"
+                + fmtWork(est[1]) + " simulated years)";
         simCount.set(0);
-        final long grandTotal  = simTotal;
-        final long grandTotalM = Math.max(1, grandTotal / 1_000_000);
+        simPathYears.set(0);
 
         // Scheduler reads simCount every 250ms and updates UI -- avoids EDT flooding
         // entirely (same pattern as SS Optimizer tab status counter).
@@ -8038,8 +8150,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 countdownStr = "estimating...";
             }
             String msg = String.format(
-                    "Running ~%,dM simulations  |  %s  |  %s elapsed",
-                    grandTotalM, countdownStr, elapsedStr);
+                    "Running ~%s  |  %s  |  %s elapsed",
+                    estStr, countdownStr, elapsedStr);
             SwingUtilities.invokeLater(() -> {
                 progressBar.setValue(timePct);
                 progressBar.setString(msg);
@@ -8050,7 +8162,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             @Override protected ProResults doInBackground() {
                 // No publish() calls -- scheduler handles all UI updates
                 simProgressCallback = null;  // disable legacy callback
-                ProResults r = simulatePro(readInputs(), seed, solvePaths, fanPaths, binIters);
+                // v12 2026-10-11: this thread alone feeds the readout counters.
+                proRunThread = Thread.currentThread();
+                ProResults r;
+                try {
+                    r = simulatePro(readInputs(), seed, solvePaths, fanPaths, binIters);
+                } finally {
+                    proRunThread = null;
+                }
                 // v12 2026-10-06: snapshot the state the run used (see ProResults).
                 TaxEngine.StateTaxProfile sp = TaxEngine.stateProfile(r.inp.stateCode);
                 r.stateName  = sp.displayName;
@@ -8067,9 +8186,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                             ? (elapsed / 1000) + "s"
                             : (elapsed / 60000) + "m " + ((elapsed % 60000) / 1000) + "s";
                     progressBar.setValue(100);
+                    // v12 2026-10-11: ACTUAL counts from this run, not an estimate.
                     progressBar.setString(String.format(
-                            "Complete -- ~%,dM simulations . %,d fan paths . %,d solve paths . %d iters . %s",
-                            grandTotalM, fanPaths, solvePaths, binIters, elapsedStr));
+                            "Complete -- %s Monte Carlo paths (up to %s simulated years) . "
+                                    + "%,d fan paths . %,d solve paths . %d iters . %s",
+                            fmtWork(simCount.get()), fmtWork(simPathYears.get()),
+                            fanPaths, solvePaths, binIters, elapsedStr));
                     // Save calibration entry for future countdown estimates
                     saveCalibrationEntry(solvePaths, binIters, fanPaths, horizon, elapsed);
                 } catch (Exception ex) {
@@ -8100,6 +8222,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         i.womanSSStartYear   = iv(spWomanSSStartYear);
         i.womanSSStartMonth  = iv(spWomanSSStartMonth);
         i.ssCola             = dv(spSSCola) / 100.0;
+        i.piaAsOfYear        = iv(spPiaAsOfYear);                                    // v12 2026-10-10
         i.bridgeMode         = (cmbBridgeMode != null)
                 ? cmbBridgeMode.getSelectedIndex() : BRIDGE_SIM_START;              // v9
         i.bridgeDelayedSS    = (i.bridgeMode != BRIDGE_NONE);                        // v9: derived
@@ -8309,10 +8432,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             res.fanInflFactors[p][0] = 1.0;
             fpTrad[p][0] = trad; fpRoth[p][0] = roth; fpMM[p][0] = taxable;
 
-            // v6: this path's inflation factor at each SS start year, captured as
-            // the loop passes it, so SS can ride the path's own inflation when
-            // ssColaTracksInflation is on. Stays 0 (harmless) when the option is off.
-            double pManStartInfl = 0, pWomanStartInfl = 0;
+            // v6: this path's inflation basis for SS, so SS can ride the path's own
+            // inflation when ssColaTracksInflation is on.
+            // v12 2026-10-10: the basis is the START year (year 0), no longer each
+            // claim year -- SS grows from baseYear (see ssGrowth). Set before the
+            // loop, so it is also right for a claim year before baseYear, where the
+            // old in-loop capture never fired and tracking silently fell back.
+            double pManStartInfl   = res.fanInflFactors[p][0];
+            double pWomanStartInfl = res.fanInflFactors[p][0];
 
             for (int y = 0; y < inp.horizon; y++) {
                 int calYear  = inp.baseYear + y;
@@ -8325,8 +8452,6 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 double ret   = ri1[0];
                 double infl  = ri1[1];
                 res.fanInflFactors[p][y + 1] = res.fanInflFactors[p][y] * (1 + infl);
-                if (calYear == inp.manSSStartYear)   pManStartInfl   = res.fanInflFactors[p][y];
-                if (calYear == inp.womanSSStartYear) pWomanStartInfl = res.fanInflFactors[p][y];
                 // v12: this year's MM interest on this path (mirrors the display loop:
                 // year 0 has no prior year, so no growth and no interest).
                 double mmIntPath = 0;
@@ -8480,8 +8605,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             Arrays.sort(ia);
             medInfl[yy] = ia[fanPaths / 2];
         }
-        double medManStartInfl   = inflAt(medInfl, inp.baseYear, inp.manSSStartYear);
-        double medWomanStartInfl = inflAt(medInfl, inp.baseYear, inp.womanSSStartYear);
+        // v12 2026-10-10: basis at the start year, not the claim year (see ssGrowth).
+        double medManStartInfl   = inflAt(medInfl, inp.baseYear, inp.baseYear);
+        double medWomanStartInfl = inflAt(medInfl, inp.baseYear, inp.baseYear);
 
         // v3: MAGI history for the IRMAA 2-year lookback (index by sim year).
         double[] magiHistory = new double[inp.horizon];
@@ -8943,6 +9069,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             if (rate > inp.targetPoS) lo = mid; else hi = mid;
         }
         long added   = (long) binIters * solvePaths;
+        // v12 2026-10-11: count only the Pro PoS run's own work (see proRunThread).
+        // Bookkeeping only -- nothing below reads these, and the return value is
+        // unchanged.
+        if (Thread.currentThread() != proRunThread) return (int)((lo + hi) / 2.0);
+        simPathYears.addAndGet(added * horizon);
         long running = simCount.addAndGet(added);
         long prevM   = (running - added) / 1_000_000;
         long currM   = running / 1_000_000;
@@ -9152,7 +9283,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         + "  -> %s of %s\n\n"
                         + "== SOCIAL SECURITY ==\n"
                         + "  User: %s/yr from %02d/%d (age %d) . Spouse: %s/yr from %02d/%d (age %d)\n"
-                        + "  COLA %.1f%%/yr%s\n\n"
+                        + "  Amounts above are in %d dollars (PIA as-of year); COLA %.1f%%/yr%s\n\n"
                         + "== ANNUITY ==\n"
                         + "  %s/yr from %d (non-COLA)\n\n"
                         + "== RMD SCHEDULE (SECURE 2.0 -- age 75) ==\n"
@@ -9176,6 +9307,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 inp.manAge + (inp.manSSStartYear - inp.baseYear),
                 CURRENCY.format(inp.womanSSAmount), inp.womanSSStartMonth, inp.womanSSStartYear,
                 inp.womanAge + (inp.womanSSStartYear - inp.baseYear),
+                ssPiaAsOfEff(inp),                                      // v12 2026-10-10
                 inp.ssCola * 100,
                 inp.ssColaTracksInflation
                         ? String.format("  [COLA TRACKS SIMULATED INFLATION, shortfall %.1f%%/yr"
@@ -9256,7 +9388,29 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         return medInfl[idx];
     }
 
+    // v12 2026-10-10: growth of the entered PIAs from their as-of year to the
+    // simulation start year, at the FIXED ssCola (simulated inflation does not exist
+    // before baseYear, so there is nothing else to ride). 1.0 when the PIAs are
+    // dated the start year, which is every scenario saved before this input existed.
+    static double ssPreSimFactor(SimInputs inp) {
+        int gap = inp.baseYear - ssPiaAsOfEff(inp);
+        return (gap <= 0) ? 1.0 : Math.pow(1 + inp.ssCola, gap);
+    }
+
+    // v12 2026-10-10: the as-of year actually used -- 0 or a year after baseYear
+    // means the PIAs are dated the start year.
+    static int ssPiaAsOfEff(SimInputs inp) {
+        int asOf = inp.piaAsOfYear;
+        return (asOf <= 0 || asOf > inp.baseYear) ? inp.baseYear : asOf;
+    }
+
     // v6: growth factor applied to a benefit between its start year and calYear.
+    // v12 2026-10-10: callers now pass years since the SIMULATION START (baseYear),
+    // not since the claim year, with the inflation basis taken at baseYear. SSA
+    // applies every COLA to the PIA from age 62 on whether or not benefits have
+    // been claimed, so holding a benefit flat until its claim year understated
+    // every delayed claim by the COLAs in between. The COLA shortfall therefore
+    // also compounds from baseYear.
     // Default (ssColaTracksInflation == false) compounds the fixed ssCola, which
     // is what every pre-v6 scenario expects. When the option is on, the benefit
     // instead rides the SIMULATED inflation: inflFactor(calYear)/inflFactor(start),
@@ -9386,7 +9540,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             double inflFactor = Math.pow(1 + inp.inflation, y);
             TaxEngine.FilingStatus fs = filingFor(inp, calYear);
 
-            double grown = cfAnnual * Math.pow(1 + inp.ssCola, Math.max(0, calYear - refY))
+            // v12 2026-10-10: COLA from the PIA's as-of year through baseYear, then
+            // from baseYear on -- matching manSSThisYear, so the bridge replaces the
+            // benefit at the same COLA-grown level the real one starts at. (It grew
+            // from the reference claim year before, which froze it until then.)
+            double grown = cfAnnual * ssPreSimFactor(inp)
+                    * Math.pow(1 + inp.ssCola, Math.max(0, calYear - inp.baseYear))
                     * ssHaircutFactor(inp, calYear)
                     * yearFrac;
 
@@ -9444,10 +9603,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         int calYear = inp.baseYear + y;
         if (calYear < inp.manSSStartYear) return 0;
         double cut = ssHaircutFactor(inp, calYear);   // v6
+        // v12 2026-10-10: COLA growth from the PIA's as-of year, through the start
+        // year, to calYear -- including the claim year itself and the years before it.
+        double g = ssPreSimFactor(inp)
+                * ssGrowth(inp, calYear - inp.baseYear, inflNow, inflAtStart);
         if (calYear == inp.manSSStartYear)
-            return inp.manSSAmount * (13.0 - inp.manSSStartMonth) / 12.0 * cut;
-        return inp.manSSAmount
-                * ssGrowth(inp, calYear - inp.manSSStartYear, inflNow, inflAtStart) * cut;
+            return inp.manSSAmount * (13.0 - inp.manSSStartMonth) / 12.0 * g * cut;
+        return inp.manSSAmount * g * cut;
     }
     private double manSSThisYear(SimInputs inp, int y) {   // fixed-COLA convenience
         return manSSThisYear(inp, y, 0, 0);
@@ -9457,10 +9619,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         int calYear = inp.baseYear + y;
         if (calYear < inp.womanSSStartYear) return 0;
         double cut = ssHaircutFactor(inp, calYear);   // v6
+        // v12 2026-10-10: COLA growth from the PIA's as-of year, through the start
+        // year, to calYear -- including the claim year itself and the years before it.
+        double g = ssPreSimFactor(inp)
+                * ssGrowth(inp, calYear - inp.baseYear, inflNow, inflAtStart);
         if (calYear == inp.womanSSStartYear)
-            return inp.womanSSAmount * (13.0 - inp.womanSSStartMonth) / 12.0 * cut;
-        return inp.womanSSAmount
-                * ssGrowth(inp, calYear - inp.womanSSStartYear, inflNow, inflAtStart) * cut;
+            return inp.womanSSAmount * (13.0 - inp.womanSSStartMonth) / 12.0 * g * cut;
+        return inp.womanSSAmount * g * cut;
     }
     private double womanSSThisYear(SimInputs inp, int y) {
         return womanSSThisYear(inp, y, 0, 0);
@@ -9954,8 +10119,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             // Cumulative inflation factor from actual per-year inflation
             if (y == 0) inflFactor = 1.0;
             else        inflFactor *= (1 + yearInfl);
-            if (calYear == inp.manSSStartYear)   gkManStartInfl   = inflFactor;
-            if (calYear == inp.womanSSStartYear) gkWomanStartInfl = inflFactor;
+            // v12 2026-10-10: basis at the start year, not the claim year (see ssGrowth).
+            if (y == 0) { gkManStartInfl = inflFactor; gkWomanStartInfl = inflFactor; }
             if (y < gkInflByYear.length) gkInflByYear[y] = inflFactor;   // v11
 
             double manSS      = manSSSurv(inp, y, inflFactor, gkManStartInfl, gkWomanStartInfl);
@@ -12045,6 +12210,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         int manSSAmount, manSSStartYear, manSSStartMonth;
         int womanSSAmount, womanSSStartYear, womanSSStartMonth;
         double ssCola;
+        // v12 2026-10-10: the calendar year both PIAs are dated. 0, or any year after
+        // baseYear, means "dated the sim start year" -- no pre-start growth. Read
+        // through ssPreSimFactor(), never directly.
+        int piaAsOfYear;
         // v11: three independent guaranteed-income streams, replacing the v10
         // annuity triple (annuity / annuityStartYear / annuityStartMonth). An
         // annuity stream with colaMode 0, survivorPct 0, endYear 0 and
@@ -12636,24 +12805,68 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         } catch (Exception ignored) { distributing = false; }
     }
 
+    // v12 2026-10-11: work estimate for one Pro PoS run, mirroring simulatePro's
+    // actual calls to solveWithdrawalPro. Returns {trial paths, path-years}.
+    //   * a solve runs only in DRAWING years (calYear >= withdrawal start);
+    //   * each fan path re-solves every drawing year with a REDUCED solver:
+    //     max(20, solvePaths / 8) paths x min(binIters, 10) iterations;
+    //   * the median table re-solves every drawing year at full settings, plus
+    //     one full-settings year-1 solve;
+    //   * a trial path runs the remaining horizon, so path-years is an upper
+    //     bound -- a path that depletes stops early.
+    // An upper bound overall: a solve is skipped on a fan path already at $0.
+    // The old formula charged fan paths the FULL solver and every year of the
+    // horizon, about 18x too high, and counted trial paths for the fan term but
+    // path-years for the median term.
+    static long[] estimateProWork(int horizon, int yearsBeforeDraw,
+                                  int solvePaths, int binIters, int fanPaths) {
+        int first = Math.max(0, yearsBeforeDraw);
+        long draw = Math.max(0, horizon - first);              // drawing years
+        long remSum = draw * (draw + 1) / 2;                   // sum of remaining years
+        long fanSolve  = (long) Math.max(20, solvePaths / 8) * Math.min(binIters, 10);
+        long fullSolve = (long) solvePaths * binIters;
+        long paths = (long) fanPaths * draw * fanSolve + draw * fullSolve + fullSolve;
+        long years = (long) fanPaths * fanSolve * remSum + fullSolve * remSum
+                + fullSolve * horizon;
+        return new long[]{ paths, years };
+    }
+
+    // v12 2026-10-11: compact count for the readout -- 27.9M, 4.32B, 950,000.
+    static String fmtWork(long n) {
+        if (n >= 1_000_000_000L) return String.format("%.2fB", n / 1e9);
+        if (n >= 1_000_000L)     return String.format("%.1fM", n / 1e6);
+        return String.format("%,d", n);
+    }
+
     private String updateRunTooltip() {
         try {
             int horizon    = iv(spHorizon);
             int solvePaths = iv(spMcSolvePaths);
             int fanPaths   = iv(spMcFanPaths);
             int binIters   = iv(spBinaryIters);
-            long medianSims = (long) horizon * binIters * solvePaths * (horizon + 1) / 2;
-            long fanSims    = (long) fanPaths * horizon * binIters * solvePaths;
-            long totalSims  = medianSims + fanSims;
-            long totalM     = totalSims / 1_000_000;
+            int preDraw    = iv(spWithdrawStartYear) - iv(spSimStartYear);
+            long[] est     = estimateProWork(horizon, preDraw, solvePaths, binIters, fanPaths);
+            long draw      = Math.max(0, horizon - Math.max(0, preDraw));
+            int fanSp      = Math.max(20, solvePaths / 8);
+            int fanIt      = Math.min(binIters, 10);
+            long fanPathsN = (long) fanPaths * draw * fanSp * fanIt;
+            long medPathsN = draw * (long) solvePaths * binIters;
+            long yr1PathsN = (long) solvePaths * binIters;
             if (btnRun != null) btnRun.setToolTipText(String.format(
                     "<html><b>Estimated computation at current settings:</b><br>"
-                            + "Fan: %,d paths x %d yrs x %d iters x %,d paths = <b>%,dM sims</b><br>"
-                            + "Median: %d yrs x %d iters x %,d paths x avg %d remaining = <b>%,dM sims</b><br>"
-                            + "Grand total: <b>~%,dM simulations</b></html>",
-                    fanPaths, horizon, binIters, solvePaths, fanSims / 1_000_000,
-                    horizon, binIters, solvePaths, (horizon + 1) / 2, medianSims / 1_000_000, totalM));
-            return String.format("Running -- 0 / ~%,dM simulations performed...", totalM);
+                            + "Fan: %,d paths x %d drawing yrs x (%,d paths x %d iters) = <b>%s</b><br>"
+                            + "Median: %d drawing yrs x (%,d paths x %d iters) = <b>%s</b><br>"
+                            + "Year 1: %,d paths x %d iters = <b>%s</b><br>"
+                            + "Total: <b>~%s Monte Carlo paths</b>, up to ~%s simulated years<br><br>"
+                            + "<i>Fan paths re-solve each year with a reduced solver: solve paths / 8<br>"
+                            + "(minimum 20) and at most 10 iterations. A trial path stops early when<br>"
+                            + "it depletes, so simulated years is an upper bound.</i></html>",
+                    fanPaths, draw, fanSp, fanIt, fmtWork(fanPathsN),
+                    draw, solvePaths, binIters, fmtWork(medPathsN),
+                    solvePaths, binIters, fmtWork(yr1PathsN),
+                    fmtWork(est[0]), fmtWork(est[1])));
+            return "Running -- ~" + fmtWork(est[0]) + " Monte Carlo paths (up to ~"
+                    + fmtWork(est[1]) + " simulated years)...";
         } catch (Exception e) { return "Running Monte Carlo..."; }
     }
 
