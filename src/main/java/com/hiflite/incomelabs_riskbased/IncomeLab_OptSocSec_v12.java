@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Sunday, October 11, 2026 at 09:30 AM MST (UTC-7)
+// Last modified: Sunday, October 11, 2026 at 02:10 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -110,7 +110,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Sunday, October 11, 2026 at 09:30 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, October 11, 2026 at 02:10 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -936,7 +936,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "no-delay run would, and that extra tax becomes real drawdown.<br><br>"
                 + "The draw is applied inside the PoS solver, so probability of<br>"
                 + "success reflects it -- a heavier early bridge lowers the solved<br>"
-                + "base withdrawal rather than the success probability.</html>");
+                + "base withdrawal rather than the success probability.<br><br>"
+                + "<b>Growth (v12 2026-10-11).</b> The bridge grows at the SS COLA, or, when<br>"
+                + "<i>SS COLA tracks simulated inflation</i> is on, at mean inflation less<br>"
+                + "the COLA shortfall. <b>It stops if the bridged spouse dies</b> (from the<br>"
+                + "year after the death year), since that benefit will never start.</html>");
 
         spSSHaircutPct = spinD(0.0, 0.0, 50.0, 1.0, "0.0#");
         spSSHaircutPct.setToolTipText("<html><b>SS benefit haircut % (v6) -- a STRESS input</b><br>"
@@ -1411,8 +1415,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "Models one spouse dying in a chosen year. Beginning the year AFTER<br>"
                 + "the death year, the run automatically switches to the <b>Single</b> tax<br>"
                 + "basis (deduction, brackets, SS provisional thresholds, IRMAA tiers),<br>"
-                + "stops the decedent's Social Security (the survivor keeps the LARGER<br>"
-                + "of the two benefits), and computes RMDs on the survivor's age alone.<br>"
+                + "stops the decedent's Social Security, and computes RMDs on the<br>"
+                + "survivor's age alone. The survivor keeps their own benefit until<br>"
+                + "their survivor full retirement age (67 for anyone born 1962 or later),<br>"
+                + "then gets the larger of their own and the FULL survivor benefit. If the<br>"
+                + "decedent dies before claiming, the survivor benefit is based on the<br>"
+                + "decedent's PIA (plus delay credits earned to death), not on the claim<br>"
+                + "date they never reached. Death is taken at the end of the death year.<br>"
                 + "Because the Traditional and Roth balances are already pooled, nothing<br>"
                 + "is dropped -- the whole portfolio carries to the survivor.<br><br>"
                 + "<b>Neither:</b> both survive the horizon (no transition).</html>");
@@ -2362,7 +2371,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         // v12 2026-10-03: money-market interest is its own MAGI term now;
                         // it comes out of the residual so the Traditional line stays true.
                         long mmComp   = Math.round(er.mmInterest / d);
-                        long tradComp = magiDisp - ssComp - annComp - convComp - mmComp;
+                        // v12 2026-10-11: the extra taxable SS the conversion caused (tax
+                        // torpedo) is its own MAGI term, so it too comes out of the residual.
+                        long indComp  = Math.round(er.convSSInduced / d);
+                        long tradComp = magiDisp - ssComp - annComp - convComp - mmComp - indComp;
+                        String indLine = (er.convSSInduced > 0)
+                                ? "&nbsp;&nbsp;Extra taxable SS caused by the conversion:&nbsp;+"
+                                + CURRENCY.format(indComp) + "<br>"
+                                : "";
                         return String.format(
                                 "<html><b>MAGI -- Modified AGI this year</b><br>"
                                         + "&nbsp;&nbsp;MAGI:&nbsp;<b>%s</b><br>"
@@ -2374,6 +2390,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "&nbsp;&nbsp;Annuity/Pen/Mil:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;Money-market interest:&nbsp;%s<br>"   // v12
                                         + "&nbsp;&nbsp;Roth conversion (gross):&nbsp;+%s<br>"
+                                        + "%s"   // v12 2026-10-11: torpedo line, when any
                                         + "&nbsp;&nbsp;----------------------------<br>"
                                         + "&nbsp;&nbsp;<b>MAGI total:&nbsp;%s</b><br>"
                                         + "<br>%s"   // v12: dollar-basis note
@@ -2388,6 +2405,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                 CURRENCY.format(annComp),
                                 CURRENCY.format(mmComp),
                                 CURRENCY.format(convComp),
+                                indLine,
                                 CURRENCY.format(magiDisp),
                                 dollarBasisNote(er));
                     }
@@ -2430,10 +2448,17 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                         + "conversion. The conversion does not get its own standard<br>"
                                         + "deduction (already used by spending income), so it stacks at<br>"
                                         + "your top bracket (typically 22%%).<br><br>"
+                                        + "%s"   // v12 2026-10-11: torpedo note, when any
                                         + "This tax is paid FROM the conversion and leaves your asset<br>"
                                         + "base -- the one real cost of converting. It is separate from<br>"
                                         + "the living-expenses Tax column. See Assumptions &amp; Methods.</html>",
-                                CURRENCY.format(Math.round(er.convTax / d)));
+                                CURRENCY.format(Math.round(er.convTax / d)),
+                                (er.convSSInduced > 0)
+                                        ? "<b>Includes the tax torpedo:</b> this conversion also made<br>"
+                                        + CURRENCY.format(Math.round(er.convSSInduced / d))
+                                        + " more of your Social Security taxable, and the tax on<br>"
+                                        + "that is counted here too.<br><br>"
+                                        : "");
                     }
                     default -> { return null; }
                 }
@@ -3500,6 +3525,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "$32,000 and $44,000 up to 50% is taxable; above $44,000 up to 85% is taxable (capped at 85% of "
                 + "gross SS). These provisional thresholds are statutory and NOT inflation-indexed (fixed since "
                 + "1993), which realistically pulls more SS into the taxable base over time.</p>"
+                + "<p><b>The tax torpedo and Roth conversions (v12 2026-10-11).</b> A conversion is ordinary "
+                + "income, so it raises provisional income too. While Social Security is still below its 85% "
+                + "taxable cap, each converted dollar makes up to $0.85 <i>more</i> of the benefit taxable. The "
+                + "engine counts that extra taxable SS in the conversion's tax (Conv Tax), in MAGI (so the IRMAA "
+                + "lookback sees it), and in Fill sizing (so MAGI lands on the ceiling instead of overshooting "
+                + "it). The MAGI tooltip shows it as its own line. Years where SS is already 85% taxable before "
+                + "the conversion &mdash; the usual case at higher incomes &mdash; are unaffected. Before this "
+                + "date conversions were sized and taxed as if they never changed SS taxability.</p>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec6'></a>6. IRMAA &mdash; Medicare surcharge, costed and visible</h3>"
@@ -3689,12 +3722,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "living-expenses taxable income: tax(living + conversion) &minus; tax(living), plus the "
                 + "selected state's tax on the conversion. It does not get its own standard deduction "
                 + "(already consumed by spending income), so "
-                + "it stacks at the top bracket (typically 22%).</li>"
+                + "it stacks at the top bracket (typically 22%). It also includes the tax on any Social "
+                + "Security the conversion makes taxable (the tax torpedo, section 5).</li>"
                 + "<li>The conversion tax is paid FROM the conversion and <b>leaves the asset base</b> &mdash; "
                 + "the one real cost of converting. The net (gross &minus; tax) is split equally into the two "
                 + "Roth IRA accounts.</li>"
-                + "<li>The gross conversion raises MAGI and therefore matters for the IRMAA 2-year lookback and "
-                + "for fill-to-target sizing &mdash; but it is NOT in the living-expenses Tax column.</li>"
+                + "<li>The gross conversion raises MAGI &mdash; together with any extra taxable Social Security "
+                + "it causes &mdash; and therefore matters for the IRMAA 2-year lookback and for "
+                + "fill-to-target sizing &mdash; but it is NOT in the living-expenses Tax column.</li>"
                 + "</ul>"
                 + "<p><b>Why convert now:</b> Traditional dollars are ordinary-income-taxable whenever they come "
                 + "out &mdash; by conversion now or by forced RMD later. Converting in the low-income gap years "
@@ -3711,7 +3746,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<p><b>Conversion sizing &mdash; two modes:</b></p>"
                 + "<ul>"
                 + "<li><b>Flat $ amount:</b> a fixed conversion applied every drawing year.</li>"
-                + "<li><b>Fill to MAGI target:</b> each year converts the largest amount that keeps MAGI under "
+                + "<li><b>Fill to MAGI target:</b> each year converts the largest amount that keeps MAGI "
+                + "(including any extra taxable Social Security the conversion causes) under "
                 + "the binding ceiling &mdash; the lower of (a) the IRMAA Tier-0 cliff minus your buffer and "
                 + "(b) the 22%&rarr;24% bracket edge &mdash; then capped by the cap input. The IRMAA cliff grows "
                 + "per your threshold-growth mode and the bracket edge with the chained CPI, as the law indexes "
@@ -3858,13 +3894,31 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "<p><b>Death event (mid-projection).</b> The <i>Death event</i> and <i>Year of death</i> inputs "
                 + "(Tax Engine (v3) card) make one spouse die in a chosen calendar year. Beginning the year "
                 + "<b>after</b> the death year: the survivor holds the combined portfolio (Traditional and Roth "
-                + "balances consolidated); the decedent's Social Security stream ends and the survivor keeps the "
-                + "larger of the two benefits; RMDs follow the survivor's age; living expenses fall by the "
+                + "balances consolidated); the decedent's Social Security stream ends; RMDs follow the "
+                + "survivor's age; living expenses fall by the "
                 + "survivor-spend-cut percentage (default 20%) and medical is halved, since it is per-person; and "
                 + "the tax basis <b>switches to Single</b> automatically, including the Single brackets, standard "
                 + "deduction, IRMAA thresholds and the survivor's own age-65 add-on. This is a Pro-engine "
                 + "mechanism that runs the surviving-spouse years inline &mdash; no separate Single-mode scenario "
                 + "(section 3a) is needed to model them.</p>"
+                + "<p><b>Survivor Social Security (v12 2026-10-11).</b> The survivor keeps their <b>own</b> "
+                + "benefit &mdash; $0 until their own planned claim date &mdash; until they reach <b>survivor "
+                + "full retirement age</b>, rather than taking a permanently reduced survivor benefit early. "
+                + "From then on they receive the larger of their own benefit and the <b>full survivor "
+                + "benefit</b> (blended by month in the year that age is reached). Survivor full retirement age "
+                + "runs two birth years behind the retirement schedule: 66 for births 1945&ndash;1956, rising "
+                + "2 months a year to 67 for 1962 or later. The full survivor benefit is the decedent's actual "
+                + "benefit, delay credits included, but never less than <b>82.5% of the decedent's PIA</b> "
+                + "(SSA's floor when the decedent claimed early). If the decedent <b>dies before claiming</b>, it "
+                + "is based on their PIA instead &mdash; 100% if they died before their own full retirement age, "
+                + "plus the delay credits earned up to death if after (capped at 70) &mdash; not on the claim "
+                + "date they never reached. Death is taken at the end of the death year, so both benefits are "
+                + "paid through that year. The SS bridge for a spouse stops after that spouse's death. Before "
+                + "this date the survivor simply kept the larger of the two benefits from the first survivor "
+                + "year, which overstated a young survivor's benefit, understated it when the decedent had "
+                + "claimed very early, and &mdash; for a death before claiming &mdash; paid nothing from the "
+                + "decedent until their planned claim date and then the full delayed amount they never earned. "
+                + "SS start dates before age 62 are refused when you press Run Simulation.</p>"
 
                 + "<p><b>SS growth before and after claiming (v12 2026-10-10).</b> SSA raises a worker's PIA "
                 + "by every COLA from age 62 on, whether or not benefits have been claimed. The engine "
@@ -3876,7 +3930,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "the fixed SS COLA for the years in between (simulated inflation does not exist before the "
                 + "start year). From the start year on, benefits follow the simulated inflation when "
                 + "<i>SS COLA tracks simulated inflation</i> (Historical Stress Scenario card) is on, and "
-                + "the fixed SS COLA when it is off. The SS bridge grows the same way. Refresh both PIAs "
+                + "the fixed SS COLA when it is off. The SS bridge follows the same COLA path from the start "
+                + "year; it is one schedule shared by every path, so in tracking mode it grows at mean "
+                + "inflation less the shortfall (since 2026-10-11). Refresh both PIAs "
                 + "and the as-of year from ssa.gov/myaccount each January, after the new COLA takes "
                 + "effect. Before this date the benefit was held flat until the claim year, which "
                 + "understated every delayed claim by the COLAs in between (about 12.6% for a five-year "
@@ -4325,8 +4381,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
      *                  year, so every delayed claim is paid the COLAs it accrues
      *                  before claiming; the SS bridge grows the same way. Every
      *                  combination with a claim after the start year moves.
+     *   8  2026-10-11  conversions include the tax torpedo (extra taxable SS) in
+     *                  their sizing, tax and MAGI; survivor benefits follow SSA's
+     *                  rules (survivor FRA, 82.5% floor, death before claiming);
+     *                  the bridge stops at the bridged spouse's death and grows at
+     *                  the tracked rate in tracking mode. Rows in torpedo years,
+     *                  survivor years and tracking-mode bridge years move.
      */
-    private static final int SCORER_VERSION = 7;
+    private static final int SCORER_VERSION = 8;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -8103,6 +8165,34 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             }
         }
 
+        // v12 2026-10-11: Social Security retirement benefits cannot start before
+        // age 62. A claim date before then would be priced by extending the early-
+        // claim reduction past its legal range (age 60 -> 60% of PIA), a benefit SSA
+        // never pays. Refuse the run and say which date to fix.
+        {
+            boolean singleRun = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
+            String bad = null;
+            int manAgeMo = (iv(spManSSStartYear) - iv(spManBirthYear)) * 12
+                    + (iv(spManSSStartMonth) - iv(spManBirthMonth));
+            if (iv(spManPIA) > 0 && manAgeMo < 62 * 12) bad = "User";
+            if (bad == null && !singleRun && iv(spWomanPIA) > 0) {
+                int womAgeMo = (iv(spWomanSSStartYear) - iv(spWomanBirthYear)) * 12
+                        + (iv(spWomanSSStartMonth) - iv(spWomanBirthMonth));
+                if (womAgeMo < 62 * 12) bad = "Spouse";
+            }
+            if (bad != null) {
+                javax.swing.JOptionPane.showMessageDialog(this,
+                        "<html><b>Cannot run: " + bad + " SS start date is before age 62.</b><br><br>"
+                                + "Social Security retirement benefits cannot begin before age 62.<br>"
+                                + "Move the " + bad + " SS start year/month (Social Security card) to the<br>"
+                                + "month of the 62nd birthday or later. (SSA's earliest month is<br>"
+                                + "normally the one AFTER the 62nd birthday, unless the birthday<br>"
+                                + "falls on the 1st or 2nd of the month.)</html>",
+                        "SS start before age 62", javax.swing.JOptionPane.ERROR_MESSAGE);
+                return;   // do not start the simulation
+            }
+        }
+
         btnRun.setEnabled(false);
         progressBar.setValue(0);
         String statusMsg = updateRunTooltip();
@@ -8778,6 +8868,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             int    magiInt = 0, taxableSSInt = 0, ordTaxInt = 0, irmaaInt = 0,
                     fedInt = 0, stateInt = 0, convCeilInt = 0;
             int    mmIntTaxInt = 0;   // v12
+            int    convSSIndInt = 0;  // v12 2026-10-11: torpedo -- extra taxable SS from the conversion
             int    stStartInt = 0, stSubInt = 0, stExclInt = 0, stDedInt = 0, stTaxableInt = 0;
             boolean stParts = false;  // v12 2026-10-05: framework-state breakdown present
             String bracketStr = "--";
@@ -8830,6 +8921,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                     conv        = fill[0];
                     convCeilInt = (int) fill[1];
                     convByIrmaa = fill[2] == 1;
+                    // v12 2026-10-11: land MAGI on the ceiling INCLUDING the extra
+                    // Social Security the conversion makes taxable (tax torpedo).
+                    conv = TaxEngine.torpedoFill(conv, grossSS, ordinaryBeforeConv,
+                            magiBeforeConv, fill[1], inp.convCap, inflFactor, fsYear);
                 } else {
                     conv = inp.convFlat;
                 }
@@ -8840,6 +8935,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 // column cannot fund.
                 conv = Math.max(0, Math.min(conv, medTrad));
                 convThisYear = (int) conv;
+                // v12 2026-10-11: extra taxable SS this conversion causes (0 when SS is
+                // already 85% taxable or there is no benefit/conversion).
+                double convSSInd = TaxEngine.convInducedTaxableSS(
+                        grossSS, ordinaryBeforeConv, conv, inflFactor, fsYear);
+                convSSIndInt = (int) convSSInd;
 
                 // ---- Living-expenses tax (Tax column): spending income ONLY,
                 //      conversion EXCLUDED. MAGI for IRMAA lookback INCLUDES the
@@ -8848,7 +8948,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 //      IRMAA driver, while the taxable-income computation here
                 //      uses living income only.
                 double magiTwoYrPrior = (y >= 2) ? magiHistory[y - 2]
-                        : (magiBeforeConv + conv);
+                        : (magiBeforeConv + conv + convSSInd);   // v12 2026-10-11
                 // IRMAA thresholds index per the chosen mode, evaluated at the
                 // lookback year (y-2) whose MAGI is being assessed.
                 int lookbackY = Math.max(0, y - 2);
@@ -8903,13 +9003,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 //      income, funded FROM the conversion. Net-to-Roth = conv -
                 //      convTax. The conversion tax leaves the asset base.
                 double[] ctax = TaxEngine.conversionTax(
-                        tr, conv, inflFactor, fsYear,
+                        tr, conv, convSSInd, inflFactor, fsYear,       // v12 2026-10-11: torpedo
                         stProfile, calYear, tradDraw);
                 convTaxThisYear = (int) ctax[0];
                 convNetToRoth   = (int) (conv - ctax[0]);
 
                 // MAGI reported/stored INCLUDES the conversion (IRMAA-relevant).
-                double magiWithConv = tr.magi + conv;
+                // v12 2026-10-11: + the extra taxable SS the conversion causes.
+                double magiWithConv = tr.magi + conv + convSSInd;
                 magiInt        = (int) magiWithConv;
                 magiHistory[y] = magiWithConv;
             } else {
@@ -8976,6 +9077,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             row.conversion    = convThisYear;
             row.convTax       = convTaxThisYear;
             row.convNetToRoth = convNetToRoth;
+            row.convSSInduced = convSSIndInt;   // v12 2026-10-11
             row.ssBridge      = bridgeThisYear;  // v6
             row.baseRate      = rowBaseRate;     // v6
             row.yr1Rate       = rowYr1Rate;      // v6
@@ -9374,9 +9476,14 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 : manAgeM > manFra ? String.format("+%.1f%% delayed", (manM/manPIA-1.0)*100) : "at FRA";
         String womAdj = womAgeM < womFra ? String.format("%.1f%% early", (1.0-womM/womanPIA)*100)
                 : womAgeM > womFra ? String.format("+%.1f%% delayed", (womM/womanPIA-1.0)*100) : "at FRA";
+        // v12 2026-10-11: say which dollars these are. They are the benefit at each
+        // claim age in PIA as-of-year dollars; the engine then grows them by COLA
+        // to each year (so a later claim pays more than shown here).
+        int asOfYr = (spPiaAsOfYear != null) ? iv(spPiaAsOfYear) : 0;
         lblSSBenefitNote.setText(String.format(
-                "<html><i>Computed monthly: User $%,.0f (%s) . Spouse $%,.0f (%s)</i></html>",
-                manM, manAdj, womM, womAdj));
+                "<html><i>Monthly at claim, in %d dollars (before COLA growth): User $%,.0f (%s)"
+                        + " . Spouse $%,.0f (%s)</i></html>",
+                asOfYr, manM, manAdj, womM, womAdj));
     }
 
     // v6: median inflation factor at a given calendar year, clamped to range.
@@ -9395,6 +9502,19 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     static double ssPreSimFactor(SimInputs inp) {
         int gap = inp.baseYear - ssPiaAsOfEff(inp);
         return (gap <= 0) ? 1.0 : Math.pow(1 + inp.ssCola, gap);
+    }
+
+    // v12 2026-10-11: the SS bridge's growth from baseYear. The bridge is ONE
+    // deterministic schedule shared by every path, so it cannot ride each path's
+    // own inflation. With "SS COLA tracks simulated inflation" OFF it grows at the
+    // fixed SS COLA (unchanged); with it ON it grows at the EXPECTED tracked rate --
+    // mean inflation less the COLA shortfall -- which is what the real benefit it
+    // stands in for does on the median path. Previously it always used the fixed
+    // COLA, a small mismatch (about 0.3%/yr at the defaults) in tracking mode.
+    static double bridgeColaFactor(SimInputs inp, int years) {
+        if (years <= 0 || !inp.ssColaTracksInflation)
+            return Math.pow(1 + inp.ssCola, Math.max(0, years));
+        return Math.pow((1 + inp.inflation) / (1 + Math.max(0, inp.ssColaShortfall)), years);
     }
 
     // v12 2026-10-10: the as-of year actually used -- 0 or a year after baseYear
@@ -9535,6 +9655,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             int yrStartMo = calYear * 12 + 1, yrEndMo = calYear * 12 + 13;
             int covered = Math.min(yrEndMo, gapEndMo) - Math.max(yrStartMo, gapStartMo);
             if (covered <= 0) continue;                       // outside the gap
+            // v12 2026-10-11: no bridge after the bridged spouse has died -- it would
+            // replace a benefit that will never start. (Death is at the end of the
+            // death year, so the death year itself is still bridged.)
+            if (isSurvivorYear(inp, calYear)
+                    && ((isMan && inp.deathWho == 1) || (!isMan && inp.deathWho == 2))) continue;
             double yearFrac = Math.min(12, covered) / 12.0;   // 1.0 for a full year
 
             double inflFactor = Math.pow(1 + inp.inflation, y);
@@ -9545,7 +9670,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             // benefit at the same COLA-grown level the real one starts at. (It grew
             // from the reference claim year before, which froze it until then.)
             double grown = cfAnnual * ssPreSimFactor(inp)
-                    * Math.pow(1 + inp.ssCola, Math.max(0, calYear - inp.baseYear))
+                    * bridgeColaFactor(inp, Math.max(0, calYear - inp.baseYear))   // v12 2026-10-11
                     * ssHaircutFactor(inp, calYear)
                     * yearFrac;
 
@@ -9915,17 +10040,20 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     }
 
     // Survivor-aware Social Security. In a survivor year the decedent's benefit
-    // stops and the survivor keeps the LARGER of the two benefits (standard
-    // survivor rule). We compute both raw benefits, then in survivor years route
-    // the larger to the survivor's slot and zero the decedent's.
+    // stops and the survivor's slot carries survivorSS(): their own benefit, or the
+    // survivor benefit once they are entitled to the full amount, whichever is larger.
+    // v12 2026-10-11: rewritten around survivorSS() / survivorFullBenefit() so a
+    // death before claiming, a young survivor and an early-claiming decedent are all
+    // handled the way SSA handles them (see those methods). Everything else -- no
+    // death event, or a survivor past survivor full retirement age whose spouse had
+    // already claimed -- computes exactly what it did before.
     private double manSSSurv(SimInputs inp, int y, double iNow, double iManStart, double iWomanStart) {
         int calYear = inp.baseYear + y;
         double raw = manSSThisYear(inp, y, iNow, iManStart);
         if (!isSurvivorYear(inp, calYear)) return raw;
         if (inp.deathWho == 1) return 0;                 // user died -> no user SS
-        // spouse died -> user (survivor) keeps larger of the two this year
-        return Math.max(manSSThisYear(inp, y, iNow, iManStart),
-                womanSSThisYear(inp, y, iNow, iWomanStart));
+        // spouse died -> the user is the survivor
+        return survivorSS(inp, y, iNow, iManStart, iWomanStart, /*survivorIsMan=*/true);
     }
     private double manSSSurv(SimInputs inp, int y) { return manSSSurv(inp, y, 0, 0, 0); }
     private double womanSSSurv(SimInputs inp, int y, double iNow, double iManStart, double iWomanStart) {
@@ -9933,9 +10061,104 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         double raw = womanSSThisYear(inp, y, iNow, iWomanStart);
         if (!isSurvivorYear(inp, calYear)) return raw;
         if (inp.deathWho == 2) return 0;                 // spouse died -> no spouse SS
-        // user died -> spouse (survivor) keeps larger of the two this year
-        return Math.max(manSSThisYear(inp, y, iNow, iManStart),
-                womanSSThisYear(inp, y, iNow, iWomanStart));
+        // user died -> the spouse is the survivor
+        return survivorSS(inp, y, iNow, iManStart, iWomanStart, /*survivorIsMan=*/false);
+    }
+
+    /**
+     * v12 2026-10-11: the survivor's Social Security in a survivor year (Bob's rule).
+     *
+     * Before the survivor reaches SURVIVOR full retirement age they keep their own
+     * benefit -- which is $0 until their own planned claim date -- rather than take
+     * a permanently reduced survivor benefit. From survivor FRA on they receive the
+     * larger of their own benefit and the FULL survivor benefit. In the calendar
+     * year survivor FRA is reached the two are blended by month.
+     *
+     * A survivor already at or past survivor FRA gets max(own, full) for the whole
+     * year, which is the pre-2026-10-11 rule whenever the decedent had claimed.
+     */
+    private double survivorSS(SimInputs inp, int y, double iNow,
+                              double iManStart, double iWomanStart, boolean survivorIsMan) {
+        int calYear = inp.baseYear + y;
+        double own  = survivorIsMan ? manSSThisYear(inp, y, iNow, iManStart)
+                : womanSSThisYear(inp, y, iNow, iWomanStart);
+        double full = survivorFullBenefit(inp, y, iNow,
+                survivorIsMan ? iWomanStart : iManStart, /*decedentIsMan=*/!survivorIsMan);
+        double f = survivorFraFraction(inp, calYear, survivorIsMan);
+        if (f >= 1.0) return Math.max(own, full);
+        if (f <= 0.0) return own;
+        return (1.0 - f) * own + f * Math.max(own, full);
+    }
+
+    /**
+     * v12 2026-10-11: the FULL survivor benefit (what the survivor gets at or after
+     * survivor FRA), in this year's dollars, on the same COLA and haircut path as
+     * every other benefit.
+     *
+     *   Decedent had claimed by the end of the death year: their actual benefit
+     *   (delayed credits included), but never below 82.5% of their PIA -- SSA's
+     *   floor for a decedent who claimed early.
+     *
+     *   Decedent died BEFORE claiming: based on their PIA, not on the claim date
+     *   they never reached -- 100% of PIA if they died before their own FRA, plus
+     *   the delayed credits earned up to death if they died after it (capped at
+     *   70). Death is taken at the END of the death year, matching the rest of the
+     *   model (both benefits are paid through the death year; survivor years begin
+     *   the following January).
+     */
+    private double survivorFullBenefit(SimInputs inp, int y, double iNow,
+                                       double iDecStart, boolean decedentIsMan) {
+        int calYear = inp.baseYear + y;
+        int pia     = decedentIsMan ? inp.manPIA : inp.womanPIA;
+        if (pia <= 0) return 0;
+        double cut = ssHaircutFactor(inp, calYear);
+        double g   = ssPreSimFactor(inp)
+                * ssGrowth(inp, calYear - inp.baseYear, iNow, iDecStart);
+        double piaAnnual = pia * 12.0;                       // PIA as-of-year dollars
+        int claimY = decedentIsMan ? inp.manSSStartYear : inp.womanSSStartYear;
+        double base;
+        if (claimY <= inp.deathYear) {
+            base = decedentIsMan ? inp.manSSAmount : inp.womanSSAmount;
+        } else {
+            int bY  = decedentIsMan ? inp.manBirthYear  : inp.womanBirthYear;
+            int bM  = decedentIsMan ? inp.manBirthMonth : inp.womanBirthMonth;
+            int fra = fraMonths(bY);
+            int ageAtDeath = (inp.deathYear - bY) * 12 + (12 - bM);   // December of death year
+            int drcMonths  = Math.max(0, Math.min(ageAtDeath, 70 * 12) - fra);
+            base = piaAnnual * (1.0 + drcMonths * (8.0 / 1200.0));
+        }
+        base = Math.max(base, 0.825 * piaAnnual);
+        return base * g * cut;
+    }
+
+    /**
+     * v12 2026-10-11: share of calendar year calYear at or after the survivor's
+     * SURVIVOR full retirement age (0, 1, or the blended fraction in the year it is
+     * reached). Survivor FRA runs on its own schedule, two birth years behind the
+     * retirement one -- see survivorFraMonths().
+     */
+    private static double survivorFraFraction(SimInputs inp, int calYear, boolean survivorIsMan) {
+        int bY = survivorIsMan ? inp.manBirthYear  : inp.womanBirthYear;
+        int bM = survivorIsMan ? inp.manBirthMonth : inp.womanBirthMonth;
+        // first month of calYear in which age (months) >= survivor FRA
+        int firstMonth = survivorFraMonths(bY) - (calYear - bY) * 12 + bM;
+        if (firstMonth <= 1)  return 1.0;
+        if (firstMonth > 12)  return 0.0;
+        return (13.0 - firstMonth) / 12.0;
+    }
+
+    /**
+     * v12 2026-10-11: SSA's full retirement age for SURVIVOR benefits, in months.
+     * 1939 or earlier 65; then +2 months per birth year to 65y10m (1944); 66 for
+     * 1945-1956; +2 months per year 1957-1961; 67 for 1962 or later. (The
+     * retirement schedule in fraMonths() is the same shape two years earlier.)
+     */
+    static int survivorFraMonths(int birthYear) {
+        if (birthYear <= 1939) return 65 * 12;
+        if (birthYear <= 1944) return 65 * 12 + 2 * (birthYear - 1939);
+        if (birthYear <= 1956) return 66 * 12;
+        if (birthYear <= 1961) return 66 * 12 + 2 * (birthYear - 1956);
+        return 67 * 12;
     }
     private double womanSSSurv(SimInputs inp, int y) { return womanSSSurv(inp, y, 0, 0, 0); }
 
@@ -9991,7 +10214,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                     inflFactor, TaxEngine.fedIndexFactor(inflFactor, y),            // v12 2026-10-07
                     TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, y), fs,
                     inp.fillIrmaaTierIdx, inp.fillBracketIdx);
-            return fill[0];
+            // v12 2026-10-11: torpedo-aware, as in the display loop.
+            return TaxEngine.torpedoFill(fill[0], grossSS, ordinaryBeforeConv,
+                    magiBeforeConv, fill[1], inp.convCap, inflFactor, fs);
         }
         return inp.convFlat;
     }
@@ -10032,7 +10257,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 // travels in its own parameter (see stateTaxLiving).
                 fs, stProfile, calYear, rmd,
                 streamsStateExemptDet(inp, calYear), stCtx);
-        double[] ctax = TaxEngine.conversionTax(tr, convGross,
+        // v12 2026-10-11: include the tax on the Social Security the conversion
+        // makes taxable (tax torpedo), as in the display loop.
+        double convSSInd = TaxEngine.convInducedTaxableSS(grossSS, ordinaryBeforeConv,
+                convGross, inflFactor, fs);
+        double[] ctax = TaxEngine.conversionTax(tr, convGross, convSSInd,
                 inflFactor, fs, stProfile, calYear, rmd);
         return convGross - ctax[0];
     }
@@ -12089,6 +12318,56 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         }
 
         /**
+         * v12 2026-10-11: the "tax torpedo". A Roth conversion is ordinary income, so
+         * it raises provisional income -- and while Social Security is still below
+         * its 85% taxable cap, each converted dollar makes up to $0.85 MORE of the
+         * benefit taxable. Returns that extra taxable Social Security. Zero when there
+         * is no benefit, no conversion, or the benefit is already 85% taxable (the
+         * usual case at higher incomes), which is why most years are unaffected.
+         */
+        static double convInducedTaxableSS(double grossSS, double ordinaryBefore,
+                                           double conv, double inflFactor, FilingStatus fs) {
+            if (conv <= 0 || grossSS <= 0) return 0;
+            return taxableSocialSecurity(grossSS, ordinaryBefore + conv, inflFactor, fs)
+                    - taxableSocialSecurity(grossSS, ordinaryBefore, inflFactor, fs);
+        }
+
+        /**
+         * v12 2026-10-11: torpedo-aware fill. fillConversion() sizes the conversion as
+         * (ceiling - MAGI before conversion), which assumes $1 converted adds exactly
+         * $1 of MAGI. When the conversion also makes more Social Security taxable,
+         * MAGI rises faster than that and the plain fill overshoots the ceiling --
+         * past the IRMAA cliff it was aiming under. This returns the largest
+         * conversion whose MAGI INCLUDING the extra taxable SS stays at the ceiling,
+         * then re-applies the user's cap.
+         *
+         * When the extra taxable SS is zero at the plain fill amount, the plain
+         * result is returned UNCHANGED (same double), so every unaffected year is
+         * byte-identical to the previous build.
+         */
+        static double torpedoFill(double plainConv, double grossSS, double ordinaryBefore,
+                                  double magiBeforeConv, double bindingCeil, double userCap,
+                                  double inflFactor, FilingStatus fs) {
+            double c0 = Math.max(0, bindingCeil - magiBeforeConv);   // fill before the cap
+            if (c0 <= 0 || grossSS <= 0) return plainConv;
+            if (convInducedTaxableSS(grossSS, ordinaryBefore, c0, inflFactor, fs) <= 0)
+                return plainConv;
+            // MAGI(c) = ordinaryBefore + c + taxableSS(ordinaryBefore + c) is
+            // continuous and strictly increasing, so bisection finds the c that lands
+            // on the ceiling; 60 halvings of a range under $1M is far below a cent.
+            double lo = 0, hi = c0;
+            for (int i = 0; i < 60; i++) {
+                double mid  = 0.5 * (lo + hi);
+                double magi = ordinaryBefore + mid
+                        + taxableSocialSecurity(grossSS, ordinaryBefore + mid, inflFactor, fs);
+                if (magi <= bindingCeil) lo = mid; else hi = mid;
+            }
+            double conv = lo;
+            if (userCap > 0) conv = Math.min(conv, userCap);
+            return conv;
+        }
+
+        /**
          * Marginal (stacked) tax on a Roth conversion. The conversion is a
          * separate Traditional distribution taxed ON TOP of the living-expenses
          * taxable income, so its tax = tax(livingTaxable + conversion) -
@@ -12141,6 +12420,47 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
          * per-person context, so a graduated state stacks correctly and an exclusion
          * cap is not spent twice. The legacy (Custom) path is the old calculation.
          */
+        /**
+         * v12 2026-10-11: conversion tax INCLUDING the tax torpedo. inducedSS is the
+         * extra Social Security the conversion makes taxable (convInducedTaxableSS).
+         * Federal: the conversion AND the induced SS stack on living taxable income.
+         * Framework state: the state sees federal AGI and taxable SS both raised by
+         * inducedSS, so a state that exempts Social Security (Arizona) nets it back
+         * out and one that taxes it does not. Custom profile: the legacy conversion
+         * figure plus the Custom rules' own tax on the induced SS (zero when the
+         * profile exempts Social Security). inducedSS == 0 returns exactly what the
+         * overload below returns, so unaffected years are byte-identical.
+         */
+        static double[] conversionTax(TaxResult living, double conversion, double inducedSS,
+                                      double inflFactor, FilingStatus fs,
+                                      StateTaxProfile stateProfile, int simYear,
+                                      double retirementOrdinary) {
+            if (inducedSS <= 0 || conversion <= 0)
+                return conversionTax(living, conversion, inflFactor, fs, stateProfile,
+                        simYear, retirementOrdinary);
+            StateTaxYear sty = stateProfile.forYear(simYear);
+            double base = Math.max(0, living.taxableIncome);
+            double fedConv = Math.max(0, fedTax(base + conversion + inducedSS, living.fedFactor, fs)
+                    - fedTax(base, living.fedFactor, fs));
+            double stConv;
+            if (sty.rules == null || living.stateCtx == null) {
+                double legacy = stateTaxConversion(sty, conversion, retirementOrdinary, inflFactor);
+                double ssPart = Math.max(0,
+                        stateTaxLiving(sty, base + inducedSS, living.taxableSS + inducedSS,
+                                retirementOrdinary, living.streamStateExempt, inflFactor)
+                                - stateTaxLiving(sty, base, living.taxableSS,
+                                retirementOrdinary, living.streamStateExempt, inflFactor));
+                stConv = legacy + ssPart;
+            } else {
+                double stWith = stateTaxRules(sty.rules, living.magi + inducedSS,
+                        living.taxableSS + inducedSS, living.streamStateExempt, conversion,
+                        living.stateCtx, living.man65, living.woman65, inflFactor,
+                        living.fedFactor, fs, null);
+                stConv = Math.max(0, stWith - living.stateTax);
+            }
+            return new double[]{ fedConv + stConv, fedConv, stConv };
+        }
+
         static double[] conversionTax(TaxResult living, double conversion,
                                       double inflFactor, FilingStatus fs,
                                       StateTaxProfile stateProfile, int simYear,
@@ -12255,8 +12575,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // 2=Spouse(woman). deathYear = calendar year of death; the SURVIVOR
         // year begins the year AFTER (calYear > deathYear). Before/at deathYear
         // the couple files per inp.filingStatus (normally MFJ); after, the tax
-        // basis is forced to Single, the decedent's SS stops (survivor keeps the
-        // larger benefit), and RMDs are computed on the survivor's age alone.
+        // basis is forced to Single, the decedent's SS stops (the survivor's SS
+        // follows survivorSS() -- v12 2026-10-11), and RMDs are computed on the
+        // survivor's age alone.
         // hisRmdShare/herRmdShare split the single combined Traditional bucket
         // for two-age RMD math while both live (default 0.5/0.5); at the death
         // year the survivor's share -> 1.0 and the decedent's -> 0.0.
@@ -12350,6 +12671,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // same tax without it. Both 0 when the reserve is empty.
         int  mmInterest, mmInterestTax;
         int  convTax, convNetToRoth;   // v3: conversion tax + net landing in Roth
+        int  convSSInduced;            // v12 2026-10-11: extra taxable SS the conversion caused
         // v6: the actual figures behind the Wd % guardrail colour, so the cell
         // tooltip can show WHY a row is green or red rather than just that it is.
         int  ssBridge;   // v6: extra draw replacing a delayed benefit
