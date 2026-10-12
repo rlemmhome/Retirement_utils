@@ -1,6 +1,6 @@
 // ==============================================================
 // IncomeLab_OptSocSec_v12.java
-// Last modified: Sunday, October 11, 2026 at 02:10 PM MST (UTC-7)
+// Last modified: Sunday, October 11, 2026 at 05:02 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.incomelabs_riskbased;
 
@@ -110,7 +110,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v12";
-    private static final String BUILD_STAMP = "Sunday, October 11, 2026 at 02:10 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, October 11, 2026 at 05:02 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -4010,20 +4010,25 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "scored once, at your <b>full Pro-tab fidelity</b> (see <i>How each combination is scored</i>, "
                 + "below).</p>"
 
-                + "<p><b>Objective &mdash; feasibility, then final-years draws.</b> A combination is <i>feasible</i> when "
+                + "<p><b>Objective &mdash; feasibility, then your chosen measure.</b> A combination is <i>feasible</i> when "
                 + "it satisfies all of these:</p>"
                 + "<ul>"
                 + "<li><b>Stays green</b> every year at or above the <i>Green Surplus/Gap</i> (subject to terminal grace, "
                 + "below).</li>"
                 + "<li><b>Go-go headroom</b> in every go-go year at or above the <i>Go-go floor</i>.</li>"
-                + "<li><b>Slow-go headroom</b> in every slow-go year at or above the <i>Slow-go floor</i>.</li>"
+                + "<li><b>Slow-go headroom</b> in every slow-go year at or above the <i>Slow-go floor</i>. "
+                + "Go-go, slow-go and no-go years are the year windows set on the Annual Spending card "
+                + "(go-go duration, then slow-go duration, then the rest) &mdash; not inferred from the "
+                + "multiplier values, which before 2026-10-11 misfiled years when two phases shared a "
+                + "multiplier.</li>"
                 + "<li><b>PoS</b> holds at or above your <i>Target probability of success</i>.</li>"
                 + "</ul>"
-                + "<p>Among <b>feasible</b> combinations, the optimizer ranks highest the one that draws the most "
-                + "from the portfolio across the <b>final 5 years</b> of the plan &mdash; how much the plan can still "
-                + "pay out at the far end of life. <i>How rows are ranked</i> and <i>Why that measure</i>, below, "
-                + "give the full order and the reasoning. The survivor's Social Security and survivor spendable "
-                + "figures are shown in their own columns but do not rank the table.</p>"
+                + "<p>Among <b>feasible</b> combinations, the order is set by the <b>Rank passing rows by</b> "
+                + "dropdown (v12 2026-10-11). The default, <b>No-go spendable, total</b>, ranks highest the "
+                + "combination that leaves the most money available in the no-go years. <i>How rows are "
+                + "ranked</i> and <i>The five measures</i>, below, give the full order and the definitions. The "
+                + "survivor's Social Security and survivor spendable figures are shown in their own columns but "
+                + "do not rank the table.</p>"
 
                 + "<p><b>Travel floors are cushions, not travel budgets.</b> Your go-go and slow-go multipliers "
                 + "(e.g. 1.5x, 1.3x) already inflate spending during those years -- travel money lives in the "
@@ -4058,9 +4063,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "pure arithmetic on PIA and claim age, so it rises with every month of delay and ranks "
                 + "late claims first without exception. It is the wrong objective. <b>Delaying does not "
                 + "create money.</b> It buys a larger <i>guaranteed floor</i>, and it pays for that floor by "
-                + "draining the portfolio through the bridge years. Measured across a sample of claim pairs "
-                + "in this engine, the two rank in <b>opposite directions</b>: the pair with the largest "
-                + "survivor check left the survivor the <i>least</i> to spend.</p>"
+                + "draining the portfolio through the bridge years. The ranking measures are read from the "
+                + "simulated plan instead, so they count both what delaying costs and what it buys.</p>"
                 + "<p>The delayed-retirement credit is also smaller than it looks. It is <b>simple on PIA, "
                 + "not compounded</b>: 67 to 70 gives 124% of PIA, not 1.08&sup3; = 126%, so the year-over-year "
                 + "raise decays &mdash; 8.0%, then 7.4%, then 6.9%. Against that, delaying forgoes the payments "
@@ -4082,18 +4086,37 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "</ul>"
                 + "<p><b>Survivor spendable</b> is still computed and shown in its own column &mdash; the "
                 + "leanest year of <i>income &minus; tax &minus; medical</i> across the survivor phase. It is "
-                + "not what ranks the table; the final-years draw is. Both are there so the trade-off reads "
-                + "without opening a dialog.</p>"
+                + "not what ranks the table; the selected ranking measure is. Both are there so the trade-off "
+                + "reads without opening a dialog. <b>Survivor SS</b> and <b>SS at full claim</b> are read from "
+                + "the simulation's own rows in today's dollars (since 2026-10-11), so they match the Pro table "
+                + "to the dollar: SS at full claim is User + Spouse Social Security in the first year both are "
+                + "paid for the whole year; Survivor SS is the survivor's benefit in the first survivor year "
+                + "when a death event is set, otherwise the larger of the two benefits in that same year.</p>"
                 + "<p><b>How rows are ranked.</b> <b>A combination that passes every floor always ranks above one "
-                + "that does not.</b> Feasibility is a gate, not a preference. Within each block the order "
-                + "is <b>total portfolio withdrawals across the final 5 years</b>, highest first, with the "
-                + "ending balance, then combined annual benefit, then the claim dates as tie-breaks.</p>"
-                + "<p><b>Why that measure.</b> The SS bridge replaces a delayed benefit dollar for dollar "
-                + "(see <i>SS bridge</i> above), so Surplus/gap lands in nearly the same place whatever the "
-                + "claim dates and the entire cost of delaying surfaces as a smaller portfolio. The question "
-                + "that actually separates claim dates is therefore <i>how much can this plan still pay out "
-                + "at the far end of life</i> &mdash; not what is left unspent at the horizon, and not a "
-                + "lifetime total the bridge flattens.</p>"
+                + "that does not.</b> Feasibility is a gate, not a preference. Within each block the order is the "
+                + "measure picked in <b>Rank passing rows by</b>, highest first, with the ending balance and then "
+                + "the earlier claim dates as tie-breaks. Every row stores all five measures (CSV columns "
+                + "<tt>final_years_draw</tt>, <tt>no_go_total</tt>, <tt>no_go_worst</tt>, "
+                + "<tt>lifetime_spendable</tt>, <tt>early_spendable</tt>), so changing the dropdown re-sorts the "
+                + "table instantly &mdash; no re-run &mdash; and the choice is not part of the fingerprint. The "
+                + "ranking column's header carries a *.</p>"
+                + "<p><b>The five measures</b> (all today's dollars; Surplus/gap is total income minus living, "
+                + "medical and tax, so Social Security and portfolio draws both count):</p>"
+                + "<ul>"
+                + "<li><b>No-go spendable, total</b> (default) &mdash; Surplus/gap summed over every no-go year, "
+                + "the drawing years after the go-go and slow-go windows. It answers <i>how much is available "
+                + "late in life</i> once the go-go and slow-go floors are met &mdash; the money that covers "
+                + "medical costs and anything else the no-go years bring.</li>"
+                + "<li><b>Worst no-go year</b> &mdash; the leanest no-go year's Surplus/gap, terminal-grace years "
+                + "excluded: the cushion every no-go year can count on, not just the total.</li>"
+                + "<li><b>Lifetime spendable</b> &mdash; Surplus/gap summed over every drawing year.</li>"
+                + "<li><b>Go-go + slow-go spendable</b> &mdash; summed over the go-go and slow-go years only.</li>"
+                + "<li><b>Final 5-year portfolio draws</b> &mdash; portfolio withdrawals over the last 5 years, "
+                + "Social Security excluded. The only measure before 2026-10-11, kept for comparison. Because "
+                + "Social Security never flows back into the portfolio, it counts what delaying costs (the "
+                + "bridge) but not what it buys (larger checks), so it favors the earliest claim pair that "
+                + "clears the floors.</li>"
+                + "</ul>"
                 // v11 2026-09-27: the "What was removed" changelog paragraph was deleted. It
                 // described the removal of machinery no user outside development ever ran,
                 // and its closing arithmetic ("nearly two hours -- roughly five times the
@@ -4124,7 +4147,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "stop matching after a restart or after clicking a row. The file path is shown in the status line when a batch "
                 + "starts, and the fingerprint sits in its own selectable field beside Run SS Optimizer "
                 + "&mdash; click and drag to copy it. It stays put while the progress line scrolls, so a file that fails to match can be diagnosed without picking the hash "
-                + "out of the file. The first line of a new file is a CSV header naming all 37 columns. "
+                + "out of the file. The first line of a new file is a CSV header naming all 41 columns. "
                 + "An interrupted batch "
                 + "costs one run rather than the whole night &mdash; press Run again and it resumes. Change any "
                 + "input that would alter a result and the fingerprint changes, so a stale file is never "
@@ -4237,8 +4260,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + "highlighted, a <i>why it ranks here</i> section, every failing year, and any terminal-grace "
                 + "forgiveness. The <i>why it ranks here</i> section shows the two blocks &mdash; PASS (funds every "
                 + "floor and the PoS target) above FAIL &mdash; with the row counts of each and which block this row "
-                + "is in. A <i>what is being maximized</i> section then shows this row's final-5-year draws (the "
-                + "ranking), ending balance (the tie-break), and its spendable and Survivor SS figures, so a row's "
+                + "is in. A <i>what is being maximized</i> section then shows all five ranking measures with the "
+                + "selected one highlighted, the ending balance (the tie-break), and the spendable and Survivor SS "
+                + "figures, so a row's "
                 + "position is always traceable to numbers you can see. There is no score formula and no penalty "
                 + "weight: a row either funds the floors or it does not.</p>"
 
@@ -4337,6 +4361,20 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
      */
     private static final int OPT_SCORE_YEARS = 5;
 
+    // v12 2026-10-11 (OF1): how PASSING rows are ordered -- the "Rank passing rows by"
+    // dropdown on the SS Optimizer tab. Every row stores all five measures, so the
+    // table re-sorts instantly when the choice changes; no batch re-run is needed and
+    // the choice is NOT part of the plan fingerprint. All in today's dollars.
+    static final String[] OPT_RANK_LABELS = {
+            "No-go spendable, total",
+            "Worst no-go year",
+            "Lifetime spendable",
+            "Go-go + slow-go spendable",
+            "Final 5-year portfolio draws" };
+    static final int RANK_NOGO_TOTAL = 0, RANK_NOGO_WORST = 1, RANK_LIFETIME = 2,
+            RANK_EARLY = 3, RANK_FINAL5 = 4;
+    private JComboBox<String> cmbOptRankBy;
+
     /**
      * v11 2026-09-29: the version of the SCORING LOGIC, hashed into the batch
      * fingerprint beside the floors.
@@ -4387,8 +4425,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
      *                  the bridge stops at the bridged spouse's death and grows at
      *                  the tracked rate in tracking mode. Rows in torpedo years,
      *                  survivor years and tracking-mode bridge years move.
+     *   9  2026-10-11  four more ranking measures stored per row (no-go total,
+     *                  worst no-go year, lifetime, go-go + slow-go); go-go and
+     *                  slow-go years identified by their windows, not multiplier
+     *                  values; Survivor SS and SS at full claim read from the engine
+     *                  rows in today's dollars. The row format gains four columns.
      */
-    private static final int SCORER_VERSION = 8;
+    private static final int SCORER_VERSION = 9;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -4404,6 +4447,18 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     private static final int OCOL_SURVSPEND  = 11;  // v11 2026-09-27: leanest survivor year
     private static final int OCOL_SURVSS     = 12;  // v11 2026-09-27: what delay actually buys
     private static final int OCOL_SSFULL     = 13;
+    // v12 2026-10-11 (OF1): the four new ranking measures, one column each.
+    private static final int OCOL_NOGO       = 14;
+    private static final int OCOL_NOGOWORST  = 15;
+    private static final int OCOL_LIFETIME   = 16;
+    private static final int OCOL_EARLY      = 17;
+    private static final String[] OPT_COL_NAMES = {
+            "Rank", "User SS Start", "Spouse SS Start",
+            "PoS %", "Feasibility min", "Why", "Min surplus",
+            "Go-go headroom", "Slow-go headroom",
+            "Final 5yr draws", "Ending balance",
+            "Survivor spendable", "Survivor SS", "SS at full claim",
+            "No-go spendable", "Worst no-go yr", "Lifetime spendable", "Go+slow spendable" };
 
     private JPanel buildSsOptimizerPanel() {
         JPanel p = new JPanel(new BorderLayout(0, 6));
@@ -4429,8 +4484,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // exists; feasibility is a hard gate and the rank is one measure.
         lblOptObjective = new JLabel(
                 "  Objective: meet every floor first -- that is a gate, not a preference."
-                        + " Passing rows are then ordered by the most portfolio dollars drawn"
-                        + " in the final 5 years.");
+                        + " Passing rows are then ordered by " + OPT_RANK_LABELS[RANK_NOGO_TOTAL]
+                        + ".");   // v12 2026-10-11: follows "Rank passing rows by"
         lblOptObjective.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblOptObjective.setForeground(new Color(150, 60, 0));
 
@@ -4589,6 +4644,26 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         objRow.add(new JLabel("Green Surplus/Gap $:")); objRow.add(spOptGreenBuffer);
         objRow.add(new JLabel("Term grace yr:"));    objRow.add(spOptTermGrace);
         objRow.add(new JLabel("   Grid:"));          objRow.add(cmbOptGrid);
+        // v12 2026-10-11 (OF1): how passing rows are ordered. Re-sorts the current
+        // results instantly; it never re-runs the batch.
+        cmbOptRankBy = new JComboBox<>(OPT_RANK_LABELS);
+        cmbOptRankBy.setSelectedIndex(RANK_NOGO_TOTAL);
+        cmbOptRankBy.setToolTipText("<html><b>Rank passing rows by</b> (all in today's dollars)<br>"
+                + "Rows that pass every floor always rank above rows that do not. Within each<br>"
+                + "block, this measure orders them, highest first; ties go to the larger ending<br>"
+                + "balance, then the earlier claim dates.<br><br>"
+                + "<b>No-go spendable, total</b> (default): Surplus/gap summed over every no-go year<br>"
+                + "(after the go-go and slow-go windows) -- money available late in life, Social<br>"
+                + "Security included.<br>"
+                + "<b>Worst no-go year</b>: the leanest no-go year's Surplus/gap (terminal-grace years<br>"
+                + "excluded) -- the medical cushion you can count on every no-go year.<br>"
+                + "<b>Lifetime spendable</b>: Surplus/gap summed over every drawing year.<br>"
+                + "<b>Go-go + slow-go spendable</b>: summed over the go-go and slow-go years.<br>"
+                + "<b>Final 5-year portfolio draws</b>: the pre-2026-10-11 measure, for comparison.<br><br>"
+                + "Every row stores all five, so changing this re-sorts at once -- no re-run.<br>"
+                + "The ranking column's header is marked with *.</html>");
+        cmbOptRankBy.addActionListener(e -> reRankOptTable());
+        objRow.add(new JLabel("   Rank passing rows by:")); objRow.add(cmbOptRankBy);
 
         // v12 2026-10-02: CPU row -- how many CPUs the batch leaves for everything else.
         JPanel cpuRow = buildLeaveFreeRow();
@@ -4598,13 +4673,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // combination, so the trade-off is visible rather than collapsed to one pick.
         // v11: "Why" inserted at OCOL_WHY (5) -- the binding constraint and the
         // margin against it, so the verdict reads without hovering or clicking.
-        String[] optCols = {
-                "Rank", "User SS Start", "Spouse SS Start",
-                "PoS %", "Feasibility min", "Why", "Min surplus",
-                "Go-go headroom", "Slow-go headroom",
-                "Final 5yr draws", "Ending balance",
-                "Survivor spendable", "Survivor SS", "SS at full claim"
-        };
+        String[] optCols = OPT_COL_NAMES.clone();   // v12 2026-10-11: + 4 ranking measures
         tblOptModel = new javax.swing.table.DefaultTableModel(optCols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
@@ -4626,6 +4695,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                                     + " in the dialog."
                                     + "</html>";
                         }
+                        // v12 2026-10-11: the ranking measures and the two SS columns.
+                        int mCol = (vCol >= 0) ? getTable().convertColumnIndexToModel(vCol) : -1;
+                        String tip = optHeaderTip(mCol);
+                        if (tip != null) return tip;
                         return super.getToolTipText(e);
                     }
                 };
@@ -4659,7 +4732,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // Survivor SS (what delay buys), so the trade-off reads without a dialog.
         // v11 2026-09-27: "Verified" is gone -- every row is full fidelity. Two new columns
         // carry the rank metric and its tie-break.
-        int[] optWidths = {40, 110, 110, 60, 100, 150, 100, 110, 110, 120, 110, 130, 110, 110};
+        int[] optWidths = {40, 110, 110, 60, 100, 150, 100, 110, 110, 120, 110, 130, 110, 110,
+                125, 115, 130, 130};   // v12 2026-10-11
         for (int i = 0; i < optWidths.length && i < tblOpt.getColumnCount(); i++)
             tblOpt.getColumnModel().getColumn(i).setPreferredWidth(optWidths[i]);
 
@@ -4701,6 +4775,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             }
         };
         tblOpt.setDefaultRenderer(Object.class, optRend);
+        reRankOptTable();   // v12 2026-10-11 (OF1): mark the ranking column, set the objective
 
         // v11 GESTURE MAP (item D). Pre-v11 ANY click anywhere on a row called
         // applyAndRun, so a row could not be inspected without launching a full
@@ -5275,6 +5350,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         boolean single;
         int goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget, gridStepMo;
         int fullPaths, fullFan, binIters;
+        int rankBy;   // v12 2026-10-11 (OF1): ordering only -- not hashed
         long seed;
         // v11 2026-09-27: `real` is gone. The scorer always works in today's dollars.
         // v12 2026-10-05: name of the stress scenario the batch overrode, or null.
@@ -5312,6 +5388,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         c.fullPaths   = iv(spMcSolvePaths);
         c.fullFan     = iv(spMcFanPaths);
         c.binIters    = iv(spBinaryIters);
+        c.rankBy      = optRankMode();   // v12 2026-10-11 (OF1)
         // v11 2026-09-27: THE BATCH SEED IS ALWAYS 0, and "Re-randomize each run" is not
         // consulted here at all.
         //
@@ -5509,7 +5586,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         javax.swing.JOptionPane.WARNING_MESSAGE));
         }
 
-        rankOptResults(results);
+        rankOptResults(results, c.rankBy);   // v12 2026-10-11 (OF1)
 
         // v11 2026-09-27: a batch that could not write must say so, loudly, once. Silence here
         // is how nine hours of work disappears.
@@ -5531,12 +5608,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             System.out.printf("%n%,d combinations: %,d pass, %,d fail.%n",
                     results.size(), pass, results.size() - pass);
             int n = Math.min(10, results.size());
-            System.out.println("Top " + n + " by final-" + OPT_SCORE_YEARS + "-year portfolio draws:");
+            System.out.println("Top " + n + " by " + OPT_RANK_LABELS[c.rankBy] + ":");   // v12 2026-10-11
             for (int i = 0; i < n; i++) {
                 SsOptResult r = results.get(i);
-                System.out.printf("  %2d. user %02d/%d  spouse %02d/%d   draws %,12.0f   end bal %,12.0f   %s%n",
+                System.out.printf("  %2d. user %02d/%d  spouse %02d/%d   measure %,12.0f   end bal %,12.0f   %s%n",
                         i + 1, r.bobMonth, r.bobYear, r.joMonth, r.joYear,
-                        r.finalYearsDraw, r.endingBalance, r.feasible ? "PASS" : "fail");
+                        rankValue(r, c.rankBy), r.endingBalance, r.feasible ? "PASS" : "fail");
             }
         } else {
             final java.util.List<SsOptResult> fin = results;
@@ -5618,7 +5695,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                     + "binding_floor,shortfall,user_monthly_ss,spouse_monthly_ss,feas_min_year,dollars_real,"
                     + "survivor_years,spendable_is_couple,couple_spendable,floor_green,floor_gogo,"
                     + "floor_slowgo,floor_pos,margin_green,margin_gogo,margin_slowgo,margin_pos,"
-                    + "bind_margin,violations,graced_dips";
+                    + "bind_margin,violations,graced_dips,"
+                    + "no_go_total,no_go_worst,lifetime_spendable,early_spendable";   // v12 2026-10-11
     /** First write failure of the current batch, or null. Reported, never swallowed. */
     private volatile String batchWriteError = null;
 
@@ -5829,6 +5907,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                     if (p.length > 34) r.bindMargin        = Integer.parseInt(p[34]);
                     if (p.length > 35) decodeMisses(p[35], r.violations);
                     if (p.length > 36) decodeMisses(p[36], r.gracedDips);
+                    // v12 2026-10-11 (OF1): the four extra ranking measures.
+                    if (p.length > 37) r.noGoTotal         = Double.parseDouble(p[37]);
+                    if (p.length > 38) r.noGoWorst         = Double.parseDouble(p[38]);
+                    if (p.length > 39) r.lifetimeSpendable = Double.parseDouble(p[39]);
+                    if (p.length > 40) r.earlySpendable    = Double.parseDouble(p[40]);
                     r.fromDisk = true;
                     out.put(p[1], r);
                 } catch (RuntimeException bad) {
@@ -5857,7 +5940,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             try (java.io.PrintWriter pw = new java.io.PrintWriter(
                     new java.io.FileWriter(out, true))) {
                 pw.printf("%s,%s,%d,%d,%d,%d,%b,%.6f,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,"
-                                + "%.4f,%.4f,%d,%b,%d,%b,%.2f,%d,%d,%d,%d,%d,%d,%d,%.4f,%d,%s,%s%n",
+                                + "%.4f,%.4f,%d,%b,%d,%b,%.2f,%d,%d,%d,%d,%d,%d,%d,%.4f,%d,%s,%s,"
+                                + "%.2f,%.2f,%.2f,%.2f%n",
                         fp, key, r.bobYear, r.bobMonth, r.joYear, r.joMonth, r.feasible,
                         r.actualPoS, r.feasMin, r.minSurplus, r.minGoGoSurplus, r.minSlowGoSurplus,
                         r.finalYearsDraw, r.endingBalance, r.survivorSpendable, r.survivorSS,
@@ -5866,7 +5950,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                         r.survivorYears, r.spendableIsCouple, r.coupleSpendable,
                         r.floorGreen, r.floorGoGo, r.floorSlowGo, r.floorPoS,
                         r.marginGreen, r.marginGoGo, r.marginSlowGo, r.marginPoS, r.bindMargin,
-                        encodeMisses(r.violations), encodeMisses(r.gracedDips));
+                        encodeMisses(r.violations), encodeMisses(r.gracedDips),
+                        r.noGoTotal, r.noGoWorst, r.lifetimeSpendable, r.earlySpendable);   // v12 2026-10-11
             } catch (Exception ex) {
                 // v11 2026-09-27: disk trouble must not kill a nine-hour run -- but it must not be
                 // invisible either. Pre-v15 this was swallowed silently, so an unwritable
@@ -5976,8 +6061,18 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // we mirror that so the optimizer's floors and columns match what the user
         // sees and sets. In nominal mode d=1.0 (raw surplus); in real mode we
         // deflate by inflFactor. row.surplus is stored NOMINAL.
-        double goGoMultVal   = base.goGoMultiplier;      // e.g. 1.5
-        double slowGoMultVal = base.slowGoMultiplier;    // e.g. 1.3
+        // v12 2026-10-11 (O2): go-go / slow-go / no-go years are identified by the
+        // year WINDOWS on the Annual Spending card (spendMultFor's rule), not by
+        // matching each row's multiplier value. The old value test misfiled years
+        // whenever two phases shared a multiplier -- go-go 1.0 made every year
+        // "go-go", a 1.0 slow-go (including the default 0-year phase) made every
+        // no-go year "slow-go", and go-go == slow-go hid the slow-go floor.
+        int goGoDur   = Math.max(0, base.goGoDuration);
+        int slowGoDur = Math.max(0, base.slowGoDuration);
+        // v12 2026-10-11 (OF1): the ranking measures, accumulated below.
+        double noGoSum = 0, earlySum = 0, lifeSum = 0;
+        double noGoWorst = Double.MAX_VALUE, noGoWorstAll = Double.MAX_VALUE;
+        int noGoN = 0;
         int minGo = Integer.MAX_VALUE, minSlow = Integer.MAX_VALUE;
         boolean sawGo = false, sawSlow = false;
         int minGreenTest = Integer.MAX_VALUE;   // drives feasibility
@@ -6061,11 +6156,24 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                     r.gracedDips.add(new FloorMiss(calY, surplusDisp, balanceDisp, "green", greenBuf));
                 }
 
-                if (approxEq(row.goGoMult, goGoMultVal)) {
+                // v12 2026-10-11 (O2): phase from the year windows.
+                int yFromStart = row.calYear - inp.withdrawStartYear;
+                int phase = (yFromStart < goGoDur) ? 0
+                        : (yFromStart < goGoDur + slowGoDur) ? 1 : 2;   // 0 go-go, 1 slow-go, 2 no-go
+                // v12 2026-10-11 (OF1): ranking measures, today's dollars.
+                double sReal = row.surplus / d;
+                lifeSum += sReal;
+                if (phase < 2) earlySum += sReal;
+                else {
+                    noGoSum += sReal; noGoN++;
+                    noGoWorstAll = Math.min(noGoWorstAll, sReal);
+                    if (!inTerminalWindow) noGoWorst = Math.min(noGoWorst, sReal);
+                }
+                if (phase == 0) {
                     sawGo = true; if (surplusDisp < minGo) minGo = surplusDisp;
                     if (surplusDisp < goGoFloor)
                         r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "go-go", goGoFloor));
-                } else if (approxEq(row.goGoMult, slowGoMultVal)) {
+                } else if (phase == 1) {
                     sawSlow = true; if (surplusDisp < minSlow) minSlow = surplusDisp;
                     if (surplusDisp < slowGoFloor)
                         r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "slow-go", slowGoFloor));
@@ -6078,6 +6186,13 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // and the couple figure stands in, so the column never goes blank or changes
         // units. deathYear is a single global input, so every row in one scan uses the
         // same definition and the comparison stays apples-to-apples.
+        // v12 2026-10-11 (OF1): store every ranking measure on the row.
+        r.noGoYears         = noGoN;
+        r.noGoTotal         = noGoSum;
+        r.noGoWorst         = (noGoWorst != Double.MAX_VALUE) ? noGoWorst
+                : (noGoWorstAll != Double.MAX_VALUE ? noGoWorstAll : 0);
+        r.lifetimeSpendable = lifeSum;
+        r.earlySpendable    = earlySum;
         r.survivorYears     = survYears;
         r.spendableIsCouple = (survYears == 0);
         r.coupleSpendable   = (coupYears > 0) ? minCoupSpend : 0;
@@ -6113,6 +6228,27 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
             EnhRow lastRow = pr.medianRows.get(n - 1);
             double dl = (lastRow.inflFactor > 0) ? lastRow.inflFactor : 1.0;
             r.endingBalance = lastRow.balance / dl;
+
+            // v12 2026-10-11 (O5): the two SS columns from the engine's own rows, in
+            // today's dollars, so they match the Pro table to the dollar. Before this
+            // they were PIA x claim-age factor x 12 in PIA as-of-year dollars, with no
+            // COLA growth, shortfall, haircut or survivor rules.
+            int fyMan  = (bobM <= 1) ? bobY : bobY + 1;            // first full year paid
+            int fyWom  = single ? Integer.MIN_VALUE : ((joM <= 1) ? joY : joY + 1);
+            int fIdx   = Math.max(0, Math.min(n - 1, Math.max(fyMan, fyWom) - inp.baseYear));
+            EnhRow fr  = pr.medianRows.get(fIdx);
+            double dfr = (fr.inflFactor > 0) ? fr.inflFactor : 1.0;
+            r.combinedAnnual = (fr.manSS + fr.womanSS) / dfr;
+            double surv = Math.max(fr.manSS, fr.womanSS) / dfr;
+            if (inp.deathWho != 0) {
+                int sIdx = inp.deathYear + 1 - inp.baseYear;         // first survivor year
+                if (sIdx >= 0 && sIdx < n) {
+                    EnhRow sr = pr.medianRows.get(sIdx);
+                    double ds = (sr.inflFactor > 0) ? sr.inflFactor : 1.0;
+                    surv = (sr.manSS + sr.womanSS) / ds;             // decedent's slot is 0
+                }
+            }
+            r.survivorSS = surv;
         }
 
         r.minSurplus       = (minRawSurplus == Integer.MAX_VALUE) ? 0 : minRawSurplus;
@@ -6230,19 +6366,41 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
      *                    identical table.
      */
     private static void rankOptResults(java.util.List<SsOptResult> results) {
+        rankOptResults(results, RANK_NOGO_TOTAL);
+    }
+
+    /**
+     * v12 2026-10-11 (OF1): PASS always outranks FAIL; within each block the row with
+     * the larger selected measure (rankValue) ranks higher; ties go to the larger
+     * ending balance, then the earlier User claim, then the earlier Spouse claim.
+     * Before this date the measure was always the final-5-year portfolio draws and
+     * combined annual benefit was a tie-break. That measure is still available as
+     * RANK_FINAL5; the combined-benefit tie-break was dropped (it favored later
+     * claims for no reason tied to spending).
+     */
+    static void rankOptResults(java.util.List<SsOptResult> results, int mode) {
         for (SsOptResult r : results) r.shortfallDollars = r.shortfall;
         results.sort((x, y) -> {
             if (x.feasible != y.feasible) return x.feasible ? -1 : 1;   // the gate
-            int c = Double.compare(y.finalYearsDraw, x.finalYearsDraw);
+            int c = Double.compare(rankValue(y, mode), rankValue(x, mode));
             if (c != 0) return c;
             c = Double.compare(y.endingBalance, x.endingBalance);
-            if (c != 0) return c;
-            c = Double.compare(y.combinedAnnual, x.combinedAnnual);
             if (c != 0) return c;
             c = Integer.compare(x.bobYear * 12 + x.bobMonth, y.bobYear * 12 + y.bobMonth);
             if (c != 0) return c;
             return Integer.compare(x.joYear * 12 + x.joMonth, y.joYear * 12 + y.joMonth);
         });
+    }
+
+    /** v12 2026-10-11 (OF1): the value a row is ranked on under the given mode. */
+    static double rankValue(SsOptResult r, int mode) {
+        switch (mode) {
+            case RANK_NOGO_WORST: return r.noGoWorst;
+            case RANK_LIFETIME:   return r.lifetimeSpendable;
+            case RANK_EARLY:      return r.earlySpendable;
+            case RANK_FINAL5:     return r.finalYearsDraw;
+            default:              return r.noGoTotal;
+        }
     }
 
     private java.util.List<int[]> buildSsRange(int birthYear, int birthMonth,
@@ -6512,15 +6670,17 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 .append(" (the Real/Nominal mode active when the scan was run).</p>");
 
         sb.append("<h3 style='margin-bottom:2px;'>WHY IT RANKS HERE</h3>");
+        // v12 2026-10-11 (OF1): the order follows "Rank passing rows by".
+        int mode = optRankMode();
         sb.append("<p style='margin-top:0;'><b>Two blocks. Funding the floors decides which"
-                + " block; portfolio dollars paid out late decides the position inside it.</b></p>");
+                + " block; " + OPT_RANK_LABELS[mode] + " decides the position inside it.</b></p>");
         sb.append("<table cellpadding=4 border=1 cellspacing=0>");
         sb.append("<tr bgcolor='#eeeeee'><td><b>Block</b></td><td><b>Meaning</b></td>")
                 .append("<td><b>Ordered within the block by</b></td><td><b>Rows</b></td></tr>");
         sb.append("<tr").append(r.feasible ? " bgcolor='#eef6ee'" : "")
                 .append("><td><b>1. PASS</b></td><td>Funds the Green Surplus/Gap, both travel floors"
                         + " and the PoS target</td>")
-                .append("<td>Final-").append(OPT_SCORE_YEARS).append("-year draws, highest first</td><td>")
+                .append("<td>").append(OPT_RANK_LABELS[mode]).append(", highest first</td><td>")
                 .append(passCount).append("</td></tr>");
         sb.append("<tr").append(!r.feasible ? " bgcolor='#f8e4e4'" : "")
                 .append("><td><b>2. FAIL</b></td><td>Misses at least one floor</td>")
@@ -6532,20 +6692,39 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                 + " funds the floors or it does not.</p>");
 
         sb.append("<h3 style='margin-bottom:2px;'>WHAT IS BEING MAXIMIZED</h3>");
-        sb.append("<p style='margin-top:0;'><b>Total portfolio withdrawals across the final ")
-                .append(OPT_SCORE_YEARS).append(" years</b> &mdash; what this plan can still pay out"
-                        + " at the far end of life.</p>");
+        // v12 2026-10-11 (OF1): all five measures, the selected one highlighted.
+        sb.append("<p style='margin-top:0;'><b>").append(OPT_RANK_LABELS[mode])
+                .append("</b>, in today's dollars &mdash; chosen in <i>Rank passing rows by</i>."
+                        + " Every measure is shown so the trade-off reads without re-sorting.</p>");
         sb.append("<table cellpadding=4 border=1 cellspacing=0>");
         sb.append("<tr bgcolor='#eeeeee'><td><b>Measure</b></td><td><b>This row</b></td>"
                 + "<td><b>What it means</b></td></tr>");
-        sb.append("<tr bgcolor='#eef6ee'><td><b>Final-").append(OPT_SCORE_YEARS)
-                .append("-year draws</b></td><td><b>")
-                .append(CURRENCY.format((long) r.finalYearsDraw))
-                .append("</b></td><td><b>The ranking.</b> The SS bridge holds spending roughly"
-                        + " constant across claim dates, so the difference between them lands here.</td></tr>");
+        String[][] measures = {
+                { OPT_RANK_LABELS[RANK_NOGO_TOTAL], CURRENCY.format((long) r.noGoTotal),
+                        "Surplus/gap summed over the " + r.noGoYears + " no-go year(s) -- Social Security"
+                                + " and portfolio together, after living, medical and tax." },
+                { OPT_RANK_LABELS[RANK_NOGO_WORST], CURRENCY.format((long) r.noGoWorst),
+                        "The leanest no-go year (terminal-grace years excluded): the cushion every no-go year has." },
+                { OPT_RANK_LABELS[RANK_LIFETIME], CURRENCY.format((long) r.lifetimeSpendable),
+                        "Surplus/gap summed over every drawing year." },
+                { OPT_RANK_LABELS[RANK_EARLY], CURRENCY.format((long) r.earlySpendable),
+                        "Surplus/gap summed over the go-go and slow-go years." },
+                { OPT_RANK_LABELS[RANK_FINAL5], CURRENCY.format((long) r.finalYearsDraw),
+                        "Portfolio withdrawals over the last " + OPT_SCORE_YEARS
+                                + " years; Social Security not included." } };
+        for (int m = 0; m < measures.length; m++) {
+            boolean sel = (m == mode);
+            sb.append("<tr").append(sel ? " bgcolor='#eef6ee'" : "").append("><td>")
+                    .append(sel ? "<b>" : "").append(measures[m][0]).append(sel ? "</b>" : "")
+                    .append("</td><td>").append(sel ? "<b>" : "").append(measures[m][1])
+                    .append(sel ? "</b>" : "").append("</td><td>")
+                    .append(sel ? "<b>The ranking.</b> " : "").append(measures[m][2])
+                    .append("</td></tr>");
+        }
         sb.append("<tr><td>Ending balance</td><td>")
                 .append(CURRENCY.format((long) r.endingBalance))
-                .append("</td><td>What is left unspent at the horizon. The tie-break.</td></tr>");
+                .append("</td><td>What is left unspent at the horizon. The first tie-break;"
+                        + " then the earlier claim dates.</td></tr>");
         sb.append("<tr><td>").append(r.spendableIsCouple ? "Couple spendable" : "Survivor spendable")
                 .append("</td><td>").append(CURRENCY.format((long) r.survivorSpendable))
                 .append("</td><td>Leanest year of <tt>income &minus; tax &minus; medical</tt>");
@@ -6554,10 +6733,8 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         sb.append(".</td></tr>");
         sb.append("<tr><td>Survivor SS</td><td>")
                 .append(CURRENCY.format((long) r.survivorSS))
-                .append("</td><td>What delaying buys: a larger guaranteed floor. It moves"
-                        + " <i>opposite</i> to spendable income &mdash; the claim pair with the biggest"
-                        + " check tends to leave the least to spend, because the bridge years are funded"
-                        + " by draining the portfolio.</td></tr>");
+                .append("</td><td>The survivor's Social Security as the simulation pays it (today's $):"
+                        + " the guaranteed income that delaying a claim buys.</td></tr>");
         sb.append("</table>");
         sb.append("<p>Of ").append(total).append(" combinations, ").append(passCount)
                 .append(" pass and ").append(failCount).append(" fail. ")
@@ -6663,6 +6840,10 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
                     CURRENCY.format((long) r.survivorSpendable),
                     CURRENCY.format((long) r.survivorSS),
                     CURRENCY.format((long) r.combinedAnnual),
+                    CURRENCY.format((long) r.noGoTotal),          // v12 2026-10-11 (OF1)
+                    CURRENCY.format((long) r.noGoWorst),
+                    CURRENCY.format((long) r.lifetimeSpendable),
+                    CURRENCY.format((long) r.earlySpendable),
             });
             optRowDates.add(new int[]{r.bobYear, r.bobMonth, r.joYear, r.joMonth});
             optRowResults.add(r);
@@ -6671,9 +6852,9 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // v11 2026-09-27: one message. Full fidelity everywhere, two blocks, one measure.
         String head = String.format(
                 "%,d combinations at full Pro fidelity: %,d pass, %,d fail. "
-                        + "PASS ranks first; within each block, most portfolio dollars drawn "
-                        + "in the final %d years. Click the Why cell for the reason.",
-                show, passCount, failCount, OPT_SCORE_YEARS);
+                        + "PASS ranks first; within each block, %s, highest first. "
+                        + "Click the Why cell for the reason.",
+                show, passCount, failCount, OPT_RANK_LABELS[optRankMode()]);   // v12 2026-10-11
         // v12 2026-10-04: the run's final wall-clock time stays on screen.
         if (elapsedMs > 0) head += "   [elapsed " + minSec(elapsedMs) + "]";
         lblOptStatus.setText(head);
@@ -6722,6 +6903,11 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // rankOptResults for why this and not the ending balance.
         double finalYearsDraw;
         double endingBalance;        // portfolio left at the horizon, shown beside it
+        // v12 2026-10-11 (OF1): the four other ranking measures, today's dollars. See
+        // rankValue(). noGoYears counts the drawing years after the go-go and
+        // slow-go windows.
+        double noGoTotal, noGoWorst, lifetimeSpendable, earlySpendable;
+        int    noGoYears;
         boolean fromDisk = false;    // true when this row was resumed from the CSV
         double inflAccYr1   = 1.0;   // inflation factor at withdrawal start year (default 1=nominal)
         double inflAccFinal = 1.0;   // inflation factor at end of horizon (default 1=nominal)
@@ -7049,7 +7235,80 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     // and its explanation is a static label, so this is a no-op kept only because
     // it is still called once at init. Left in place to avoid touching that path.
     private void refreshOptObjective() {
-        // intentionally empty -- lblOptObjective is set once at construction.
+        // v12 2026-10-11 (OF1): names the measure picked in "Rank passing rows by".
+        if (lblOptObjective == null) return;
+        lblOptObjective.setText("  Objective: meet every floor first -- that is a gate, not a preference."
+                + " Passing rows are then ordered by " + OPT_RANK_LABELS[optRankMode()] + ".");
+    }
+
+    /** v12 2026-10-11 (OF1): the selected ranking measure (default: no-go total). */
+    private int optRankMode() {
+        if (cmbOptRankBy == null) return RANK_NOGO_TOTAL;
+        int i = cmbOptRankBy.getSelectedIndex();
+        return (i < 0 || i >= OPT_RANK_LABELS.length) ? RANK_NOGO_TOTAL : i;
+    }
+
+    /** v12 2026-10-11 (OF1): the results-table column that shows a ranking measure. */
+    private static int rankColumnFor(int mode) {
+        switch (mode) {
+            case RANK_NOGO_WORST: return OCOL_NOGOWORST;
+            case RANK_LIFETIME:   return OCOL_LIFETIME;
+            case RANK_EARLY:      return OCOL_EARLY;
+            case RANK_FINAL5:     return OCOL_FINALDRAW;
+            default:              return OCOL_NOGO;
+        }
+    }
+
+    /**
+     * v12 2026-10-11 (OF1): the dropdown changed. Mark the ranking column, rename the
+     * objective, and re-sort whatever results are on screen -- from memory, without
+     * touching the batch or the file.
+     */
+    private void reRankOptTable() {
+        refreshOptObjective();
+        if (tblOpt != null) {
+            int rc = rankColumnFor(optRankMode());
+            for (int m = 0; m < OPT_COL_NAMES.length && m < tblOpt.getColumnCount(); m++) {
+                int v = tblOpt.convertColumnIndexToView(m);
+                if (v < 0) continue;
+                tblOpt.getColumnModel().getColumn(v)
+                        .setHeaderValue(OPT_COL_NAMES[m] + (m == rc ? " *" : ""));
+            }
+            tblOpt.getTableHeader().repaint();
+        }
+        if (lastOptResults == null || lastOptResults.isEmpty()) return;
+        rankOptResults(lastOptResults, optRankMode());
+        populateOptTable(lastOptResults, lastOptManBY, lastOptManBM, lastOptWomanBY,
+                lastOptWomanBM, lastOptManPIA, lastOptWomanPIA, optRunElapsedMs);
+    }
+
+    /** v12 2026-10-11: header tooltips for the ranking measures and the two SS columns. */
+    private static String optHeaderTip(int mCol) {
+        switch (mCol) {
+            case OCOL_NOGO: return "<html><b>No-go spendable, total</b> (today's $)<br>"
+                    + "Surplus/gap summed over every no-go year -- the drawing years after the<br>"
+                    + "go-go and slow-go windows. Social Security and portfolio draws both count,<br>"
+                    + "after living, medical and tax. The default ranking measure.</html>";
+            case OCOL_NOGOWORST: return "<html><b>Worst no-go year</b> (today's $)<br>"
+                    + "The leanest no-go year's Surplus/gap, terminal-grace years excluded --<br>"
+                    + "the cushion available in EVERY no-go year, e.g. for medical costs.</html>";
+            case OCOL_LIFETIME: return "<html><b>Lifetime spendable</b> (today's $)<br>"
+                    + "Surplus/gap summed over every drawing year.</html>";
+            case OCOL_EARLY: return "<html><b>Go-go + slow-go spendable</b> (today's $)<br>"
+                    + "Surplus/gap summed over the go-go and slow-go years.</html>";
+            case OCOL_FINALDRAW: return "<html><b>Final 5-year portfolio draws</b> (today's $)<br>"
+                    + "Portfolio withdrawals over the last 5 years of the horizon. Social<br>"
+                    + "Security is not included. The ranking measure before 2026-10-11.</html>";
+            case OCOL_SURVSS: return "<html><b>Survivor SS</b> (today's $, from the simulation)<br>"
+                    + "With a death event: the survivor's Social Security in the first survivor<br>"
+                    + "year, as the engine pays it (survivor full retirement age, 82.5% floor,<br>"
+                    + "death before claiming all applied). Without one: the larger of the two<br>"
+                    + "benefits in the first year both are paid in full.</html>";
+            case OCOL_SSFULL: return "<html><b>SS at full claim</b> (today's $, from the simulation)<br>"
+                    + "User + Spouse Social Security in the first year both are paid for the<br>"
+                    + "whole year -- COLA growth, tracking/shortfall and any haircut included.</html>";
+            default: return null;
+        }
     }
 
     private void refreshColaWarn() {
@@ -7578,6 +7837,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // longer written -- the controls they mirrored are gone. Old scenario files
         // still carrying them load fine; the keys are simply ignored.
         if (cmbOptGrid      != null) props.setProperty("opt.grid",        String.valueOf(cmbOptGrid.getSelectedIndex()));
+        if (cmbOptRankBy    != null) props.setProperty("opt.rankBy",      String.valueOf(cmbOptRankBy.getSelectedIndex()));   // v12 2026-10-11
         try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
             props.store(fos, "IncomePoS_OptSocSec_v2 scenario -- " + desc);
             addRecentFile(file.getAbsolutePath());
@@ -7855,6 +8115,7 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
         // the controls they drove no longer exist. A pre-v13 scenario therefore
         // opens cleanly, minus tuning that no longer has anything to tune.
         setStreamComboIfPresent(cmbOptGrid, props, "opt.grid");
+        setStreamComboIfPresent(cmbOptRankBy, props, "opt.rankBy");   // v12 2026-10-11 (OF1)
         refreshTaxEngineEnabled();  // greying may change if loaded toggles differ
         refreshStateFieldsEnabled();  // v5: apply loaded state selection greying
         refreshDeathFieldsEnabled();  // v6: apply loaded death-event greying
@@ -8129,41 +8390,12 @@ public class IncomeLab_OptSocSec_v12 extends JFrame {
     //  SIMULATION  (dispatches Enhanced Pro engine + Guyton-Klinger engine)
     // ========================================================================
     private void runSimulation() {
-        // v9: hard-disallow a death that falls inside a spouse's SIM_START bridge
-        // window. Under SIM_START each spouse is bridged from the withdrawal-start
-        // date to their OWN claim date; a spouse dying inside that window is a
-        // combination we do not model (the bridge would replace a benefit the
-        // decedent will never claim). Block the run and explain.
-        if (cmbBridgeMode != null
-                && cmbBridgeMode.getSelectedIndex() == BRIDGE_SIM_START
-                && cmbDeathWho != null && cmbDeathWho.getSelectedIndex() != 0) {
-            int deathYear = iv(spDeathYear);
-            int wsY = iv(spWithdrawStartYear);
-            boolean manDies = (cmbDeathWho.getSelectedIndex() == 1);   // 1=User, 2=Spouse
-            int claimY = manDies ? iv(spManSSStartYear) : iv(spWomanSSStartYear);
-            // Bridge window for the decedent: [withdrawStart, own claim year).
-            // A death in that half-open span is disallowed. (If the decedent
-            // claims at or before withdrawStart there is no window, so no block.)
-            if (claimY > wsY && deathYear >= wsY && deathYear < claimY) {
-                String who = manDies ? "User" : "Spouse";
-                javax.swing.JOptionPane.showMessageDialog(
-                        this,
-                        "<html><b>Cannot run: death falls inside an SS bridge window.</b><br><br>"
-                                + who + " is set to die in " + deathYear + ", but under the<br>"
-                                + "<b>\"From simulation start (both)\"</b> bridge mode that spouse is<br>"
-                                + "being bridged from the withdrawal-start year (" + wsY + ") until<br>"
-                                + "their own claim year (" + claimY + "). Bridging a benefit for a<br>"
-                                + "spouse who dies before ever claiming it is not a combination<br>"
-                                + "this model supports.<br><br>"
-                                + "Resolve it by any one of:<br>"
-                                + "&nbsp;&nbsp;- moving the year of death to " + claimY + " or later, or<br>"
-                                + "&nbsp;&nbsp;- setting that spouse's SS start year to " + deathYear + " or earlier, or<br>"
-                                + "&nbsp;&nbsp;- switching SS bridge mode to \"From first claim\" or \"No bridge\".</html>",
-                        "SS bridge / death-event conflict (v9)",
-                        javax.swing.JOptionPane.ERROR_MESSAGE);
-                return;   // do not start the simulation
-            }
-        }
+        // v12 2026-10-11 (O3): the v9 block that refused a death inside a spouse's
+        // "From simulation start" bridge window is gone. It existed because that case
+        // was not modelled; it now is -- the bridge stops at the bridged spouse's death
+        // (addBridgeForPerson) and the survivor benefit is based on the decedent's PIA
+        // when they die before claiming (survivorFullBenefit). Removing it also lets the
+        // Pro tab run every row the SS Optimizer scores.
 
         // v12 2026-10-11: Social Security retirement benefits cannot start before
         // age 62. A claim date before then would be priced by extending the early-
