@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Monday, October 12, 2026 at 02:57 PM MST (UTC-7)
+// Last modified: Monday, October 12, 2026 at 05:14 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -41,7 +41,8 @@ import java.util.List;
  *     INNER (per Monte Carlo trial in survivalRatePro):
  *       Given a starting balance and a candidate first-year withdrawal W0,
  *       simulate `horizon` years of stochastic returns and inflation with
- *       spending = W0 * goGoMultiplier(y) * cumInflFactor(y), where
+ *       spending = W0 * goGoMultiplier(y) * cumInflFactor(y), withdrawn at
+ *       the START of each year (v1 2026-10-12: the January transfer), where
  *       cumInflFactor chains the per-year inflation draws multiplicatively
  *       (year 0 = 1.0, year y = product of (1 + infl_k) for k = 1..y).
  *       This is a Bengen-style real-dollar fixed schedule -- no inner
@@ -110,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Monday, October 12, 2026 at 02:57 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, October 12, 2026 at 05:14 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -136,6 +137,149 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         ULT.put(93, 10.1); ULT.put(94,  9.5); ULT.put(95,  8.9);
         ULT.put(96,  8.4); ULT.put(97,  7.8); ULT.put(98,  7.3);
         ULT.put(99,  6.8); ULT.put(100, 6.4);
+        // v1 2026-10-12: extended past 100 (ages 101+ used to fall back to 6.4,
+        // understating late-life RMDs). Values per IRS Pub 590-B Appendix B,
+        // Table III (2022+), checked Oct 2026 against two published reprints.
+        ULT.put(101, 6.0); ULT.put(102, 5.6); ULT.put(103, 5.2);
+        ULT.put(104, 4.9); ULT.put(105, 4.6); ULT.put(106, 4.3);
+        ULT.put(107, 4.1); ULT.put(108, 3.9); ULT.put(109, 3.7);
+        ULT.put(110, 3.5); ULT.put(111, 3.4); ULT.put(112, 3.3);
+        ULT.put(113, 3.1); ULT.put(114, 3.0); ULT.put(115, 2.9);
+        ULT.put(116, 2.8); ULT.put(117, 2.7); ULT.put(118, 2.5);
+        ULT.put(119, 2.3); ULT.put(120, 2.0);   // "120 and over"
+    }
+
+    // ==============================================================
+    // v1 2026-10-12: IRS Joint Life and Last Survivor Expectancy table
+    // (Pub 590-B Appendix B, Table II, 2022+), the cells this tool needs:
+    // owner ages 70-100 with a spouse MORE THAN 10 years younger. Used in
+    // place of the Uniform table when the spouse is alive, on a joint
+    // return, more than 10 years younger, and (assumed) sole beneficiary.
+    //
+    // Rows are stored exactly as the published reprint prints them: a block
+    // header "B <first owner age> <last owner age>", then one row per SPOUSE
+    // age listing the values for consecutive owner ages ENDING at the
+    // block's last owner age (the rows are right-aligned, because a cell
+    // exists only when owner age >= spouse age + 11). The parser below
+    // re-derives every column from that rule and refuses to start if a row
+    // has the wrong number of values.
+    //
+    // Provenance: transcribed Oct 12, 2026 from the Morgan Stanley reprint
+    // of the 2022 IRS table and checked cell by cell against the Baird
+    // reprint of the full IRS grid: 569 of 570 cells agree, and the IRS's own
+    // Pub 590-B example (owner 75, spouse 64 = 25.3) matches. The one
+    // disagreement is owner 90 / spouse 76 (14.7 vs 14.8); the smaller
+    // divisor, 14.7, is used because it gives the larger (conservative) RMD.
+    // Any pair outside these blocks falls back to the Uniform table, whose
+    // smaller divisor also gives a larger (conservative) RMD.
+    // ==============================================================
+    private static final String[] JLT_ROWS = {
+            "B 70 77",
+            "45 41.5 41.5 41.4 41.4 41.3 41.3 41.2 41.2",
+            "46 40.6 40.6 40.5 40.4 40.4 40.3 40.3 40.3",
+            "47 39.7 39.7 39.6 39.5 39.5 39.4 39.4 39.3",
+            "48 38.8 38.8 38.7 38.6 38.6 38.5 38.5 38.4",
+            "49 38.0 37.9 37.8 37.7 37.7 37.6 37.5 37.5",
+            "50 37.1 37.0 36.9 36.8 36.8 36.7 36.6 36.6",
+            "51 36.2 36.1 36.0 36.0 35.9 35.8 35.7 35.7",
+            "52 35.4 35.3 35.2 35.1 35.0 34.9 34.9 34.8",
+            "53 34.6 34.5 34.3 34.2 34.1 34.1 34.0 33.9",
+            "54 33.8 33.6 33.5 33.4 33.3 33.2 33.1 33.0",
+            "55 33.0 32.8 32.7 32.6 32.4 32.4 32.3 32.2",
+            "56 32.2 32.0 31.9 31.7 31.6 31.5 31.4 31.3",
+            "57 31.4 31.2 31.1 30.9 30.8 30.7 30.6 30.5",
+            "58 30.7 30.5 30.3 30.1 30.0 29.9 29.8 29.7",
+            "59 29.9 29.7 29.5 29.4 29.2 29.1 29.0 28.8",
+            "60 29.0 28.8 28.6 28.4 28.3 28.2 28.0",
+            "61 28.1 27.9 27.7 27.5 27.4 27.3",
+            "62 27.2 27.0 26.8 26.6 26.5",
+            "63 26.2 26.1 25.9 25.7",
+            "64 25.3 25.2 25.0",
+            "65 24.4 24.3",
+            "66 23.5",
+            "B 78 85",
+            "53 33.9 33.8 33.7 33.7 33.7 33.6 33.6 33.6",
+            "54 33.0 32.9 32.9 32.8 32.8 32.7 32.7 32.7",
+            "55 32.1 32.0 32.0 31.9 31.9 31.8 31.8 31.8",
+            "56 31.2 31.2 31.1 31.1 31.0 31.0 30.9 30.9",
+            "57 30.4 30.3 30.3 30.2 30.1 30.1 30.0 30.0",
+            "58 29.6 29.5 29.4 29.3 29.3 29.2 29.2 29.1",
+            "59 28.7 28.7 28.6 28.5 28.4 28.4 28.3 28.3",
+            "60 27.9 27.8 27.8 27.7 27.6 27.5 27.5 27.4",
+            "61 27.1 27.0 26.9 26.9 26.8 26.7 26.7 26.6",
+            "62 26.4 26.2 26.1 26.0 26.0 25.9 25.8 25.8",
+            "63 25.6 25.5 25.3 25.2 25.2 25.1 25.0 25.0",
+            "64 24.8 24.7 24.6 24.5 24.4 24.3 24.2 24.1",
+            "65 24.1 23.9 23.8 23.7 23.6 23.5 23.4 23.3",
+            "66 23.4 23.2 23.1 22.9 22.8 22.7 22.6 22.6",
+            "67 22.7 22.5 22.3 22.2 22.1 22.0 21.9 21.8",
+            "68 21.8 21.6 21.5 21.3 21.2 21.1 21.0",
+            "69 20.9 20.7 20.6 20.5 20.4 20.3",
+            "70 20.0 19.9 19.7 19.6 19.5",
+            "71 19.2 19.0 18.9 18.8",
+            "72 18.3 18.2 18.1",
+            "73 17.5 17.4",
+            "74 16.7",
+            "B 86 93",
+            "61 26.6 26.5 26.5 26.4 26.4 26.4 26.4 26.4",
+            "62 25.7 25.7 25.6 25.6 25.6 25.6 25.5 25.5",
+            "63 24.9 24.9 24.8 24.8 24.7 24.7 24.7 24.7",
+            "64 24.1 24.0 24.0 24.0 23.9 23.9 23.9 23.8",
+            "65 23.3 23.2 23.2 23.1 23.1 23.1 23.0 23.0",
+            "66 22.5 22.4 22.4 22.3 22.3 22.3 22.2 22.2",
+            "67 21.7 21.6 21.6 21.5 21.5 21.5 21.4 21.4",
+            "68 20.9 20.9 20.8 20.7 20.7 20.7 20.6 20.6",
+            "69 20.2 20.1 20.0 20.0 19.9 19.9 19.8 19.8",
+            "70 19.4 19.3 19.2 19.2 19.1 19.1 19.0 19.0",
+            "71 18.7 18.6 18.5 18.4 18.4 18.3 18.3 18.2",
+            "72 17.9 17.8 17.7 17.7 17.6 17.5 17.5 17.4",
+            "73 17.2 17.1 17.0 16.9 16.9 16.8 16.7 16.7",
+            "74 16.5 16.4 16.3 16.2 16.1 16.1 16.0 15.9",
+            "75 15.9 15.7 15.6 15.5 15.4 15.3 15.3 15.2",
+            "76 15.1 14.9 14.8 14.7 14.6 14.6 14.5",
+            "77 14.3 14.2 14.1 14.0 13.9 13.8",
+            "78 13.5 13.4 13.3 13.2 13.1",
+            "79 12.8 12.7 12.6 12.5",
+            "80 12.1 11.9 11.9",
+            "81 11.4 11.3",
+            "82 10.7",
+            "B 94 100",
+            "69 19.8 19.7 19.7 19.7 19.7 19.7 19.7",
+            "70 19.0 18.9 18.9 18.9 18.9 18.9 18.9",
+            "71 18.2 18.2 18.1 18.1 18.1 18.1 18.1",
+            "72 17.4 17.4 17.4 17.3 17.3 17.3 17.3",
+            "73 16.6 16.6 16.6 16.6 16.5 16.5 16.5",
+            "74 15.9 15.9 15.8 15.8 15.8 15.7 15.7",
+            "75 15.2 15.1 15.1 15.0 15.0 15.0 15.0",
+            "76 14.4 14.4 14.3 14.3 14.3 14.3 14.2",
+            "77 13.7 13.7 13.6 13.6 13.6 13.5 13.5",
+            "78 13.1 13.0 12.9 12.9 12.9 12.8 12.8",
+            "79 12.4 12.3 12.3 12.2 12.2 12.2 12.1",
+            "80 11.8 11.7 11.6 11.6 11.5 11.5 11.5",
+            "81 11.2 11.1 11.0 11.0 10.9 10.9 10.8",
+            "82 10.6 10.5 10.4 10.4 10.3 10.2 10.2",
+            "83 10.0 9.9 9.9 9.8 9.7 9.7 9.6",
+            "84 9.4 9.3 9.2 9.2 9.1 9.1",
+            "85 8.8 8.7 8.7 8.6 8.5",
+            "86 8.3 8.2 8.1 8.0",
+            "87 7.7 7.6 7.6",
+            "88 7.2 7.2",
+            "89 6.8",
+    };
+    private static final Map<Integer, Double> JLT = new HashMap<>();
+    static {
+        int lo = 0, hi = 0;
+        for (String r : JLT_ROWS) {
+            String[] t = r.trim().split(" ");
+            if (t[0].equals("B")) { lo = Integer.parseInt(t[1]); hi = Integer.parseInt(t[2]); continue; }
+            int spouse = Integer.parseInt(t[0]);
+            int n = t.length - 1;
+            int first = hi - n + 1;
+            if (first != Math.max(lo, spouse + 11))
+                throw new IllegalStateException("JLT row misaligned: block " + lo + "-" + hi + ", spouse " + spouse);
+            for (int k = 0; k < n; k++)
+                JLT.put((first + k) * 1000 + spouse, Double.parseDouble(t[k + 1]));
+        }
     }
 
     // Column indices for the Pro table
@@ -855,7 +999,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "new RMD overage. The simulation <b>never spends it</b> (informational<br>"
                 + "buffer, like the rest of Money Mkt (total)).<br><br>"
                 + "<b>Excluded from Portfolio balance</b> (Option A): the Portfolio column is<br>"
-                + "the money the sim actually draws on (qualified + spendable taxable).<br>"
+                + "the money the sim actually draws on (Traditional + Roth).<br>"
                 + "Your ACTUAL total = Portfolio balance + Money Mkt (total). Because this<br>"
                 + "reserve is walled off from spending, it is NOT added to the Account<br>"
                 + "total above and does NOT redistribute into the qualified accounts.</html>");
@@ -1073,12 +1217,21 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "growing series and are excluded from this &quot;core&quot; figure.<br><br>"
                 + "See Assumptions &amp; Methods section 2 for the full basis. The 1961-2024<br>"
                 + "historical average is 3.79% and is available as a stress-case setting.<br>"
-                + "Update at least annually.</html>");
+                + "Update at least annually.<br><br>"
+                + "<b>Simulated draws (v1):</b> each year's draw is floored at 0% (no deflation,<br>"
+                + "so Social Security never gets a negative COLA), and the draws are centred<br>"
+                + "so that, after the floor, they still average <b>exactly</b> this figure. See<br>"
+                + "Assumptions &amp; Methods section 2.</html>");
         spInflationStdDev = spinD(2.73,  0.0, 10.0, 0.01, "0.00#");
         spInflationStdDev.setToolTipText("<html><b>Inflation standard deviation (%/yr)</b><br>"
                 + "Year-to-year volatility of inflation, from the 1961-2024 historical CPI series.<br>"
                 + "Paired with the mean inflation above for the stochastic inflation draws.<br>"
-                + "Default 2.73%.</html>");
+                + "Default 2.73%.<br><br>"
+                + "<b>0% floor (v1):</b> a draw below 0% is set to 0%, and the underlying mean is<br>"
+                + "shifted down so the average stays at the mean you entered (1.91% centre for<br>"
+                + "2.3% / 2.73%). At these settings about 1 year in 4 lands on 0%. The 2.73%<br>"
+                + "comes from years that averaged 3.79% inflation, so a lower forward SD is a<br>"
+                + "reasonable input choice. See Assumptions &amp; Methods section 2.</html>");
         inner.add(card("Market Assumptions (1961-2024 Historical)", new Object[]{
                 "Expected nominal return (%)",  spNomReturn,
                 "Return std deviation (%)",     spStdDev,
@@ -1822,7 +1975,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         lblAnswer.setFont(new Font("SansSerif", Font.BOLD, 32));
         lblAnswer.setForeground(new Color(15, 80, 150));
         lblAnswer.setToolTipText("<html><b>What this number is</b><br>"
-                + "The <b>maximum</b> you can withdraw from the portfolio in Year 1 and still<br>"
+                + "The <b>maximum</b> you can withdraw from the portfolio in the first withdrawal<br>"
+                + "year (the first drawing row of the table) and still<br>"
                 + "hit your Probability-of-Success target -- found by binary search, not a<br>"
                 + "single guessed rate. It is what you <b>can</b> pull, not what you <b>need</b>.<br><br>"
                 + "<b>Guaranteed income is deliberately excluded.</b> Social Security and the<br>"
@@ -1991,7 +2145,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                 + " stochastic fan paths at this year.<br>"
                                 + "More conservative and accurate than a mean-return path.<br><br>"
                                 + "<b>This column is the money the simulation actually draws on</b><br>"
-                                + "(qualified accounts + spendable taxable). It does NOT include<br>"
+                                + "(Traditional + Roth accounts). It does NOT include<br>"
                                 + "the Money Mkt (total) reserve, which is real, already-taxed<br>"
                                 + "cash the sim leaves untouched.<br><br>"
                                 + "<b>Your ACTUAL total is Portfolio + Money Mkt (total):</b><br>"
@@ -2506,7 +2660,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "= Pro PoS withdrawal x the spending multiplier for that<br>"
                             + "year -- go-go, slow-go, or 1.000 in the no-go years.<br>"
                             + "Hover any cell to see which tier applies and the arithmetic.<br>"
-                            + "This is the amount spent and deducted from the portfolio each year.<br>"
+                            + "This is the amount spent and deducted from the portfolio each year,<br>"
+                            + "at the START of the year (the January transfer, v1).<br>"
                             + "Actual wd = Pro PoS wd x the spending multiplier for that year,<br>"
                             + "PLUS any SS bridge draw (see the SS bridge column). The bridge<br>"
                             + "is added AFTER the multiplier, so in bridge years Actual wd is<br>"
@@ -2597,10 +2752,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "costs $1.45 in that year -- or a $100K withdrawal is worth only $69K today.</html>";
                     case 18 -> "<html><b>User RMD</b><br>"
                             + "Required Minimum Distribution from the user's traditional IRA + 401K.<br>"
-                            + "Begins age 75 (SECURE 2.0, born after 1960).</html>";
+                            + "Begins age 75 (SECURE 2.0, born after 1960). Based on the prior<br>"
+                            + "December 31 balance; uses the Joint Life table when the spouse is<br>"
+                            + "more than 10 years younger (Assumptions section 9).</html>";
                     case 19 -> "<html><b>Spouse RMD</b><br>"
                             + "Required Minimum Distribution from the spouse's traditional IRA + 401K.<br>"
-                            + "Begins age 75 (SECURE 2.0, born after 1960).</html>";
+                            + "Begins age 75 (SECURE 2.0, born after 1960). Based on the prior<br>"
+                            + "December 31 balance; uses the Joint Life table when the user is<br>"
+                            + "more than 10 years younger (Assumptions section 9).</html>";
                     case 20 -> "<html><b>Combined RMD</b><br>"
                             + "Sum of User + Spouse RMDs.<br>"
                             + "Orange = RMD exceeds planned withdrawal; overage retained in Money Mkt (v8).</html>";
@@ -2649,7 +2808,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "binding ceiling (the lower of your selected IRMAA cliff minus buffer,<br>"
                             + "and your selected tax-bracket top), then capped. A separate Traditional<br>"
                             + "distribution: gross from the Traditional IRAs, net into the two Roth<br>"
-                            + "IRAs. Raises MAGI (IRMAA) but is NOT in the Tax column. Hover a cell.</html>";
+                            + "IRAs. Raises MAGI (IRMAA) but is NOT in the Tax column.<br>"
+                            + "Taken in late December, AFTER the year's RMD and January withdrawal<br>"
+                            + "(an RMD can never be converted), and capped at the Traditional balance<br>"
+                            + "left after that withdrawal. Hover a cell.</html>";
                     case COL_CONV_TAX -> "<html><b>Conv Tax -- tax on this year's Roth conversion</b><br>"
                             + "The stacked marginal tax (federal + AZ 2.5%) the conversion adds on<br>"
                             + "top of your living-expenses taxable income. Paid FROM the conversion<br>"
@@ -3167,6 +3329,17 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "(median) balance, so withdrawals adapt to portfolio drift rather than following a fixed schedule. "
                 + "The intended workflow is frequent re-running (the sustainable dollar figure moves with the "
                 + "current balance and other live inputs).</p>"
+                + "<p><b>Order within each year (v1 2026-10-12).</b> The PoS solver, the fan paths, the table and "
+                + "GK all run one sequence that matches the January-transfer practice in section 6b: (1) the RMD "
+                + "is set from the prior December 31 Traditional balance; (2) in January the whole year's "
+                + "withdrawal (Actual wd, SS bridge included) leaves the portfolio &mdash; Traditional first, so it "
+                + "counts toward the RMD, then Roth; (3) only what stays invested earns the year's return; (4) in "
+                + "late December the Roth conversion is sized on the income already known and taken from the "
+                + "Traditional balance left. Before this date the withdrawal left at year end, after a full year "
+                + "of market return it never earns, which overstated the sustainable withdrawal by about 3%. The "
+                + "spending money earns nothing in the model while it sits in cash, which is slightly conservative. "
+                + "The <b>headline</b> is the first withdrawal year's Pro PoS withdrawal (the first drawing row), and "
+                + "a first year that starts after January is prorated by the start month in every engine.</p>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec1a'></a>1a. Engine parameters &mdash; solve paths, binary-search iterations, fan paths</h3>"
@@ -3195,7 +3368,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "the <b>most expensive kind of path</b> in the engine. To keep that affordable, a fan path's annual re-solve "
                 + "uses a <b>reduced solver</b>: solve paths &divide; 8 (minimum 20) and at most 10 binary-search iterations "
                 + "&mdash; at the defaults, 125 paths &times; 10 iterations instead of 1,000 &times; 25. The median table "
-                + "and the year-1 withdrawal use the full settings. Fewer fan paths make the fan and the PoS reading noisier "
+                + "(and the headline, which is its first withdrawal row) uses the full settings. Fewer fan paths make the fan and the PoS reading noisier "
                 + "without biasing them. Accuracy ladder: <b>50</b> = rough but usable for a quick check; <b>100</b> = ~4&times; "
                 + "faster than default but visibly choppier; <b>400</b> = smooth fan, stable PoS. The default <b>500</b> is a "
                 + "half-step above that for the steadiest run-to-run PoS readout. The displayed year-by-year table is the median "
@@ -3269,7 +3442,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "equity volatility is more stable than long-run mean return, so retaining the historical "
                 + "volatility while using a forward mean is standard practice. Volatility, not average return, "
                 + "dominates sequence-of-returns risk and the sustainable withdrawal.</li>"
-                + "<li>Inflation standard deviation: 2.73% (1961-2024 historical CPI).</li>"
+                + "<li>Inflation standard deviation: 2.73% (1961-2024 historical CPI). <b>Each year's draw is "
+                + "floored at 0%</b> &mdash; no deflation, which keeps Social Security legally correct (there is no "
+                + "negative COLA). A floor alone raises the average: at 2.3% and 2.73% about 20% of draws fall below "
+                + "zero, and flooring them lifted the simulated mean to 2.61% and the median 30-year price level "
+                + "about 8% above the entered rate. Since v1 (2026-10-12) the draws are centred on a lower mean "
+                + "(1.91% for these inputs) chosen so the floored draws average <b>exactly</b> the entered mean, "
+                + "which also matches the 2.3% the deterministic helpers (conversion sizing, SS bridge) use.</li>"
                 + "<li>Social Security COLA: 2.4% (matches SSA Trustees intermediate assumption). Always "
                 + "used for the gap years from the PIA as-of year to the simulation start year; from the "
                 + "start year on, used only when <i>SS COLA tracks simulated inflation</i> is off (it is on "
@@ -3670,6 +3849,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "touch the income you have already set; it just changes what next year's re-solve will hand you. This also "
                 + "keeps the IRA distribution to one clean annual event, which is far easier for tax withholding, RMD "
                 + "reconciliation and Roth-conversion planning than twelve scattered withdrawals.</p>"
+                + "<p><b>The engine models exactly this (v1 2026-10-12):</b> each simulated year takes Actual wd out "
+                + "at the start of the year, lets only the rest earn the year's return, and sizes the Roth "
+                + "conversion in late December. See section 1.</p>"
                 + "<p><b>The one reason to re-solve off-cycle.</b> Re-run and reset mid-year only for a genuine "
                 + "<i>structural</i> change &mdash; a large unplanned expense or windfall, the death of a spouse (which "
                 + "changes filing status and SS), a home sale, or a health event that shifts the planning horizon. Those "
@@ -3718,6 +3900,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "into the living-expenses tax. Each conversion:</p>"
                 + "<ul>"
                 + "<li>Gross amount comes proportionally from the Traditional IRA accounts.</li>"
+                + "<li><b>Timing (v1 2026-10-12):</b> late December, after the year's RMD and January "
+                + "withdrawal. An RMD can never be converted &mdash; in an RMD year the first dollars out of an "
+                + "IRA count toward the RMD (Treas. Reg. 1.408A-4, Q&amp;A-6) &mdash; so the RMD is always "
+                + "satisfied first, and a conversion lowers only <i>future</i> RMDs, by shrinking the next "
+                + "December 31 balance. The conversion is sized on the actual Traditional draw, SS bridge "
+                + "included, and capped at the Traditional balance left after it.</li>"
                 + "<li>Its tax (Conv Tax column) is the <b>stacked marginal</b> tax it adds on top of the "
                 + "living-expenses taxable income: tax(living + conversion) &minus; tax(living), plus the "
                 + "selected state's tax on the conversion. It does not get its own standard deduction "
@@ -3849,7 +4037,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "and the Stress Test spend on one schedule. Slow-go rows are shaded the same paler green as on "
                 + "the Pro PoS tab. Before that date the GK engine applied go-go only and ran slow-go years at "
                 + "1.0&times;. The guardrail rules still judge the GK withdrawal itself; the multiplier scales "
-                + "only Actual wd, which is what leaves the portfolio. The GK tab is provided as a comparison "
+                + "only Actual wd, which is what leaves the portfolio. Since v1 (2026-10-12) GK also withdraws at "
+                + "the start of the year, as the Pro PoS engine does, and its RMD buckets take each RMD at the "
+                + "start of the year and use the Joint Life table when it applies. The GK tab is provided as a comparison "
                 + "overlay and as the engine behind the Stress Test tab &mdash; it is NOT the recommended "
                 + "planning method.</p>"
                 + "<p><b>The core problem with ALL withdrawal-rate methods.</b> The 4% rule and its dynamic "
@@ -3888,8 +4078,27 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec9'></a>9. RMDs, additional v9 stress inputs, and deliberately omitted features</h3>"
-                + "<p><b>RMDs:</b> SECURE 2.0, begin at age 75 (born after 1960), computed from the IRS Uniform "
-                + "Lifetime Table on median Traditional-account balances.</p>"
+                + "<p><b>RMDs:</b> SECURE 2.0, begin at age 75 (born after 1960). Each year's RMD is the "
+                + "<b>prior December 31</b> Traditional balance divided by the IRS distribution period (each fan "
+                + "path its own balance; the table its median balance). Since v1 (2026-10-12):</p>"
+                + "<ul>"
+                + "<li><b>Uniform Lifetime Table to 120+.</b> Ages 101 and older used to fall back to the age-100 "
+                + "divisor (6.4), understating late-life RMDs; the table now runs to &quot;120 and over&quot; (2.0). "
+                + "Values per IRS Pub 590-B Appendix B, Table III, checked against two published reprints.</li>"
+                + "<li><b>Joint Life and Last Survivor Table.</b> Used instead of the Uniform table for an owner's "
+                + "share when the other spouse is alive, the return is joint, and that spouse is <b>more than 10 "
+                + "years younger</b> (ages attained that year). The spouse is <b>assumed to be the sole "
+                + "beneficiary</b>, which the IRS requires. The cells cover owner ages 70&ndash;100 with a spouse "
+                + "11 to roughly 25&ndash;30 years younger, transcribed from a published reprint of the IRS table "
+                + "and checked cell by cell against a second: 569 of 570 agree, and the one disagreement (owner "
+                + "90, spouse 76: 14.7 vs 14.8) uses the smaller divisor. Pairs outside that range fall back to "
+                + "the Uniform table, whose smaller divisor gives a larger, conservative RMD. Survivor years "
+                + "always use the Uniform table: the survivor has rolled the IRA into their own.</li>"
+                + "<li><b>Single filers own all of Traditional.</b> Single mode zeroes the spouse's birth year, and "
+                + "the RMD split used to treat half of Traditional as belonging to a spouse whose &quot;age&quot; "
+                + "was the calendar year, producing a large phantom RMD from the first year. A single filer's RMD "
+                + "now follows their own age alone.</li>"
+                + "</ul>"
 
                 + "<p><b>Death event (mid-projection).</b> The <i>Death event</i> and <i>Year of death</i> inputs "
                 + "(Tax Engine (v3) card) make one spouse die in a chosen calendar year. Beginning the year "
@@ -4430,8 +4639,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *                  slow-go years identified by their windows, not multiplier
      *                  values; Survivor SS and SS at full claim read from the engine
      *                  rows in today's dollars. The row format gains four columns.
+     *  10  2026-10-12  start-of-year (January) withdrawal in the solver and fan
+     *                  paths; fan RMDs on the prior Dec 31 balance; RMD/draw before
+     *                  the December conversion, sized on the actual Traditional
+     *                  draw (SS bridge included); inflation draws centred so the
+     *                  floored average equals the entered mean; first-year
+     *                  proration in the fan paths and solver; Joint Life table and
+     *                  divisors to 120+; single filers own all of Traditional.
+     *                  Every scored row moves.
      */
-    private static final int SCORER_VERSION = 9;
+    private static final int SCORER_VERSION = 10;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -5767,7 +5984,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             "manSSStartYear", "manSSStartMonth", "womanSSStartYear", "womanSSStartMonth",
             "manSSMonthly",   "womanSSMonthly",  "manSSAmount",      "womanSSAmount",
             "gkPreRate",      "gkUpperGuardrail", "gkLowerGuardrail",
-            "proPosUpperGuardrail", "proPosLowerGuardrail");
+            "proPosUpperGuardrail", "proPosLowerGuardrail",
+            // v1 2026-10-12: a lazily cached function of inflation + its SD (both
+            // hashed). Hashing it would make the fingerprint depend on whether the
+            // cache had been filled yet -- NaN before a run, a number after.
+            "inflDrawMean");
 
     private String batchFingerprint(BatchCfg c) {
         SimInputs in = c.base;
@@ -8704,9 +8925,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         res.fanWithdrawals = new double[fanPaths][inp.horizon];
         res.fanInflFactors = new double[fanPaths][inp.horizon + 1];
 
-        // v6: two combined buckets tracked as tagged sub-components of the same
-        // total portfolio b (tradBal + rothBal <= b; the remainder is taxable /
-        // other). tradBal seeds from ALL Traditional accounts (his+her IRA+401k);
+        // v6: two combined buckets that together ARE the portfolio b
+        // (tradBal + rothBal == b; v1 2026-10-12 removed the always-zero taxable
+        // bucket). tradBal seeds from ALL Traditional accounts (his+her IRA+401k);
         // rothBal from ALL Roth accounts. Spending is drawn Traditional-FIRST so
         // the RMD base bleeds down; Roth conversions move tradBal -> rothBal (net
         // of conversion tax, which leaves the asset base); RMDs are computed off
@@ -8719,40 +8940,27 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // v6: one bridge schedule shared by the fan paths, the solver and the
         // display, so the extra drawdown is identical in all three.
         double[] ssBridge = buildSsBridgeSchedule(inp);
-        double[][] fpMM   = new double[fanPaths][inp.horizon + 1];  // v6: Money Market (taxable)
 
         for (int p = 0; p < fanPaths; p++) {
             SeededRng rng = new SeededRng(p * 17 + 11 + seed);
-            double b  = inp.portfolio;
             double trad = (double) inp.manTradIRA + inp.manTrad401K
                     + inp.womanTradIRA + inp.womanTrad401K;
             double roth = (double) inp.manRothIRA + inp.manRoth401K
                     + inp.womanRothIRA + inp.womanRoth401K;
-            // v6 fix: taxable/other is whatever the total portfolio exceeds the
-            // qualified accounts. The invariant trad + roth + taxable == b then
-            // holds every year by construction -- no rescale, so the buckets
-            // reconcile with each other and with the conversion.
-            double taxable = Math.max(0, b - trad - roth);
-            // v8: separate never-drawn money-market reserve. Seeds at 0 and only
-            // ever grows by retained RMD overage (see the draw block below). It
-            // is part of the portfolio total b and of Money Mkt (total), but the
-            // spending waterfall never touches it.
-            double mmReserve = 0;
+            // v1 2026-10-12: the portfolio IS Traditional + Roth. readInputs sets
+            // inp.portfolio to the sum of the same eight accounts, so this equals
+            // inp.portfolio exactly; the old taxable bucket (always $0) and its
+            // scale-to-fit guard (never triggered) are gone.
+            double b  = trad + roth;
             // v12 2026-10-03: this path's own copy of the Money Mkt (total) reserve
             // -- the prior carry-in plus retained overage, grown at the path's
             // inflation -- so its interest can enter MAGI exactly as the display
             // loop's does. Never drawn; it only feeds the conversion sizing.
             double mmPath = Math.max(0, inp.mmPrior);
-            // If the qualified inputs exceed the stated portfolio, scale them to
-            // fit b so the invariant still holds at t0.
-            if (trad + roth > b && (trad + roth) > 0) {
-                double sc = b / (trad + roth);
-                trad *= sc; roth *= sc; taxable = 0;
-            }
 
             res.fanBalances[p][0]    = b;
             res.fanInflFactors[p][0] = 1.0;
-            fpTrad[p][0] = trad; fpRoth[p][0] = roth; fpMM[p][0] = taxable;
+            fpTrad[p][0] = trad; fpRoth[p][0] = roth;
 
             // v6: this path's inflation basis for SS, so SS can ride the path's own
             // inflation when ssColaTracksInflation is on.
@@ -8768,7 +8976,6 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 int manAge   = calYear - inp.manBirthYear;
                 int womanAge = calYear - inp.womanBirthYear;
                 boolean drawing = calYear >= inp.withdrawStartYear;
-                boolean survivor = isSurvivorYear(inp, calYear);
 
                 double[] ri1 = getReturnAndInflation(inp, y, rng);
                 double ret   = ri1[0];
@@ -8792,90 +8999,92 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             java.util.Arrays.copyOfRange(ssBridge, y, ssBridge.length));
                 }
                 double mult   = spendMultFor(inp, y, startY);   // v6
-                int wdActual  = drawing ? (int)(wd * mult) : 0;
+                // v1 2026-10-12: prorate the first drawing year by the withdrawal
+                // start month, exactly as the displayed table and GK already do.
+                double startPror = (drawing && calYear == inp.withdrawStartYear)
+                        ? (13.0 - inp.withdrawStartMonth) / 12.0 : 1.0;
+                int wdActual  = drawing ? (int)(wd * mult * startPror) : 0;
                 res.fanWithdrawals[p][y] = wdActual;
 
-                // --- growth on every component; b is DERIVED as their sum, so
-                //     the invariant trad + roth + taxable == b holds exactly. ---
-                trad    = trad    * (1 + ret);
-                roth    = roth    * (1 + ret);
-                taxable = taxable * (1 + ret);
-
-                // --- combined RMD (share-split, survivor-aware) off tradBal ---
+                // --- combined RMD (share-split, survivor-aware) on the PRIOR
+                //     DECEMBER 31 Traditional balance -- this year's start, before
+                //     any growth (v1 2026-10-12; it used the grown balance). It
+                //     floors the Traditional draw below, and that draw is what the
+                //     conversion helpers size against. ---
                 double rmd = combinedRmd(inp, trad, calYear, manAge, womanAge);
 
-                // --- Roth conversion (fill or flat): gross moves trad -> roth;
-                //     the conversion TAX leaves the asset base, paid from taxable
-                //     first then from the converted Roth if taxable is short. ---
+                // --- JANUARY spending draw, BEFORE the year's growth (v1
+                //     2026-10-12: it came after growth, so the year's spending money
+                //     earned a full year of market return it never gets -- it sits
+                //     in cash from January). Traditional FIRST (the RMD floors the
+                //     Traditional draw, and the first dollars out of an IRA count
+                //     toward the RMD), then Roth. The RMD is at most half the start
+                //     balance (smallest divisor 2.0), so it is always fundable. ---
+                // v6: the SS bridge is spent on top of the normal draw, so the
+                // portfolio carries the full cost of delaying.
+                double wdWithBridge = wdActual + ssBridge[y];
+                double tradDraw = Math.max(rmd, Math.min(wdWithBridge, Math.max(0, trad)));
+                trad = Math.max(0, trad - tradDraw);
+                // v8: retained RMD overage goes to the Money Mkt (total) reserve.
+                // The DISPLAYED column comes from an exact-tie-out accumulator at
+                // display time (mmPrior + cumulative overage); mmPath is this path's
+                // copy, used only for its interest in the conversion sizing.
+                // v12 2026-10-03: the reserve is EARMARKED for sequence-of-returns
+                // protection -- in a down market Bob draws living expenses from the
+                // money market BEFORE drawing down the IRA accounts, so equities are
+                // not sold at depressed prices. That is also why it does not pay
+                // Roth-conversion tax. The sim does not model the down-market draw;
+                // the reserve simply accumulates and is never drawn here.
+                mmPath    += Math.max(0, tradDraw - wdWithBridge);   // v12: same overage
+                double need = Math.max(0, wdWithBridge - tradDraw);
+                double rothDraw = Math.min(need, Math.max(0, roth));
+                roth = Math.max(0, roth - rothDraw);
+
+                // --- growth on what REMAINS INVESTED after the January draw;
+                //     b is DERIVED as the sum, so trad + roth == b exactly. ---
+                trad    = trad    * (1 + ret);
+                roth    = roth    * (1 + ret);
+
+                // --- LATE-DECEMBER Roth conversion (fill or flat), AFTER the year's
+                //     RMD and spending draw (v1 2026-10-12; it ran before them,
+                //     which let a conversion empty Traditional and then "draw" the
+                //     RMD from $0, and an RMD can never be converted). It is sized
+                //     on the ACTUAL Traditional draw -- RMD and SS bridge included
+                //     -- as the displayed table does, and capped at the Traditional
+                //     balance left after that draw and the year's growth. The gross
+                //     leaves Traditional, the conversion TAX is deducted from the
+                //     gross, and only the net lands in Roth -- the documented rule
+                //     (Assumptions sec. 7). The tax leaves the asset base. ---
                 if (drawing && inp.computedTax) {
                     double convGross = fanConversion(inp, y, calYear, manAge,
-                            womanAge, trad, roth, survivor, wdActual,
+                            womanAge, tradDraw,
                             res.fanInflFactors[p][y], pManStartInfl, pWomanStartInfl,
                             mmIntPath);
                     convGross = Math.min(convGross, Math.max(0, trad));
                     if (convGross > 0) {
                         fpConv[p][y] = convGross;      // v6: record for display consistency
                         double convNet = fanConversionNet(inp, y, calYear, manAge,
-                                womanAge, trad, roth, convGross, survivor, wdActual,
+                                womanAge, tradDraw, convGross,
                                 res.fanInflFactors[p][y], pManStartInfl, pWomanStartInfl,
                                 mmIntPath);
                         double convTax = Math.max(0, convGross - Math.max(0, convNet));
                         trad -= convGross;              // gross leaves Traditional
                         roth += convGross;              // gross lands in Roth...
-                        // ...then the tax is paid: from taxable first, remainder
-                        // from the just-converted Roth. Tax leaves the base.
-                        double fromTaxable = Math.min(convTax, taxable);
-                        taxable -= fromTaxable;
-                        roth    -= (convTax - fromTaxable);
-                        roth     = Math.max(0, roth);
+                        roth -= convTax;                // ...less the tax: net = gross - tax
+                        roth  = Math.max(0, roth);
                     }
                 }
 
-                // --- spending: Traditional FIRST (RMD floors the Traditional
-                //     draw), then taxable, then Roth last. ---
-                // v6: the SS bridge is spent on top of the normal draw, so the
-                // portfolio carries the full cost of delaying.
-                double wdWithBridge = wdActual + ssBridge[y];
-                double tradDraw = Math.max(rmd, Math.min(wdWithBridge, Math.max(0, trad)));
-                trad = Math.max(0, trad - tradDraw);
-                // v8: retained RMD overage. The DISPLAYED Money Mkt (total) now
-                // comes from an exact-tie-out accumulator at display time
-                // (mmPrior + cumulative overage), so this in-sim mmReserve no
-                // longer feeds the column or the balance. v12 2026-10-03: the
-                // reserve is EARMARKED for sequence-of-returns protection -- in a
-                // down market Bob draws living expenses from the money market
-                // BEFORE drawing down the IRA accounts, so equities are not sold
-                // at depressed prices. That is also why it does not pay Roth-
-                // conversion tax. The sim does not model the down-market draw; the
-                // reserve simply accumulates and is never drawn here.
-                mmReserve += Math.max(0, tradDraw - wdWithBridge);
-                mmPath    += Math.max(0, tradDraw - wdWithBridge);   // v12: same overage
-                double need = Math.max(0, wdWithBridge - tradDraw);
-                double taxDraw = Math.min(need, Math.max(0, taxable));
-                taxable = Math.max(0, taxable - taxDraw);
-                need -= taxDraw;
-                double rothDraw = Math.min(need, Math.max(0, roth));
-                roth = Math.max(0, roth - rothDraw);
-
-                // --- b is the sum of the DRAWABLE components: the invariant,
-                //     not an independent quantity. v8 Option A: the never-drawn
-                //     mmReserve is EXCLUDED from b, so the displayed "Portfolio
-                //     balance" column is exactly the money the sim draws on
-                //     (trad + roth + taxable). The reserve is shown separately in
-                //     "Money Mkt (total)"; ACTUAL total = Portfolio + Money Mkt.
-                //     Since mmReserve is never drawn, excluding it here changes no
-                //     withdrawal decision -- it only cleans up the display split.
-                b = trad + roth + taxable;
+                // --- b is the sum of the DRAWABLE components: the invariant, not
+                //     an independent quantity. v8 Option A: the never-drawn reserve
+                //     is EXCLUDED from b, so the displayed "Portfolio balance"
+                //     column is exactly the money the sim draws on (Traditional +
+                //     Roth). The reserve is shown separately in "Money Mkt (total)";
+                //     ACTUAL total = Portfolio + Money Mkt.
+                b = trad + roth;
 
                 res.fanBalances[p][y + 1] = b;
                 fpTrad[p][y + 1] = trad; fpRoth[p][y + 1] = roth;
-                // v8 Option A: fpMM tracks only the spendable taxable bucket, and
-                // it is a fraction of the DRAWABLE balance b (which excludes the
-                // reserve). The Money Mkt (total) column is no longer taken from
-                // fpMM at all -- it is the exact-tie-out reserve accumulated at
-                // display time (mmPrior + cumulative overage). fpMM is retained
-                // only for the Trad/Roth/taxable fraction bookkeeping.
-                fpMM[p][y + 1] = taxable;
             }
         }
 
@@ -8892,9 +9101,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         res.medianFinalBalance = (int) finals[fanPaths / 2];
 
         // == Step 3: Year-1 withdrawal =====================================
-        int yr1Wd = solveWithdrawalPro(inp.portfolio, inp.baseYear, inp.horizon,
-                inp, 999L + seed, solvePaths, binIters, inp.goGoDuration, ssBridge);
-        res.yr1Withdrawal = yr1Wd;
+        // v1 2026-10-12: the headline is the FIRST DRAWING ROW's Pro PoS
+        // withdrawal, captured in the display loop below, with that row's median
+        // balance as its base. It used to be a separate solve from the SIMULATION
+        // start year, which -- when the simulation starts before withdrawals --
+        // assumed draws (and go-go spending) a year early. When the two years are
+        // the same, the row's solve has exactly the inputs the old solve had
+        // (balance, horizon, seed, settings, go-go window, bridge), so the
+        // headline is unchanged in that case.
+        int yr1Wd = 0, yr1Bal = 0;
+        boolean yr1Set = false;
 
         // == Step 4: Median-path display ===================================
         // v6 FINAL: the table shows the TRUE per-year 50th-percentile balance
@@ -8934,7 +9150,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // v3: MAGI history for the IRMAA 2-year lookback (index by sim year).
         double[] magiHistory = new double[inp.horizon];
         // v8: exact-tie-out Money Mkt (total) reserve. This REPLACES the old
-        // median-composite (medBal * mFrac) for the displayed Money Mkt column,
+        // median-composite (median balance x a median fraction) for the Money Mkt column,
         // which wobbled and lagged because it recombined independent per-year
         // medians. The reserve starts at the user's prior-years carry-in
         // (mmPrior) and each year (a) GROWS at that year's median inflation rate
@@ -8962,27 +9178,23 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             // median balance. Fractions (not dollars) are averaged across paths
             // so the split stays smooth even as individual paths diverge.
             double[] tfArr = new double[fanPaths], rfArr = new double[fanPaths];
-            double[] mfArr = new double[fanPaths];
             for (int p = 0; p < fanPaths; p++) {
                 double bp = res.fanBalances[p][y];
                 if (bp > 1) {
                     tfArr[p] = fpTrad[p][y] / bp;
                     rfArr[p] = fpRoth[p][y] / bp;
-                    mfArr[p] = fpMM[p][y]   / bp;
                 }
             }
-            Arrays.sort(tfArr); Arrays.sort(rfArr); Arrays.sort(mfArr);
+            Arrays.sort(tfArr); Arrays.sort(rfArr);
             double tFrac = tfArr[fanPaths / 2], rFrac = rfArr[fanPaths / 2];
-            double mFrac = mfArr[fanPaths / 2];
             // Independent medians could in principle sum above 1; scale to fit
-            // so trad + roth + money market never exceeds the displayed balance.
-            if (tFrac + rFrac + mFrac > 1.0) {
-                double sc = 1.0 / (tFrac + rFrac + mFrac);
-                tFrac *= sc; rFrac *= sc; mFrac *= sc;
+            // so trad + roth never exceeds the displayed balance.
+            if (tFrac + rFrac > 1.0) {
+                double sc = 1.0 / (tFrac + rFrac);
+                tFrac *= sc; rFrac *= sc;
             }
             double medTrad = medBal * tFrac;
             double medRoth = medBal * rFrac;
-            double medMM   = medBal * mFrac;
 
             int goGoRem = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
             int wd = drawing && medBal > 0
@@ -8990,15 +9202,19 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     inp, 999L + y * 37 + seed, solvePaths, binIters, goGoRem,
                     java.util.Arrays.copyOfRange(ssBridge, y, ssBridge.length))
                     : 0;
+            // v1 2026-10-12: the headline comes from the first drawing row.
+            if (drawing && !yr1Set) { yr1Wd = wd; yr1Bal = medBal; yr1Set = true; }
 
             // Share-split, survivor-aware RMD. The User/Spouse split is for the
             // display columns; combRmd is the total that drives ordinary income.
             double hs = inp.hisRmdShare, ws = inp.herRmdShare;
             if (isSurvivorYear(inp, calYear)) {
                 if (inp.deathWho == 1) { hs = 0; ws = 1; } else { hs = 1; ws = 0; }
+            } else if (filingFor(inp, calYear) == TaxEngine.FilingStatus.SINGLE) {
+                hs = 1; ws = 0;   // v1 2026-10-12: a single filer owns all of Traditional
             }
-            double manRmd   = calcRmd(medTrad * hs, manAge);
-            double womanRmd = calcRmd(medTrad * ws, womanAge);
+            double manRmd   = ownerRmd(inp, medTrad * hs, calYear, true,  manAge, womanAge);   // v1: Joint table aware
+            double womanRmd = ownerRmd(inp, medTrad * ws, calYear, false, manAge, womanAge);
             double combRmd  = manRmd + womanRmd;
 
             double goGoMult  = spendMultFor(inp, y, startY);   // v6
@@ -9109,9 +9325,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 double grossSS = manSS + womanSS;
                 // v6 FIX: only the portion of the withdrawal that actually comes
                 // OUT OF TRADITIONAL is ordinary income. The spending order is
-                // Traditional -> Money Market -> Roth, so once Traditional is
-                // exhausted the draw is Roth (tax-free) or Money Market (basis
-                // already taxed) and must NOT be taxed as an IRA distribution.
+                // Traditional -> Roth (v1 2026-10-12: the money market is never
+                // drawn), so once Traditional is exhausted the draw is Roth
+                // (tax-free) and must NOT be taxed as an IRA distribution.
                 // Previously this used the FULL withdrawal, which taxed tax-free
                 // Roth dollars as ordinary income and overstated late-life tax by
                 // roughly $20K/yr once Traditional ran out. The RMD still floors
@@ -9164,8 +9380,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 // v6: the conversion can never exceed the Traditional balance
                 // actually available on the displayed median split -- otherwise
                 // the Roth Conv column would show a conversion the Trad Bal
-                // column cannot fund.
-                conv = Math.max(0, Math.min(conv, medTrad));
+                // column cannot fund. v1 2026-10-12: available means AFTER this
+                // year's Traditional draw -- money withdrawn in January cannot be
+                // converted in December. (Growth is left out: the median table has
+                // no single-path return, so the cap is slightly conservative.)
+                conv = Math.max(0, Math.min(conv, Math.max(0, medTrad - tradDraw)));
                 convThisYear = (int) conv;
                 // v12 2026-10-11: extra taxable SS this conversion causes (0 when SS is
                 // already 85% taxable or there is no benefit/conversion).
@@ -9261,7 +9480,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             String alert = "--";
             // GUARDRAIL (fixed in v2): compare the current-year WITHDRAWAL RATE
             // (actual draw / current balance) against the YEAR-1 withdrawal rate
-            // (yr1Wd / portfolio). The prior version compared re-solved dollar
+            // (yr1Wd / yr1Bal, the first drawing row -- v1 2026-10-12; it was the
+            // simulation-start portfolio). The prior version compared re-solved dollar
             // draws across a SHRINKING remaining horizon; because a shorter horizon
             // always supports a larger sustainable draw, that comparison drifted
             // upward over time and tripped spurious raise-alerts in late years even
@@ -9270,9 +9490,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             // dividing each side by its own go-go multiplier so the rate reflects
             // the underlying base draw, not the temporary go-go uplift.
             double rowBaseRate = 0, rowYr1Rate = 0, rowRateVsYr1 = 0;   // v6
-            if (drawing && medBal > 0 && inp.portfolio > 0 && goGoMult > 0) {
+            if (drawing && medBal > 0 && yr1Bal > 0 && goGoMult > 0) {
                 double curRate = (wdActual / goGoMult) / (double) medBal;   // base-draw rate now
-                double yr1Rate = yr1Wd / (double) inp.portfolio;            // base-draw rate at start
+                double yr1Rate = yr1Wd / (double) yr1Bal;                   // base-draw rate at start
                 if (yr1Rate > 0) {
                     double vsYr1 = (curRate - yr1Rate) / yr1Rate;
                     rowBaseRate = curRate; rowYr1Rate = yr1Rate; rowRateVsYr1 = vsYr1;  // v6
@@ -9370,6 +9590,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     + (int) (inflFactor > 0 ? wdActual / inflFactor : wdActual);   // v6
             res.medianRows.add(row);
         }
+        res.yr1Withdrawal = yr1Wd;   // v1 2026-10-12: first drawing row (see Step 3)
+        res.yr1Balance    = yr1Bal;
         if (withGk) res.gkResults = simulateGK(inp);   // v11 item C
         return res;
     }
@@ -9387,19 +9609,24 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                    SimInputs inp, long seed,
                                    int solvePaths, int binIters, int goGoYearsRemaining,
                                    double[] bridgeFromHere) {
-        // NOTE (v2): `fromYear` is intentionally unused. This solver is
-        // deliberately calendar-agnostic -- by design it sizes the MAXIMUM
-        // sustainable PORTFOLIO draw at the target PoS, independent of which
-        // calendar year guaranteed income (SS/annuity) starts. The caller layers
-        // guaranteed income and the spending budget on top (see the surplus/gap
-        // column). The parameter is retained for call-site signature stability and
-        // possible future calendar-aware variants.
+        // NOTE (v2): this solver is deliberately calendar-agnostic about income --
+        // it sizes the MAXIMUM sustainable PORTFOLIO draw at the target PoS,
+        // independent of which calendar year guaranteed income (SS/annuity)
+        // starts. The caller layers guaranteed income and the spending budget on
+        // top (see the surplus/gap column).
+        // v1 2026-10-12: `fromYear` is used for one thing only -- a solve that
+        // begins in the withdrawal start year prorates its first year's spend by
+        // the withdrawal start month, matching the fan paths, the displayed table
+        // and GK. Start month 1 gives a factor of exactly 1.0.
         if (balance <= 0 || horizon <= 0) return 0;
+        double firstPror = (fromYear == inp.withdrawStartYear)
+                ? (13.0 - inp.withdrawStartMonth) / 12.0 : 1.0;
         double lo = 0, hi = balance * 0.22;
         for (int i = 0; i < binIters; i++) {
             double mid = (lo + hi) / 2.0;
             double rate = survivalRatePro(balance, horizon, mid,
-                    inp, seed + i * 31L, solvePaths, goGoYearsRemaining, bridgeFromHere);
+                    inp, seed + i * 31L, solvePaths, goGoYearsRemaining, bridgeFromHere,
+                    firstPror);
             if (rate > inp.targetPoS) lo = mid; else hi = mid;
         }
         long added   = (long) binIters * solvePaths;
@@ -9430,7 +9657,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      */
     private double survivalRatePro(int balance, int horizon, double firstYrWd,
                                    SimInputs inp, long seed, int solvePaths, int goGoYearsRemaining,
-                                   double[] bridgeFromHere) {
+                                   double[] bridgeFromHere, double firstPror) {
         int survived = 0;
         for (int i = 0; i < solvePaths; i++) {
             SeededRng rng = new SeededRng(seed * 1000L + i * 7 + 3);
@@ -9465,8 +9692,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 // display showing a lower balance.
                 double bridgeY = (bridgeFromHere != null && y < bridgeFromHere.length)
                         ? bridgeFromHere[y] : 0.0;
-                double spend = (b > 0) ? firstYrWd * mult * cumInflFactor + bridgeY : 0;
-                b = b * (1 + ret) - spend;
+                // v1 2026-10-12: first-year proration (1.0 unless the solve starts
+                // in the withdrawal start year with a start month after January).
+                double pror  = (y == 0) ? firstPror : 1.0;
+                double spend = (b > 0) ? firstYrWd * mult * cumInflFactor * pror + bridgeY : 0;
+                // v1 2026-10-12: the year's spending leaves at the START of the
+                // year (the January transfer); only the rest earns the return.
+                b = (b - spend) * (1 + ret);
                 if (b <= 0) break;
             }
             if (b > 0) survived++;
@@ -9480,7 +9712,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private void updateUI(ProResults res) {
         SimInputs inp = res.inp;
         int yr1   = res.yr1Withdrawal;
-        double rate = yr1 / (double) inp.portfolio * 100.0;
+        // v1 2026-10-12: both from the first drawing row, so a simulation that
+        // starts before withdrawals no longer divides a draw by the wrong year.
+        double rate = (res.yr1Balance > 0) ? yr1 / (double) res.yr1Balance * 100.0 : 0;
 
         // v6: the year-1 figure is a BASE-YEAR amount (inflation factor 1.000),
         // so it is identical under the real/nominal toggle. Label it so the user
@@ -9506,7 +9740,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         double d10  = res.medianRows.size() >= 10 ? res.medianRows.get(9).inflFactor : 1.0;
 
         // v6: remember this run so the baseline button and comparison line work.
-        lastRunActualWd = !res.medianRows.isEmpty() ? res.medianRows.get(0).wdActual : yr1;
+        // v1 2026-10-12: the FIRST DRAWING row, not row 0 -- row 0 is a pre-draw
+        // year (Actual wd $0) when the simulation starts before withdrawals.
+        EnhRow firstDraw = res.medianRows.stream().filter(r -> r.drawing).findFirst().orElse(null);
+        lastRunActualWd = (firstDraw != null) ? firstDraw.wdActual : yr1;
         lastRunBalance  = inp.portfolio;
         lastRunHorizon  = inp.horizon;
         lastRunGoGoMult = (inp.goGoDuration > 0) ? inp.goGoMultiplier : 1.0;
@@ -9634,7 +9871,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         + "  Median final balance: %s\n"
                         + "  Horizon: %d years (to %d)",
                 inp.withdrawStartYear,
-                CURRENCY.format(yr1), yr1 / (double) inp.portfolio * 100, (double) inp.portfolio,
+                // v1 2026-10-12: rate on the first drawing row's balance (8b)
+                CURRENCY.format(yr1), yr1 / (double) (r1 != null ? r1.balance : inp.portfolio) * 100,
+                (double) (r1 != null ? r1.balance : inp.portfolio),
                 CURRENCY.format(guar1), CURRENCY.format(inc1), CURRENCY.format(spd1),
                 sur1 >= 0 ? "SURPLUS" : "GAP", CURRENCY.format(Math.abs(sur1)),
                 CURRENCY.format(inp.manSSAmount), inp.manSSStartMonth, inp.manSSStartYear,
@@ -10407,25 +10646,51 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         if (isSurvivorYear(inp, calYear)) {
             if (inp.deathWho == 1) { hs = 0; ws = 1; }   // user died -> survivor = spouse
             else                   { hs = 1; ws = 0; }   // spouse died -> survivor = user
+        } else if (filingFor(inp, calYear) == TaxEngine.FilingStatus.SINGLE) {
+            // v1 2026-10-12: a single filer owns ALL of Traditional. Single mode
+            // zeroes the spouse's birth year, so the spouse's "age" became the
+            // calendar year and the spouse share drew a phantom RMD every year
+            // (stateCtx already handled this case; the RMD split did not).
+            hs = 1; ws = 0;
         }
-        return calcRmd(tradBal * hs, manAge) + calcRmd(tradBal * ws, womanAge);
+        return ownerRmd(inp, tradBal * hs, calYear, true,  manAge, womanAge)
+                + ownerRmd(inp, tradBal * ws, calYear, false, manAge, womanAge);
+    }
+
+    // v1 2026-10-12: one owner's RMD on their share of Traditional. The Joint Life
+    // and Last Survivor table applies when the other spouse is alive, the return
+    // is joint, and the other spouse is more than 10 years younger (ages attained
+    // in calYear); the spouse is assumed to be the sole beneficiary. Otherwise --
+    // including every survivor year, where the survivor has rolled the IRA into
+    // their own -- the Uniform Lifetime table. Shared by the fan paths, the
+    // displayed table and GK so all three use one rule.
+    double ownerRmd(SimInputs inp, double shareBal, int calYear, boolean ownerIsMan,
+                    int manAge, int womanAge) {
+        int ownerAge  = ownerIsMan ? manAge   : womanAge;
+        int spouseAge = ownerIsMan ? womanAge : manAge;
+        boolean joint = !isSurvivorYear(inp, calYear)
+                && filingFor(inp, calYear) == TaxEngine.FilingStatus.MFJ;
+        return calcRmdJoint(shareBal, ownerAge, spouseAge, joint);
     }
 
     // Gross Roth conversion for the fan path, matching the display-loop policy:
     // fill-to-ceiling (below IRMAA Tier-0 / 22%->24% edge) or flat $, using the
     // per-year filing status. Sized on pre-conversion MAGI built from this
-    // year's ordinary income (RMD floor) + annuity + survivor-aware SS.
+    // year's ordinary income + annuity + survivor-aware SS.
+    // v1 2026-10-12: `tradDraw` is the year's ACTUAL Traditional draw -- the RMD
+    // floor, the spending draw AND the SS bridge -- the same ordinary income the
+    // displayed table uses. The old max(RMD, min(wdActual, trad)) left out the
+    // bridge, so in bridge years the fan paths understated MAGI by the whole
+    // bridge and over-converted.
     private double fanConversion(SimInputs inp, int y, int calYear,
                                  int manAge, int womanAge,
-                                 double trad, double roth, boolean survivor,
-                                 double wdActual,
+                                 double tradDraw,
                                  double iNow, double iManStart, double iWomanStart,
                                  double mmInterest) {
         TaxEngine.FilingStatus fs = filingFor(inp, calYear);
         double inflFactor = Math.pow(1 + inp.inflation, y);
         double grossSS = manSSSurv(inp, y, iNow, iManStart, iWomanStart)
                 + womanSSSurv(inp, y, iNow, iManStart, iWomanStart);
-        double rmd     = combinedRmd(inp, trad, calYear, manAge, womanAge);
         // v11: TAXABLE portion of the three streams, on this method's existing
         // deterministic inflation basis. With every stream at its v10-equivalent
         // settings (no COLA, 100% taxable) this equals the old annuity figure.
@@ -10435,8 +10700,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // withdrawal and not the RMD alone. Sizing conversions off RMD only
         // understated income and over-converted.
         // v12 2026-10-03: + this path's money-market interest, as in the display loop.
-        double ordinaryBeforeConv = Math.max(rmd, Math.min(wdActual, Math.max(0, trad))) + ann
-                + mmInterest;
+        double ordinaryBeforeConv = tradDraw + ann + mmInterest;   // v1 2026-10-12
         double taxSSpre = TaxEngine.taxableSocialSecurity(grossSS, ordinaryBeforeConv, inflFactor, fs);
         double magiBeforeConv = taxSSpre + ordinaryBeforeConv;
         if (!inp.convEnabled) return 0;   // v12: conversions off
@@ -10455,29 +10719,29 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
     // Net-to-Roth for a given gross conversion on the fan path (gross minus the
     // stacked marginal conversion tax), using the per-year filing status.
+    // v1 2026-10-12: `tradDraw` as in fanConversion.
     private double fanConversionNet(SimInputs inp, int y, int calYear,
                                     int manAge, int womanAge,
-                                    double trad, double roth,
-                                    double convGross, boolean survivor,
-                                    double wdActual,
+                                    double tradDraw,
+                                    double convGross,
                                     double iNow, double iManStart, double iWomanStart,
                                     double mmInterest) {
         TaxEngine.FilingStatus fs = filingFor(inp, calYear);
         double inflFactor = Math.pow(1 + inp.inflation, y);
         double grossSS = manSSSurv(inp, y, iNow, iManStart, iWomanStart)
                 + womanSSSurv(inp, y, iNow, iManStart, iWomanStart);
-        double rmd     = combinedRmd(inp, trad, calYear, manAge, womanAge);
         double ann     = streamsTaxableDet(inp, calYear);   // v11
-        double ordinaryBeforeConv = Math.max(rmd, Math.min(wdActual, Math.max(0, trad))) + ann  // v6 FIX
+        double ordinaryBeforeConv = tradDraw + ann   // v1 2026-10-12: actual Traditional draw
                 + mmInterest;   // v12: interest raises the base the conversion stacks on
         TaxEngine.StateTaxProfile stProfile = TaxEngine.stateProfile(inp.stateCode);
         // v12 2026-10-05: a framework state sees the actual Traditional portion of
-        // the draw (RMD floor), as the display loop does; the legacy Custom path
-        // keeps retirementOrdinary = rmd exactly as before.
+        // the draw (RMD floor), as the display loop does. v1 2026-10-12: so does
+        // the legacy Custom path now (retirementOrdinary = the actual draw, as in
+        // the display loop; it was the RMD alone).
         TaxEngine.StateCtx stCtx = stateCtx(inp, calYear, manAge, womanAge,
                 manSSSurv(inp, y, iNow, iManStart, iWomanStart),
                 womanSSSurv(inp, y, iNow, iManStart, iWomanStart),
-                Math.max(rmd, Math.min(wdActual, Math.max(0, trad))),
+                tradDraw,
                 nonExemptTaxableDet(inp.pensionStream, inp, calYear),
                 nonExemptTaxableDet(inp.annuityStream, inp, calYear));
         TaxEngine.TaxResult tr = TaxEngine.compute(grossSS, ordinaryBeforeConv,
@@ -10485,16 +10749,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 primary65(inp, calYear, manAge, womanAge), womanAge >= 65, inflFactor,
                 TaxEngine.fedIndexFactor(inflFactor, y),                            // v12 2026-10-07
                 TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, Math.max(0, y - 2)),
-                // v11: retirementOrdinary stays rmd ONLY; the stream exemption
-                // travels in its own parameter (see stateTaxLiving).
-                fs, stProfile, calYear, rmd,
+                // v11: retirementOrdinary is the Traditional draw ONLY; the stream
+                // exemption travels in its own parameter (see stateTaxLiving).
+                fs, stProfile, calYear, tradDraw,
                 streamsStateExemptDet(inp, calYear), stCtx);
         // v12 2026-10-11: include the tax on the Social Security the conversion
         // makes taxable (tax torpedo), as in the display loop.
         double convSSInd = TaxEngine.convInducedTaxableSS(grossSS, ordinaryBeforeConv,
                 convGross, inflFactor, fs);
         double[] ctax = TaxEngine.conversionTax(tr, convGross, convSSInd,
-                inflFactor, fs, stProfile, calYear, rmd);
+                inflFactor, fs, stProfile, calYear, tradDraw);
         return convGross - ctax[0];
     }
     private static double magiBeforeForConv(double grossSS, double ordinaryOther,
@@ -10510,9 +10774,23 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
     private double calcRmd(double tradBalance, int age) {
         if (age < RMD_START_AGE) return 0;
-        Double factor = ULT.get(Math.min(age, 100));
-        if (factor == null) factor = 6.4;
+        Double factor = ULT.get(Math.min(age, 120));   // v1 2026-10-12: table runs to 120+
+        if (factor == null) factor = 2.0;
         return tradBalance / factor;
+    }
+
+    // v1 2026-10-12: RMD using the Joint Life and Last Survivor table when the
+    // caller says a spouse qualifies and that spouse is more than 10 years
+    // younger; otherwise -- or for a pair outside the transcribed blocks -- the
+    // Uniform Lifetime table (calcRmd), whose smaller divisor is conservative.
+    private double calcRmdJoint(double tradBalance, int ownerAge, int spouseAge,
+                                boolean spouseQualifies) {
+        if (ownerAge < RMD_START_AGE) return 0;
+        if (spouseQualifies && ownerAge - spouseAge > 10) {
+            Double j = JLT.get(ownerAge * 1000 + spouseAge);
+            if (j != null) return tradBalance / j;
+        }
+        return calcRmd(tradBalance, ownerAge);
     }
 
     // ========================================================================
@@ -10641,8 +10919,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 }
             }
 
-            double manRmd   = calcRmd(manTradIRA,   manAge) + calcRmd(manTrad401K,  manAge);
-            double womanRmd = calcRmd(womanTradIRA, womanAge) + calcRmd(womanTrad401K, womanAge);
+            // v1 2026-10-12: Joint Life table when the other spouse is alive, on a
+            // joint return and more than 10 years younger (see ownerRmd).
+            boolean gkJoint = !isSurvivorYear(inp, calYear)
+                    && filingFor(inp, calYear) == TaxEngine.FilingStatus.MFJ;
+            double manRmd   = calcRmdJoint(manTradIRA,   manAge, womanAge, gkJoint)
+                    + calcRmdJoint(manTrad401K,  manAge, womanAge, gkJoint);
+            double womanRmd = calcRmdJoint(womanTradIRA,  womanAge, manAge, gkJoint)
+                    + calcRmdJoint(womanTrad401K, womanAge, manAge, gkJoint);
             double combRmd  = manRmd + womanRmd;
 
             int wdActual   = drawing ? (int)(wdGK * goGoMult) : 0;
@@ -10655,7 +10939,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             GkRow row = new GkRow();
             row.calYear = calYear; row.manAge = manAge; row.womanAge = womanAge;
             row.balance = (int) Math.max(0, bal);
-            row.investmentGrowth = (int)(bal * yearReturn);
+            // v1 2026-10-12: growth only on what stays invested after the
+            // start-of-year (January) withdrawal.
+            row.investmentGrowth = (int)(Math.max(0, bal - wdActual) * yearReturn);
             row.wdGK = (int) wdGK; row.wdActual = wdActual;
             row.wdPct = wdPct; row.ruleFlags = flags;
             row.manSS = (int) manSS; row.womanSS = (int) womanSS;
@@ -10675,7 +10961,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     && yFromStartGk < inp.goGoDuration + inp.slowGoDuration;
             row.preAnchor = false;
 
-            double nextBal = Math.max(0, bal * (1 + yearReturn) - wdActual);
+            // v1 2026-10-12: the withdrawal leaves at the START of the year, as in
+            // the Pro PoS engine; only the remainder earns the year's return.
+            double nextBal = Math.max(0, (bal - wdActual) * (1 + yearReturn));
             row.balDelta   = (int)(nextBal - bal);
             // v6: true real change -- each balance deflated by ITS OWN year's
             // price level, so the column agrees with the balance column in
@@ -10687,10 +10975,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             bal            = nextBal;
             gk.rows.add(row);
 
-            manTradIRA    = Math.max(0, manTradIRA   * (1 + yearReturn) - calcRmd(manTradIRA,   manAge));
-            manTrad401K   = Math.max(0, manTrad401K  * (1 + yearReturn) - calcRmd(manTrad401K,  manAge));
-            womanTradIRA  = Math.max(0, womanTradIRA * (1 + yearReturn) - calcRmd(womanTradIRA, womanAge));
-            womanTrad401K = Math.max(0, womanTrad401K*(1 + yearReturn) - calcRmd(womanTrad401K, womanAge));
+            // v1 2026-10-12: the RMD comes out at the start of the year too.
+            manTradIRA    = Math.max(0, (manTradIRA    - calcRmdJoint(manTradIRA,    manAge, womanAge, gkJoint)) * (1 + yearReturn));
+            manTrad401K   = Math.max(0, (manTrad401K   - calcRmdJoint(manTrad401K,   manAge, womanAge, gkJoint)) * (1 + yearReturn));
+            womanTradIRA  = Math.max(0, (womanTradIRA  - calcRmdJoint(womanTradIRA,  womanAge, manAge, gkJoint)) * (1 + yearReturn));
+            womanTrad401K = Math.max(0, (womanTrad401K - calcRmdJoint(womanTrad401K, womanAge, manAge, gkJoint)) * (1 + yearReturn));
         }
 
         gk.finalBalance = gk.rows.isEmpty() ? 0
@@ -11221,8 +11510,54 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      */
     private double[] getRandomReturnAndInflation(SimInputs inp, SeededRng rng) {
         double ret  = inp.nomReturn + inp.stdDev * rng.nextGaussian();
-        double infl = Math.max(0, inp.inflation + inp.inflationStdDev * rng.nextGaussian());
+        // v1 2026-10-12: drawn around the SHIFTED mean so that, after the 0%
+        // floor, the draws average exactly the entered mean (see inflDrawMean).
+        double infl = Math.max(0, inflDrawMean(inp) + inp.inflationStdDev * rng.nextGaussian());
         return new double[]{ ret, infl };
+    }
+
+    // ==============================================================
+    // v1 2026-10-12: inflation draws keep their 0% floor (no deflation, which
+    // keeps Social Security legally correct -- there is no negative COLA), but
+    // the floor alone raised the simulated average: at 2.3% mean and 2.73% SD,
+    // 20% of draws were floored and the draws averaged 2.61%, pushing the median
+    // 30-year price level about 8% above the entered 2.3%. The underlying normal
+    // is now centred on a shifted mean m chosen so that E[max(0, m + sd*Z)]
+    // equals the entered mean (1.91% for 2.3% / 2.73%). Solved once per input
+    // set and cached on the SimInputs (excluded from the batch fingerprint,
+    // since it is a pure function of two inputs that are hashed).
+    // ==============================================================
+    static double inflDrawMean(SimInputs inp) {
+        double m = inp.inflDrawMean;
+        if (Double.isNaN(m)) {
+            m = truncNormalShift(inp.inflation, inp.inflationStdDev);
+            inp.inflDrawMean = m;
+        }
+        return m;
+    }
+
+    /** Mean m with E[max(0, m + sd*Z)] == target (bisection; E rises with m). */
+    static double truncNormalShift(double target, double sd) {
+        if (sd <= 0 || target <= 0) return target;   // nothing to correct / unattainable
+        double lo = target - 10 * sd, hi = target;   // E(m) >= m, so m <= target
+        for (int i = 0; i < 100; i++) {
+            double mid = 0.5 * (lo + hi);
+            double z = mid / sd;
+            double e = mid * normCdf(z) + sd * Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+            if (e > target) hi = mid; else lo = mid;
+        }
+        return 0.5 * (lo + hi);
+    }
+
+    /** Standard normal CDF via erfc (Numerical Recipes erfcc, |error| < 1.2e-7). */
+    static double normCdf(double z) {
+        double x = -z / Math.sqrt(2.0), a = Math.abs(x);
+        double t = 1.0 / (1.0 + 0.5 * a);
+        double r = t * Math.exp(-a * a - 1.26551223 + t * (1.00002368 + t * (0.37409196
+                + t * (0.09678418 + t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398
+                + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))));
+        double erfc = (x >= 0) ? r : 2.0 - r;
+        return 0.5 * erfc;
     }
 
     // ========================================================================
@@ -12779,11 +13114,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // carried in from a previous run's accumulated RMD overage. It seeds row 1
         // of the Money Mkt (total) column, is NEVER spent by the sim (informational
         // buffer), and is EXCLUDED from the drawn "Portfolio balance" (Option A:
-        // Portfolio = qualified + spendable taxable only; ACTUAL total = Portfolio
+        // Portfolio = Traditional + Roth only; ACTUAL total = Portfolio
         // + Money Mkt (total)).
         int mmPrior;
         int manPlanAge, womanPlanAge;
         double nomReturn, stdDev, inflation, inflationStdDev;
+        // v1 2026-10-12: cached shifted mean for the floored inflation draws
+        // (see inflDrawMean). Derived, not an input -- NaN until first use.
+        double inflDrawMean = Double.NaN;
         int livingExp, medical; double medInflation;
         int baseTax; double taxInflation;
         // v3 tax engine
@@ -12930,6 +13268,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     static class ProResults {
         SimInputs inp;
         int yr1Withdrawal;
+        // v1 2026-10-12: the median balance of the first drawing row -- the base
+        // the headline withdrawal was solved on and the year-1 rates divide by.
+        int yr1Balance;
         List<EnhRow> medianRows;
         double[][] fanBalances, fanWithdrawals, fanInflFactors;
         double actualPoS;
@@ -13364,8 +13705,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     //   * a solve runs only in DRAWING years (calYear >= withdrawal start);
     //   * each fan path re-solves every drawing year with a REDUCED solver:
     //     max(20, solvePaths / 8) paths x min(binIters, 10) iterations;
-    //   * the median table re-solves every drawing year at full settings, plus
-    //     one full-settings year-1 solve;
+    //   * the median table re-solves every drawing year at full settings (v1
+    //     2026-10-12: the headline now comes from the first drawing row, so the
+    //     separate full-settings year-1 solve is gone);
     //   * a trial path runs the remaining horizon, so path-years is an upper
     //     bound -- a path that depletes stops early.
     // An upper bound overall: a solve is skipped on a fan path already at $0.
@@ -13379,9 +13721,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         long remSum = draw * (draw + 1) / 2;                   // sum of remaining years
         long fanSolve  = (long) Math.max(20, solvePaths / 8) * Math.min(binIters, 10);
         long fullSolve = (long) solvePaths * binIters;
-        long paths = (long) fanPaths * draw * fanSolve + draw * fullSolve + fullSolve;
-        long years = (long) fanPaths * fanSolve * remSum + fullSolve * remSum
-                + fullSolve * horizon;
+        long paths = (long) fanPaths * draw * fanSolve + draw * fullSolve;
+        long years = (long) fanPaths * fanSolve * remSum + fullSolve * remSum;
         return new long[]{ paths, years };
     }
 
@@ -13405,19 +13746,17 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             int fanIt      = Math.min(binIters, 10);
             long fanPathsN = (long) fanPaths * draw * fanSp * fanIt;
             long medPathsN = draw * (long) solvePaths * binIters;
-            long yr1PathsN = (long) solvePaths * binIters;
             if (btnRun != null) btnRun.setToolTipText(String.format(
                     "<html><b>Estimated computation at current settings:</b><br>"
                             + "Fan: %,d paths x %d drawing yrs x (%,d paths x %d iters) = <b>%s</b><br>"
                             + "Median: %d drawing yrs x (%,d paths x %d iters) = <b>%s</b><br>"
-                            + "Year 1: %,d paths x %d iters = <b>%s</b><br>"
+                            + "<i>(the headline is the first median row's solve, not a separate one)</i><br>"
                             + "Total: <b>~%s Monte Carlo paths</b>, up to ~%s simulated years<br><br>"
                             + "<i>Fan paths re-solve each year with a reduced solver: solve paths / 8<br>"
                             + "(minimum 20) and at most 10 iterations. A trial path stops early when<br>"
                             + "it depletes, so simulated years is an upper bound.</i></html>",
                     fanPaths, draw, fanSp, fanIt, fmtWork(fanPathsN),
                     draw, solvePaths, binIters, fmtWork(medPathsN),
-                    solvePaths, binIters, fmtWork(yr1PathsN),
                     fmtWork(est[0]), fmtWork(est[1])));
             return "Running -- ~" + fmtWork(est[0]) + " Monte Carlo paths (up to ~"
                     + fmtWork(est[1]) + " simulated years)...";
