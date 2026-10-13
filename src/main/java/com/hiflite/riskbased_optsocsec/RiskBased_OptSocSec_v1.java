@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Monday, October 12, 2026 at 05:14 PM MST (UTC-7)
+// Last modified: Tuesday, October 13, 2026 at 12:08 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Monday, October 12, 2026 at 05:14 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, October 13, 2026 at 12:08 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -4254,18 +4254,20 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<b>only when the portfolio balance can cover the shortfall</b>. This prevents harmless end-of-"
                 + "horizon dips from marking otherwise-sound strategies infeasible.</p>"
 
-                + "<p><b>Real / Nominal.</b> The optimizer's floors and columns follow the top-right dollar toggle "
-                + "at the moment you press Run SS Optimizer. In <b>Real (today's $)</b> mode, floors are compared to "
-                + "surpluses deflated by inflation; in <b>Nominal (future $)</b> mode, to the raw surpluses. Flipping "
-                + "the toggle does <i>not</i> recompute the displayed results -- switch modes and re-run to see them "
-                + "in the other units.</p>"
+                // v1 2026-10-13: Real / Nominal and Randomization rewritten -- both
+                // described behavior the optimizer dropped in v11 / v12.
+                + "<p><b>Real / Nominal.</b> The optimizer always scores and displays in <b>today's dollars</b> "
+                + "(since v11): every floor is compared to surpluses deflated by inflation, and every money "
+                + "column is in today's $. The top-right dollar toggle does not apply to it &mdash; switching "
+                + "the toggle changes nothing in the optimizer table, and a batch never needs re-running for "
+                + "it. The toggle still governs the Pro PoS table.</p>"
 
-                + "<p><b>Randomization.</b> When the <i>Re-randomize each run</i> checkbox on the Portfolio panel is "
-                + "on, the optimizer captures one fresh seed per scan so every combination in that scan faces the "
-                + "identical random future (fair ranking), but two different scans -- or the optimizer vs a later "
-                + "Pro tab run -- draw different futures. To reproduce an optimizer row exactly, turn randomize "
-                + "OFF; both the optimizer and the confirming Pro tab run will use seed 0 and agree within scan-"
-                + "fidelity noise.</p>"
+                + "<p><b>Randomization.</b> The batch always uses <b>seed 0</b> (see below), so every "
+                + "combination faces the identical future and a finished batch is reproducible. The "
+                + "<i>Re-randomize each run</i> checkbox on the Portfolio panel affects only Pro PoS and GK runs "
+                + "&mdash; including a Pro run launched by clicking an optimizer row. To reproduce a row "
+                + "exactly, leave the checkbox OFF before clicking it; the Pro run then uses seed 0 too and "
+                + "agrees with the row within scan-fidelity noise.</p>"
 
                 + "<p><b>Why the survivor's Social Security check does not rank the table.</b> The obvious "
                 + "metric is the <b>survivor's Social Security check</b> &mdash; <i>max(User, Spouse) &times; 12</i>. That is "
