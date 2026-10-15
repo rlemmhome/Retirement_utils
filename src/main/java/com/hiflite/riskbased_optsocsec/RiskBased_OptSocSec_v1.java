@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Tuesday, October 13, 2026 at 12:08 PM MST (UTC-7)
+// Last modified: Wednesday, October 14, 2026 at 06:52 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -61,7 +61,7 @@ import java.util.List;
  *     dynamic-spending overlay with explicit upper/lower guardrails.
  *
  *  3. COUPLE-AWARE SS / RMD
- *     Full SSA FRA schedule, early/delayed adjustments, SECURE 2.0 RMDs (age 75),
+ *     Full SSA FRA schedule, early/delayed adjustments, SECURE 2.0 RMDs (73 or 75 by birth year),
  *     seven-account decomposition (trad/Roth for both spouses).
  *
  *  4. TAX ENGINE (v3, state selector added v5)
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Tuesday, October 13, 2026 at 12:08 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Wednesday, October 14, 2026 at 06:52 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -119,7 +119,17 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
     private static final int BASE_YEAR_DEFAULT = java.time.Year.now().getValue();
     private static int BASE_YEAR = BASE_YEAR_DEFAULT;
-    private static final int RMD_START_AGE = 75;
+    /**
+     * v1 2026-10-14 (F1): RMD starting age by birth year -- the SECURE 2.0
+     * "applicable age" as the final regulations (2024) set it: 73 for anyone born
+     * 1951-1958, 75 for anyone born 1960 or later. 1959 falls in a drafting gap in
+     * the Act; the proposed regulations treat it as 73. Anyone born before 1951 is
+     * already past their starting age in every simulation year (2026 on), so 73
+     * covers them too. Replaces a fixed 75, which was right only for 1960+.
+     */
+    static int rmdStartAge(int birthYear) {
+        return birthYear >= 1960 ? 75 : 73;
+    }
 
     private int mcSolvePaths = 800;
     private int mcFanPaths   = 400;
@@ -128,6 +138,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // IRS Uniform Lifetime Table
     private static final Map<Integer, Double> ULT = new HashMap<>();
     static {
+        // v1 2026-10-14 (F1): ages 73-74 for owners born 1951-1959, who start at
+        // 73 (IRS Uniform Lifetime Table, 2022; checked against two reprints).
+        // Without them those ages fell through to the 2.0 fallback in calcRmd.
+        ULT.put(73, 26.5); ULT.put(74, 25.5);
         ULT.put(75, 24.6); ULT.put(76, 23.7); ULT.put(77, 22.9);
         ULT.put(78, 22.0); ULT.put(79, 21.1); ULT.put(80, 20.2);
         ULT.put(81, 19.4); ULT.put(82, 18.5); ULT.put(83, 17.7);
@@ -362,6 +376,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private JSpinner   spConvFlat;          // flat annual conversion $ (flat mode)
     private JSpinner   spConvBuffer;        // MAGI buffer below IRMAA cliff (fill mode)
     private JSpinner   spConvCap;           // max conversion cap (fill mode; 0 = uncapped)
+    // v1 2026-10-14 (F2): actual MAGI of the two tax years before the simulation
+    // starts -- the IRMAA lookback for its first two years. 0 = use the estimate.
+    private JSpinner   spPriorMagi2, spPriorMagi1;
     private JComboBox<String> cmbIrmaaMode; // IRMAA threshold indexing mode
     private JComboBox<String> cmbFilingStatus; // v4: MFJ / Single tax basis
     // v7: fill-to-target ceiling selectors + the editable-threshold dialog button.
@@ -1012,15 +1029,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 spWomanRoth401K, spWomanRothIRA, spWomanTradIRA, spWomanTrad401K })
             sp.addChangeListener(acctListener);
 
-        inner.add(card("Account Balances (SECURE 2.0 RMD -- Age 75)", new Object[]{
-                "User -- Traditional IRA ($)  [RMD age 75]",    spManTradIRA,
+        // v1 2026-10-14 (F1): RMDs start at 73 or 75 depending on birth year.
+        inner.add(card("Account Balances (SECURE 2.0 RMDs)", new Object[]{
+                "User -- Traditional IRA ($)  [RMD at 73 or 75 by birth year]",    spManTradIRA,
                 "User -- Roth IRA ($)  [no RMD]",               spManRothIRA,
-                "User -- Traditional 401K ($)  [RMD age 75]",   spManTrad401K,
+                "User -- Traditional 401K ($)  [RMD at 73 or 75 by birth year]",   spManTrad401K,
                 "User -- Roth 401K ($)  [no RMD]",              spManRoth401K,
                 "Spouse -- Roth 401K ($)  [no RMD]",            spWomanRoth401K,
                 "Spouse -- Roth IRA ($)  [no RMD]",             spWomanRothIRA,
-                "Spouse -- Traditional IRA ($)  [RMD age 75]",  spWomanTradIRA,
-                "Spouse -- Traditional 401K ($)  [RMD age 75]", spWomanTrad401K,
+                "Spouse -- Traditional IRA ($)  [RMD at 73 or 75 by birth year]",  spWomanTradIRA,
+                "Spouse -- Traditional 401K ($)  [RMD at 73 or 75 by birth year]", spWomanTrad401K,
                 "Money Mkt (prior, $)  [carry-in, not spent, not in Portfolio]", spMmPrior,
                 null,                                          lblAccountTotal,
         }));
@@ -1469,6 +1487,20 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // CPI-U, so Full CPI IS current law; chained is the conservative option.
         // Index order is unchanged (0 Frozen, 1 Chained, 2 Full) so saved scenarios
         // keep the setting they were saved with.
+        // v1 2026-10-14 (F2): actual MAGI for the first two IRMAA lookback years.
+        spPriorMagi2 = spinI(0, 0, 10_000_000, 1_000, "#,###");
+        spPriorMagi1 = spinI(0, 0, 10_000_000, 1_000, "#,###");
+        String priorMagiTip = "<br>The IRMAA surcharge in the first two simulation years is set by MAGI<br>"
+                + "from the two tax years BEFORE the simulation starts -- income the plan<br>"
+                + "cannot see. Enter the actual figure from that year's return, in that<br>"
+                + "year's dollars: Form 1040 line 11 (AGI) plus line 2a (tax-exempt interest).<br><br>"
+                + "<b>0 = use the estimate</b> (that simulation year's own MAGI, as before).<br>"
+                + "If you expect Social Security to reduce the surcharge on Form SSA-44<br>"
+                + "(for example, after stopping work), leave 0.</html>";
+        spPriorMagi2.setToolTipText("<html><b>MAGI 2 years before sim start ($)</b><br>"
+                + "Sets IRMAA in the FIRST simulation year (for a 2027 start, your 2025 return)." + priorMagiTip);
+        spPriorMagi1.setToolTipText("<html><b>MAGI 1 year before sim start ($)</b><br>"
+                + "Sets IRMAA in the SECOND simulation year (for a 2027 start, your 2026 return)." + priorMagiTip);
         cmbIrmaaMode = new JComboBox<>(new String[]{
                 "Frozen (stress)", "Chained-CPI (conservative)", "Full CPI (current law)" });
         cmbIrmaaMode.setSelectedIndex(TaxEngine.IRMAA_FULL); // default: current law
@@ -1476,7 +1508,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "How the IRMAA income cliffs move over the horizon. The surcharge<br>"
                 + "AMOUNT always tracks general inflation; this controls only the<br>"
                 + "THRESHOLDS. The conversion fill aims at the threshold of the mode<br>"
-                + "you pick, so the fill and the surcharge test always agree.<br><br>"
+                + "you pick, so the fill and the surcharge test always agree. Each<br>"
+                + "year's surcharge is tested against the thresholds of the year it is<br>"
+                + "PAID, using MAGI from two years earlier.<br><br>"
                 + "<b>Full CPI (default, current law):</b> thresholds grow with your<br>"
                 + "inflation assumption. The law indexes them to the regular CPI-U<br>"
                 + "(42 U.S.C. 1395r(i)(5)). The top tier ($750,000 MFJ) is not indexed<br>"
@@ -1651,6 +1685,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 "Fill buffer below IRMAA ($)", spConvBuffer,
                 "Fill cap ($/yr, 0=NO LIMIT)", spConvCap,
                 "IRMAA threshold growth",  cmbIrmaaMode,
+                "MAGI 2 years before sim start ($, 0=estimate)", spPriorMagi2,   // v1 2026-10-14 (F2)
+                "MAGI 1 year before sim start ($, 0=estimate)",  spPriorMagi1,
                 "Base thresholds",         btnEditThresholds,
         }, /*defaultExpanded=*/false));
         inner.add(Box.createVerticalStrut(4));
@@ -2467,23 +2503,51 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     }
                     case COL_IRMAA -> {
                         if (!er.drawing) return null;
+                        // v1 2026-10-14: thresholds follow the LOOKBACK return's
+                        // filing status; the surcharge is per Medicare enrollee.
+                        String basis = er.irmaaJoint
+                                ? "joint return (2026 base $218,000)"
+                                : "single return (2026 base $109,000)";
+                        // v1 2026-10-14 (F2): where the lookback MAGI came from in the
+                        // first two simulation years.
+                        String src = er.irmaaSrc == 1
+                                ? "<br><br>Lookback MAGI: the actual figure you entered for that year<br>"
+                                + "(Roth Conversion &amp; IRMAA Surcharge card)."
+                                : er.irmaaSrc == 2
+                                ? "<br><br>Lookback MAGI: an ESTIMATE (this year's own MAGI). That year's<br>"
+                                + "actual MAGI can be entered on the Roth Conversion &amp; IRMAA<br>"
+                                + "Surcharge card."
+                                : "";
+                        if (er.irmaa <= 0 && er.irmaaTier > 0)
+                            return "<html><b>IRMAA surcharge: none</b><br>"
+                                    + "MAGI from 2 years prior is in Tier " + er.irmaaTier + " on the " + basis + ",<br>"
+                                    + "but no one is on Medicare (65 or older) this year, so no<br>"
+                                    + "surcharge is owed. A spouse not yet on Medicare pays nothing,<br>"
+                                    + "though their income still counts on a joint return." + src + "</html>";
                         if (er.irmaa <= 0)
                             return "<html><b>IRMAA surcharge: none</b><br>"
                                     + "MAGI from 2 years prior was at or below the Tier-0<br>"
-                                    + "threshold (2026 base $218,000, indexed per your chosen<br>"
-                                    + "IRMAA threshold-growth mode), so no Medicare Part B/D<br>"
-                                    + "surcharge applies this year. If this stays all-dashes even in<br>"
-                                    + "high-RMD late years, try the 'Frozen' threshold mode to see<br>"
-                                    + "the conservative IRMAA exposure.</html>";
+                                    + "threshold for the " + basis + ",<br>"
+                                    + "indexed per your chosen IRMAA threshold-growth mode, so no<br>"
+                                    + "Medicare Part B/D surcharge applies this year. If this stays<br>"
+                                    + "all-dashes even in high-RMD late years, try the 'Frozen'<br>"
+                                    + "threshold mode to see the conservative IRMAA exposure." + src + "</html>";
                         double d = showRealDollars ? er.inflFactor : 1.0;
                         return String.format(
                                 "<html><b>IRMAA surcharge (Medicare Part B + D)</b><br>"
-                                        + "&nbsp;&nbsp;Amount this year:&nbsp;<b>%s</b> (per couple)<br><br>"
-                                        + "Assessed on your MAGI from <b>2 years prior</b> (the IRMAA<br>"
-                                        + "lookback). Because your conversions and later RMDs raise<br>"
-                                        + "MAGI, they can trip a higher tier two years out. Thresholds<br>"
-                                        + "are 2026 values, grown per your IRMAA threshold-growth mode. See Assumptions &amp; Methods.</html>",
-                                CURRENCY.format(Math.round(er.irmaa / d)));
+                                        + "&nbsp;&nbsp;Amount this year:&nbsp;<b>%s</b> &nbsp;(Tier %d; %d %s on Medicare &times; %s each)<br><br>"
+                                        + "Assessed on MAGI from <b>2 years prior</b> (the IRMAA lookback),<br>"
+                                        + "against the thresholds for that year's %s.<br>"
+                                        + "The surcharge is per Medicare enrollee: each person 65 or older<br>"
+                                        + "pays it; a spouse not yet 65 or a deceased spouse does not.<br>"
+                                        + "Because your conversions and later RMDs raise MAGI, they can<br>"
+                                        + "trip a higher tier two years out. Thresholds are 2026 values,<br>"
+                                        + "grown per your IRMAA threshold-growth mode. See Assumptions &amp; Methods.%s</html>",
+                                CURRENCY.format(Math.round(er.irmaa / d)),
+                                er.irmaaTier, er.irmaaPeople,
+                                er.irmaaPeople == 1 ? "person" : "people",
+                                CURRENCY.format(Math.round(er.irmaa / d / Math.max(1, er.irmaaPeople))),
+                                basis, src);
                     }
                     case COL_MAGI -> {
                         if (!er.drawing) return null;
@@ -2752,12 +2816,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "costs $1.45 in that year -- or a $100K withdrawal is worth only $69K today.</html>";
                     case 18 -> "<html><b>User RMD</b><br>"
                             + "Required Minimum Distribution from the user's traditional IRA + 401K.<br>"
-                            + "Begins age 75 (SECURE 2.0, born after 1960). Based on the prior<br>"
+                            + "Begins at 75 if born 1960 or later, 73 if born 1951-1959 (SECURE 2.0).<br>Based on the prior "
                             + "December 31 balance; uses the Joint Life table when the spouse is<br>"
                             + "more than 10 years younger (Assumptions section 9).</html>";
                     case 19 -> "<html><b>Spouse RMD</b><br>"
                             + "Required Minimum Distribution from the spouse's traditional IRA + 401K.<br>"
-                            + "Begins age 75 (SECURE 2.0, born after 1960). Based on the prior<br>"
+                            + "Begins at 75 if born 1960 or later, 73 if born 1951-1959 (SECURE 2.0).<br>Based on the prior "
                             + "December 31 balance; uses the Joint Life table when the user is<br>"
                             + "more than 10 years younger (Assumptions section 9).</html>";
                     case 20 -> "<html><b>Combined RMD</b><br>"
@@ -2790,8 +2854,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "(State defaults to Arizona; Colorado, Florida, Idaho, Nevada, Oklahoma<br>"
                             + "and Custom are on the Tax Engine card.) When OFF, reverts to the legacy flat escalator. Hover<br>"
                             + "a cell for that year's breakdown. See the Assumptions &amp; Methods tab.</html>";
-                    case COL_IRMAA -> "<html><b>IRMAA -- Medicare Part B + D surcharge (per couple)</b><br>"
-                            + "Assessed on your MAGI from 2 years prior (the IRMAA lookback).<br>"
+                    case COL_IRMAA -> "<html><b>IRMAA -- Medicare Part B + D surcharge (per Medicare enrollee)</b><br>"
+                            + "Assessed on your MAGI from 2 years prior (the IRMAA lookback), against the thresholds<br>"
+                            + "for THAT return's filing status -- a survivor stays on the joint thresholds for two years.<br>"
+                            + "Each person 65 or older pays the per-person surcharge; a spouse under 65 pays nothing.<br>"
                             + "2026 tier thresholds, grown per your threshold-growth mode. Conversions and later RMDs<br>"
                             + "raise MAGI and can trip a higher tier two years out. Included in Tax.<br>"
                             + "Hover a cell for the amount and tier detail.</html>";
@@ -3492,7 +3558,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<p><b>Filing status (v4).</b> A 'Filing status' selector switches the entire tax basis "
                 + "between <b>Married filing jointly</b> (default) and <b>Single</b>. Changing it swaps the "
                 + "standard deduction, the ordinary brackets, the age-65 add-on, the Social Security "
-                + "provisional-income thresholds, and the IRMAA thresholds and per-person surcharge to the "
+                + "provisional-income thresholds, and the IRMAA thresholds to the "
                 + "matching 2026 single-filer figures (std deduction $16,100; 65+ add-on $2,050; brackets "
                 + "$12,400 / $50,400 / $105,700 / $201,775 / $256,225 / $640,600; SS provisional $25,000 / "
                 + "$34,000; IRMAA thresholds $109,000 / $137,000 / $171,000 / $205,000 / $500,000). In Single "
@@ -3723,20 +3789,35 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "(section 7 / the Medical column), not here. At MAGI below $218,000 the IRMAA surcharge is $0, "
                 + "which is why the IRMAA column shows dashes at your planned income &mdash; that is correct, not "
                 + "a missing cost.</p>"
+                // v1 2026-10-14: per Medicare enrollee; lookback-return filing status.
                 + "<p>The IRMAA <b>surcharge</b> is computed as a real dollar cost (not merely flagged) and "
                 + "included in the Tax column, with its own IRMAA column. It is assessed on MAGI from <b>2 years "
-                + "prior</b> (the statutory lookback). 2026 base tiers, inflation-indexed. The dollar figures below "
-                + "are <b>per couple</b> &mdash; each spouse on Medicare owes the surcharge, so a married couple with "
-                + "both enrolled pays <b>twice</b> the per-person amount, and that is what the tool charges (the MFJ "
-                + "surcharge table is the per-person schedule &times; 2):</p>"
+                + "prior</b> (the statutory lookback), against the thresholds for the <b>filing status on that "
+                + "same return</b> (20 CFR 418.1120(a), 418.1135(a)). 2026 base tiers, inflation-indexed.</p>"
+                + "<p>The surcharge is <b>per Medicare enrollee</b> (42 U.S.C. 1395r(i)(1)): each person 65 or "
+                + "older pays the per-person amount below. On a joint return both spouses are judged on the "
+                + "joint MAGI, so a couple with both enrolled pays <b>twice</b> the per-person amount. A spouse "
+                + "not yet 65 pays nothing, although their income still counts on the joint return. The tool "
+                + "assumes each person enrolls in Part B and Part D at 65 (not someone who delays Part B on "
+                + "employer coverage, or is on Medicare before 65 through disability). Joint-return tiers:</p>"
                 + "<ul>"
                 + "<li>Tier 0: MAGI &le; $218,000 &rarr; $0</li>"
-                + "<li>Tier 1: $218,001 &ndash; $274,000 &rarr; $2,297 &nbsp;<span style='color:#777;'>($1,148/person &times; 2)</span></li>"
-                + "<li>Tier 2: $274,001 &ndash; $342,000 &rarr; $5,770 &nbsp;<span style='color:#777;'>($2,885/person &times; 2)</span></li>"
-                + "<li>Tier 3: $342,001 &ndash; $410,000 &rarr; $9,240 &nbsp;<span style='color:#777;'>($4,620/person &times; 2)</span></li>"
-                + "<li>Tier 4: $410,001 &ndash; $750,000 &rarr; $12,710 &nbsp;<span style='color:#777;'>($6,355/person &times; 2)</span></li>"
-                + "<li>Tier 5: &gt; $750,000 &rarr; $13,872 &nbsp;<span style='color:#777;'>($6,936/person &times; 2)</span></li>"
+                + "<li>Tier 1: $218,001 &ndash; $274,000 &rarr; $1,148/person &nbsp;<span style='color:#777;'>($2,297 for two)</span></li>"
+                + "<li>Tier 2: $274,001 &ndash; $342,000 &rarr; $2,885/person &nbsp;<span style='color:#777;'>($5,770 for two)</span></li>"
+                + "<li>Tier 3: $342,001 &ndash; $410,000 &rarr; $4,620/person &nbsp;<span style='color:#777;'>($9,240 for two)</span></li>"
+                + "<li>Tier 4: $410,001 &ndash; $750,000 &rarr; $6,355/person &nbsp;<span style='color:#777;'>($12,710 for two)</span></li>"
+                + "<li>Tier 5: &gt; $750,000 &rarr; $6,936/person &nbsp;<span style='color:#777;'>($13,872 for two)</span></li>"
                 + "</ul>"
+                + "<p>A Single return (also qualifying surviving spouse) uses half the thresholds &mdash; "
+                + "$109,000, $137,000, $171,000, $205,000 and $500,000 &mdash; and the same per-person amounts.</p>"
+                + "<p><b>After a death (v1 2026-10-14).</b> Only the survivor pays. The survivor's first two "
+                + "years are judged on the couple's last two joint returns &mdash; the death-year return may "
+                + "still be filed jointly (IRS Pub. 501) &mdash; so the <b>joint</b> thresholds apply; the Single "
+                + "thresholds start in the third survivor year. Before this date the tool switched to the Single "
+                + "thresholds at once, which tiered a joint return's MAGI against roughly half the thresholds. "
+                + "The death of a spouse is also a <b>life-changing event</b> (20 CFR 418.1205(a)): the survivor "
+                + "can file Form SSA-44 to have SSA use a more recent, usually lower, year's income. The tool "
+                + "does not model that appeal; it charges what the lookback gives, the conservative side.</p>"
                 + "<p>IRMAA is a cliff: one dollar over a threshold triggers the full tier jump &mdash; which is "
                 + "why the conversion fill leaves a buffer (section 7).</p>"
                 + "<p><b>IRMAA threshold growth (user toggle).</b> By law (42 U.S.C. 1395r(i)(5), checked October "
@@ -3744,7 +3825,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "12 months ending in August of the prior year &mdash; rounded to the nearest $1,000. The top tier "
                 + "($500,000 single / $750,000 MFJ) is not indexed until 2028. Note the contrast with the federal tax "
                 + "brackets, which the law indexes to the slower <i>chained</i> CPI-U (section 3). Indexing has also "
-                + "been suspended by Congress in the past. The selector:</p>"
+                + "been suspended by Congress in the past. Each year's surcharge is tested against the thresholds "
+                + "of the year it is <b>paid</b> (the premium year), using MAGI from two years earlier; before "
+                + "October 14, 2026 the Chained-CPI mode mixed the two years' indexing in that test. The selector:</p>"
                 + "<ul>"
                 + "<li><b>Full CPI (default, current law):</b> thresholds grow with your inflation assumption.</li>"
                 + "<li><b>Chained-CPI (conservative):</b> thresholds grow about 0.3%/yr slower than the law says, "
@@ -3784,38 +3867,41 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "you do not need to shift years by hand.</p>"
                 // v12 2026-10-03: the first two years and the fill's threshold year,
                 // both previously misdescribed as "every assessment" / "the premium year".
-                + "<p><b>The first two simulated years use a stand-in (2027 and 2028 for this plan).</b> Their "
-                + "premiums are set by your actual 2025 and 2026 MAGI &mdash; income that happened before the "
-                + "simulation starts, which no input here can change. For those two years the engine substitutes "
-                + "the same year's MAGI as a stand-in. If your real 2025 or 2026 MAGI (for example, including a "
-                + "final year of wages) was above a threshold, that surcharge applies whatever the table shows. A "
-                + "work stoppage is a life-changing event that can be reported to Social Security on Form SSA-44 "
-                + "to ask for the surcharge to be redetermined on current income (verify with SSA).</p>"
+                // v1 2026-10-14 (F2): the two pre-simulation MAGI inputs.
+                + "<p><b>The first two simulated years (2027 and 2028 for this plan).</b> Their premiums are set "
+                + "by your actual 2025 and 2026 MAGI &mdash; income from before the simulation starts. Enter those "
+                + "two figures on the <i>Roth Conversion &amp; IRMAA Surcharge</i> card (<b>MAGI 2 years before sim "
+                + "start</b> and <b>MAGI 1 year before sim start</b>: Form 1040 line 11 plus line 2a, in that "
+                + "year's dollars) and the engine uses them. Left at <b>0</b> (the default), the engine uses the "
+                + "same year's MAGI as an estimate, as it always has; the IRMAA tooltip says which one a year used. "
+                + "If your real 2025 or 2026 MAGI (for example, including a final year of wages) was above a "
+                + "threshold, that surcharge applies unless Social Security redetermines it: a work stoppage is a "
+                + "life-changing event that can be reported on Form SSA-44 to ask for current income to be used "
+                + "(verify with SSA). If you expect that, leave the input at 0.</p>"
                 + "<p><b>The fill sizes against THIS year's threshold, not the premium year's.</b> Each year's "
                 + "conversion is sized against the IRMAA threshold for the year the conversion happens &mdash; "
                 + "grown by the threshold-growth mode you selected &mdash; not against the threshold of the premium "
                 + "year two years later that the MAGI is actually judged by. The premium-year threshold is never "
                 + "lower, so this adds margin on top of your buffer. At a 2.3% inflation assumption the real "
                 + "cushion below the cliff is about <b>$23,100</b> under Full CPI (the $13,000 buffer plus two years "
-                + "of indexing), about $23,100 early to $22,400 by year 30 under Chained-CPI, and exactly your "
+                + "of indexing), about $21,800 early to $21,100 by year 30 under Chained-CPI (two years of the "
+                + "slower indexing; corrected October 14, 2026 from $23,100 / $22,400), and exactly your "
                 + "<b>$13,000</b> buffer under Frozen. (Before October 7, 2026 the fill grew the threshold with "
                 + "general inflation in every mode, which in Frozen mode aimed above the frozen line and tripped the "
                 + "surcharge from about year 5.)</p>"
-                + "<p><b>Both spouses' surcharges are counted.</b> Once both of you are enrolled in Medicare, a tier "
-                + "breach costs the surcharge <b>twice</b> &mdash; once per person. The tool uses the per-couple "
-                + "(per-person &times; 2) MFJ schedule in section 6, so the cost it shows for crossing a cliff is "
-                + "the full household cost, not a single person's. That is deliberately why the cliff is worth "
-                + "protecting so carefully in the conversion sizing.</p>"
-                + "<p><b>One conservative caveat in transition years.</b> The tool assumes both spouses are enrolled "
-                + "in Medicare in every year it charges the couple surcharge. In a year when only one of you has "
-                + "actually reached Medicare (for the household here, calendar 2027, before the younger spouse's "
-                + "Part B begins), the true IRMAA owed for that single-enrollee year is only one person's share. "
-                + "The tool may therefore show that one transition year's IRMAA as larger than it will really be. "
-                + "This errs on the safe side &mdash; an overstated cliff cost makes the fill slightly more "
-                + "cautious, so trusting the column never causes an over-conversion into a cliff; at worst it "
-                + "leaves a little conversion headroom unused in that one year. Given that busting a cliff is far "
-                + "worse than under-filling, that is the right direction to be wrong.</p>"
+                + "<p><b>Each enrolled spouse's surcharge is counted.</b> Once both of you are on Medicare, a tier "
+                + "breach costs the surcharge <b>twice</b> &mdash; once per person (section 6) &mdash; so the cost "
+                + "shown for crossing a cliff is the full household cost, not a single person's. That is why the "
+                + "cliff is worth protecting so carefully in the conversion sizing.</p>"
+                + "<p><b>Transition years (v1 2026-10-14).</b> In a year when only one of you is 65 or older, only "
+                + "that person is charged; a spouse not yet on Medicare pays nothing, though their income still "
+                + "counts on the joint return. Before this date the tool charged both of you whenever the joint "
+                + "thresholds were crossed, overstating such a year's IRMAA. The fill ceiling is unchanged: it "
+                + "still holds the joint MAGI under the cliff, which protects the years when both are enrolled.</p>";
 
+        // v1 2026-10-14: split here -- the first literal passed javac's 65,535-byte
+        // limit on a single compile-time String constant.
+        String htmlB = ""
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec6b'></a>6b. Re-solve cadence &mdash; annual decision, monthly paycheck</h3>"
                 + "<div style='background:#eef5ec; border-left:4px solid #2a5d34; padding:8px 12px; margin:6px 0 10px 0;'>"
@@ -4078,7 +4164,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec9'></a>9. RMDs, additional v9 stress inputs, and deliberately omitted features</h3>"
-                + "<p><b>RMDs:</b> SECURE 2.0, begin at age 75 (born after 1960). Each year's RMD is the "
+                + "<p><b>RMDs:</b> SECURE 2.0. They begin at <b>75</b> for anyone born 1960 or later and at <b>73</b> "
+                + "for anyone born 1951-1959 (the 2024 final regulations; 1959 falls in a drafting gap in the Act "
+                + "and the proposed regulations treat it as 73). Each person's own birth year sets their age, and "
+                + "a survivor who has rolled the IRA over uses their own (v1 2026-10-14; before that every owner "
+                + "started at 75, which was right only for 1960 and later). Each year's RMD is the "
                 + "<b>prior December 31</b> Traditional balance divided by the IRS distribution period (each fan "
                 + "path its own balance; the table its median balance). Since v1 (2026-10-12):</p>"
                 + "<ul>"
@@ -4107,7 +4197,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "survivor's age; living expenses fall by the "
                 + "survivor-spend-cut percentage (default 20%) and medical is halved, since it is per-person; and "
                 + "the tax basis <b>switches to Single</b> automatically, including the Single brackets, standard "
-                + "deduction, IRMAA thresholds and the survivor's own age-65 add-on. This is a Pro-engine "
+                + "deduction and the survivor's own age-65 add-on. IRMAA follows its two-year lookback: the "
+                + "survivor alone pays, on the joint thresholds for the first two survivor years and the Single "
+                + "thresholds after that (section 6; v1 2026-10-14). This is a Pro-engine "
                 + "mechanism that runs the surviving-spouse years inline &mdash; no separate Single-mode scenario "
                 + "(section 3a) is needed to model them.</p>"
                 + "<p><b>Survivor Social Security (v12 2026-10-11).</b> The survivor keeps their <b>own</b> "
@@ -4539,7 +4631,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "</body></html>";
 
-        ep.setText(html + html2);
+        ep.setText(html + htmlB + html2);
         ep.setCaretPosition(0);
         JScrollPane sp = new JScrollPane(ep);
         sp.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
@@ -4649,8 +4741,19 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *                  proration in the fan paths and solver; Joint Life table and
      *                  divisors to 120+; single filers own all of Traditional.
      *                  Every scored row moves.
+     *  11  2026-10-14  IRMAA tiers use the LOOKBACK return's filing status (a
+     *                  survivor's first two years stay on the joint thresholds) and
+     *                  the surcharge is charged per Medicare enrollee (people 65+
+     *                  and alive), not per couple. Rows in survivor years, and in
+     *                  IRMAA years when someone is under 65, move.
+     *  12  2026-10-14  RMDs start at 73 or 75 by each owner's birth year (73 for
+     *                  1951-1959); optional actual MAGI for the two years before the
+     *                  simulation feeds the first two IRMAA lookbacks (0 = estimate,
+     *                  as before); the IRMAA test uses the premium year's thresholds
+     *                  (changes Chained-CPI mode only). Rows move only for owners born
+     *                  1951-1959, entered prior MAGI, or Chained-CPI mode.
      */
-    private static final int SCORER_VERSION = 10;
+    private static final int SCORER_VERSION = 12;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -7222,6 +7325,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         if (chkConvEnabled != null)  chkConvEnabled.setEnabled(computed);
         if (tglConvMode != null)     tglConvMode.setEnabled(conv);
         if (cmbIrmaaMode != null)    cmbIrmaaMode.setEnabled(computed);
+        if (spPriorMagi2 != null)    spPriorMagi2.setEnabled(computed);   // v1 2026-10-14 (F2)
+        if (spPriorMagi1 != null)    spPriorMagi1.setEnabled(computed);
         if (cmbFilingStatus != null) cmbFilingStatus.setEnabled(computed);
 
         boolean fillMode = (tglConvMode != null) && tglConvMode.isSelected();
@@ -8005,6 +8110,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         props.setProperty("tax.convBuffer",         String.valueOf(iv(spConvBuffer)));
         props.setProperty("tax.convCap",            String.valueOf(iv(spConvCap)));
         props.setProperty("tax.irmaaThreshMode",    String.valueOf(cmbIrmaaMode.getSelectedIndex()));
+        props.setProperty("tax.priorMagi2",         String.valueOf(iv(spPriorMagi2)));   // v1 2026-10-14 (F2)
+        props.setProperty("tax.priorMagi1",         String.valueOf(iv(spPriorMagi1)));
         // v7: fill-target ceiling selections + editable base thresholds.
         props.setProperty("tax.fillIrmaaTierIdx",   String.valueOf(cmbFillIrmaaTier.getSelectedIndex()));
         props.setProperty("tax.fillBracketDropdown", String.valueOf(cmbFillBracket.getSelectedIndex()));
@@ -8204,6 +8311,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         setSpinnerI(spConvFlat,           props, "tax.convFlat",           warnings);
         setSpinnerI(spConvBuffer,         props, "tax.convBuffer",         warnings);
         setSpinnerI(spConvCap,            props, "tax.convCap",            warnings);
+        // v1 2026-10-14 (F2): optional keys. A scenario saved before them loads as
+        // 0 (use the estimate) -- reset first so a value typed earlier in this
+        // session cannot carry into an older scenario.
+        spPriorMagi2.setValue(0);
+        spPriorMagi1.setValue(0);
+        setSpinnerIfPresent(spPriorMagi2, props, "tax.priorMagi2");
+        setSpinnerIfPresent(spPriorMagi1, props, "tax.priorMagi1");
         if (props.getProperty("tax.irmaaThreshMode") != null) {
             try {
                 int m = Integer.parseInt(props.getProperty("tax.irmaaThreshMode").trim());
@@ -8837,6 +8951,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         i.convBuffer         = iv(spConvBuffer);
         i.convCap            = iv(spConvCap);
         i.irmaaThreshMode    = cmbIrmaaMode.getSelectedIndex();
+        i.priorMagi2         = iv(spPriorMagi2);   // v1 2026-10-14 (F2)
+        i.priorMagi1         = iv(spPriorMagi1);
         i.fillIrmaaTierIdx   = cmbFillIrmaaTier.getSelectedIndex();
         // map the tax-bracket dropdown (12/22/24/32) to brackets(fs) indices
         // (1/2/3/4 -- index 0 is the 10% bracket, never a fill target).
@@ -9317,6 +9433,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             int    convTaxThisYear = 0, convNetToRoth = 0;
             int    magiInt = 0, taxableSSInt = 0, ordTaxInt = 0, irmaaInt = 0,
                     fedInt = 0, stateInt = 0, convCeilInt = 0;
+            int    irmaaTierInt = 0, irmaaPeopleInt = 0;   // v1 2026-10-14: tooltip
+            int    irmaaSrcInt = 0;   // v1 2026-10-14 (F2): lookback MAGI 0=simulated 1=entered 2=estimate
+            boolean irmaaJoint = filingFor(inp, calYear - 2)   // v1 2026-10-14: lookback
+                    == TaxEngine.FilingStatus.MFJ;                 // return joint? (tooltip)
             int    mmIntTaxInt = 0;   // v12
             int    convSSIndInt = 0;  // v12 2026-10-11: torpedo -- extra taxable SS from the conversion
             int    stStartInt = 0, stSubInt = 0, stExclInt = 0, stDedInt = 0, stTaxableInt = 0;
@@ -9400,13 +9520,27 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 //      2yr-prior MAGI (which already folded conversions) as the
                 //      IRMAA driver, while the taxable-income computation here
                 //      uses living income only.
+                // v1 2026-10-14 (F2): in years 0 and 1 the lookback year is before
+                // the simulation -- use the actual MAGI entered for it, else this
+                // year's own MAGI as the estimate (the only behavior before F2).
+                int priorEntered = (y == 0) ? inp.priorMagi2 : (y == 1) ? inp.priorMagi1 : 0;
                 double magiTwoYrPrior = (y >= 2) ? magiHistory[y - 2]
+                        : (priorEntered > 0) ? priorEntered
                         : (magiBeforeConv + conv + convSSInd);   // v12 2026-10-11
-                // IRMAA thresholds index per the chosen mode, evaluated at the
-                // lookback year (y-2) whose MAGI is being assessed.
-                int lookbackY = Math.max(0, y - 2);
+                irmaaSrcInt = (y >= 2) ? 0 : (priorEntered > 0) ? 1 : 2;
+                // v1 2026-10-14 (S1): IRMAA thresholds are those of the PREMIUM year
+                // (this year) -- the lookback MAGI is judged against the thresholds
+                // in force when the surcharge is paid (42 U.S.C. 1395r(i)(5)). It
+                // passed y-2 here, which Full CPI and Frozen ignore but Chained-CPI
+                // mixed with this year's inflation factor.
                 double irmaaTF = TaxEngine.irmaaThreshFactor(
-                        inp.irmaaThreshMode, inflFactor, lookbackY);
+                        inp.irmaaThreshMode, inflFactor, y);
+                // v1 2026-10-14: the thresholds follow the LOOKBACK return's filing
+                // status -- still joint for a survivor's first two years (the
+                // death-year return may be filed jointly) -- and the surcharge is
+                // paid by each person on Medicare this year.
+                TaxEngine.FilingStatus irmaaFs = filingFor(inp, calYear - 2);
+                int irmaaPeople = irmaaEnrollees(inp, calYear, manAge, womanAge);
                 TaxEngine.StateTaxProfile stProfile =
                         TaxEngine.stateProfile(inp.stateCode);
                 // v12 2026-10-05: per-person context for a framework state (ages,
@@ -9418,6 +9552,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 TaxEngine.TaxResult tr = TaxEngine.compute(
                         grossSS, ordinaryBeforeConv, magiTwoYrPrior,
                         p65, womanAge >= 65, inflFactor, fedF, irmaaTF,
+                        irmaaFs, irmaaPeople,                        // v1 2026-10-14
                         // v11: retirementOrdinary stays tradDraw ONLY. A stream's
                         // state exemption travels in its own parameter below, so a
                         // Custom profile that also excludes retirement income cannot
@@ -9433,6 +9568,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     TaxEngine.TaxResult trNoInt = TaxEngine.compute(
                             grossSS, ordinaryBeforeConv - mmInterest, magiTwoYrPrior,
                             p65, womanAge >= 65, inflFactor, fedF, irmaaTF,
+                            irmaaFs, irmaaPeople,                    // v1 2026-10-14
                             fsYear, stProfile, calYear, tradDraw,
                             streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil), stCtx);
                     mmIntTaxInt = (int) Math.max(0, tr.totalTax - trNoInt.totalTax);
@@ -9440,6 +9576,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 taxableSSInt = (int) tr.taxableSS;
                 ordTaxInt    = (int) tr.ordinaryOther;      // living ordinary only
                 irmaaInt     = (int) tr.irmaaCost;
+                irmaaTierInt   = tr.irmaaTier;                      // v1 2026-10-14
+                irmaaPeopleInt = tr.irmaaEnrollees;
                 fedInt       = (int) tr.fedTax;
                 stateInt     = (int) tr.stateTax;
                 bracketStr   = tr.topBracket;
@@ -9528,6 +9666,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             row.medical       = (int) medical;
             row.tax           = (int) tax;
             row.irmaa         = irmaaInt;
+            row.irmaaTier     = irmaaTierInt;     // v1 2026-10-14
+            row.irmaaPeople   = irmaaPeopleInt;
+            row.irmaaJoint    = irmaaJoint;
+            row.irmaaSrc      = irmaaSrcInt;      // v1 2026-10-14 (F2)
             row.conversion    = convThisYear;
             row.convTax       = convTaxThisYear;
             row.convNetToRoth = convNetToRoth;
@@ -9834,8 +9976,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int spd1  = r1 != null ? r1.totalSpend : 0;
         int inc1  = yr1 + guar1;
         int sur1  = inc1 - spd1;
-        int manRmdYear   = inp.manBirthYear   + RMD_START_AGE;
-        int womanRmdYear = inp.womanBirthYear + RMD_START_AGE;
+        int manRmdYear   = inp.manBirthYear   + rmdStartAge(inp.manBirthYear);     // v1 2026-10-14 (F1)
+        int womanRmdYear = inp.womanBirthYear + rmdStartAge(inp.womanBirthYear);
 
         String preDrawSection = "";
         if (inp.baseYear < inp.withdrawStartYear) {
@@ -9859,7 +10001,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         + "  Amounts above are in %d dollars (PIA as-of year); COLA %.1f%%/yr%s\n\n"
                         + "== ANNUITY ==\n"
                         + "  %s/yr from %d (non-COLA)\n\n"
-                        + "== RMD SCHEDULE (SECURE 2.0 -- age 75) ==\n"
+                        + "== RMD SCHEDULE (SECURE 2.0 -- 73 or 75 by birth year) ==\n"
                         + "  User's trad IRA + 401K: %s . RMDs begin %d\n"
                         + "  Spouse's trad IRA + 401K: %s . RMDs begin %d\n"
                         + "  Roth accounts (no RMD): %s\n\n"
@@ -10512,6 +10654,26 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         return manAge >= 65;
     }
 
+    /**
+     * v1 2026-10-14: how many people pay an IRMAA surcharge this year. IRMAA is
+     * charged per Medicare enrollee (42 U.S.C. 1395r(i)(1)), so each person who
+     * is present and 65 or older pays the per-person amount. Presence follows
+     * stateCtx: the decedent in a survivor year, and the spouse when filing
+     * Single, are not counted. Assumes Part B and Part D enrollment at 65.
+     */
+    static int irmaaEnrollees(SimInputs inp, int calYear, int manAge, int womanAge) {
+        boolean manPresent, womanPresent;
+        if (isSurvivorYear(inp, calYear)) {
+            manPresent   = inp.deathWho != 1;
+            womanPresent = inp.deathWho == 1;
+        } else if (filingFor(inp, calYear) == TaxEngine.FilingStatus.SINGLE) {
+            manPresent = true;  womanPresent = false;
+        } else {
+            manPresent = true;  womanPresent = true;
+        }
+        return (manPresent && manAge >= 65 ? 1 : 0) + (womanPresent && womanAge >= 65 ? 1 : 0);
+    }
+
     // Survivor-aware Social Security. In a survivor year the decedent's benefit
     // stops and the survivor's slot carries survivorSS(): their own benefit, or the
     // survivor benefit once they are entitled to the full amount, whichever is larger.
@@ -10672,7 +10834,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int spouseAge = ownerIsMan ? womanAge : manAge;
         boolean joint = !isSurvivorYear(inp, calYear)
                 && filingFor(inp, calYear) == TaxEngine.FilingStatus.MFJ;
-        return calcRmdJoint(shareBal, ownerAge, spouseAge, joint);
+        // v1 2026-10-14 (F1): the owner's own starting age. In a survivor year the
+        // survivor owns all of Traditional (rolled over), so it is theirs.
+        int startAge = rmdStartAge(ownerIsMan ? inp.manBirthYear : inp.womanBirthYear);
+        return calcRmdJoint(shareBal, ownerAge, spouseAge, joint, startAge);
     }
 
     // Gross Roth conversion for the fan path, matching the display-loop policy:
@@ -10750,7 +10915,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 magiBeforeForConv(grossSS, ordinaryBeforeConv, inflFactor, fs),
                 primary65(inp, calYear, manAge, womanAge), womanAge >= 65, inflFactor,
                 TaxEngine.fedIndexFactor(inflFactor, y),                            // v12 2026-10-07
-                TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, Math.max(0, y - 2)),
+                TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, y),   // v1 2026-10-14 (S1): premium year
+                filingFor(inp, calYear - 2), irmaaEnrollees(inp, calYear, manAge, womanAge),  // v1 2026-10-14
                 // v11: retirementOrdinary is the Traditional draw ONLY; the stream
                 // exemption travels in its own parameter (see stateTaxLiving).
                 fs, stProfile, calYear, tradDraw,
@@ -10774,8 +10940,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         return inp.baseTax * Math.pow(1 + inp.taxInflation, calYear - inp.withdrawStartYear);
     }
 
-    private double calcRmd(double tradBalance, int age) {
-        if (age < RMD_START_AGE) return 0;
+    private double calcRmd(double tradBalance, int age, int startAge) {
+        if (age < startAge) return 0;                  // v1 2026-10-14 (F1): per owner
         Double factor = ULT.get(Math.min(age, 120));   // v1 2026-10-12: table runs to 120+
         if (factor == null) factor = 2.0;
         return tradBalance / factor;
@@ -10785,14 +10951,15 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // caller says a spouse qualifies and that spouse is more than 10 years
     // younger; otherwise -- or for a pair outside the transcribed blocks -- the
     // Uniform Lifetime table (calcRmd), whose smaller divisor is conservative.
+    // v1 2026-10-14 (F1): `startAge` is the owner's rmdStartAge(birth year).
     private double calcRmdJoint(double tradBalance, int ownerAge, int spouseAge,
-                                boolean spouseQualifies) {
-        if (ownerAge < RMD_START_AGE) return 0;
+                                boolean spouseQualifies, int startAge) {
+        if (ownerAge < startAge) return 0;
         if (spouseQualifies && ownerAge - spouseAge > 10) {
             Double j = JLT.get(ownerAge * 1000 + spouseAge);
             if (j != null) return tradBalance / j;
         }
-        return calcRmd(tradBalance, ownerAge);
+        return calcRmd(tradBalance, ownerAge, startAge);
     }
 
     // ========================================================================
@@ -10925,10 +11092,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             // joint return and more than 10 years younger (see ownerRmd).
             boolean gkJoint = !isSurvivorYear(inp, calYear)
                     && filingFor(inp, calYear) == TaxEngine.FilingStatus.MFJ;
-            double manRmd   = calcRmdJoint(manTradIRA,   manAge, womanAge, gkJoint)
-                    + calcRmdJoint(manTrad401K,  manAge, womanAge, gkJoint);
-            double womanRmd = calcRmdJoint(womanTradIRA,  womanAge, manAge, gkJoint)
-                    + calcRmdJoint(womanTrad401K, womanAge, manAge, gkJoint);
+            // v1 2026-10-14 (F1): each owner's own starting age.
+            int gkManStart   = rmdStartAge(inp.manBirthYear);
+            int gkWomanStart = rmdStartAge(inp.womanBirthYear);
+            double manRmd   = calcRmdJoint(manTradIRA,   manAge, womanAge, gkJoint, gkManStart)
+                    + calcRmdJoint(manTrad401K,  manAge, womanAge, gkJoint, gkManStart);
+            double womanRmd = calcRmdJoint(womanTradIRA,  womanAge, manAge, gkJoint, gkWomanStart)
+                    + calcRmdJoint(womanTrad401K, womanAge, manAge, gkJoint, gkWomanStart);
             double combRmd  = manRmd + womanRmd;
 
             int wdActual   = drawing ? (int)(wdGK * goGoMult) : 0;
@@ -10978,10 +11148,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             gk.rows.add(row);
 
             // v1 2026-10-12: the RMD comes out at the start of the year too.
-            manTradIRA    = Math.max(0, (manTradIRA    - calcRmdJoint(manTradIRA,    manAge, womanAge, gkJoint)) * (1 + yearReturn));
-            manTrad401K   = Math.max(0, (manTrad401K   - calcRmdJoint(manTrad401K,   manAge, womanAge, gkJoint)) * (1 + yearReturn));
-            womanTradIRA  = Math.max(0, (womanTradIRA  - calcRmdJoint(womanTradIRA,  womanAge, manAge, gkJoint)) * (1 + yearReturn));
-            womanTrad401K = Math.max(0, (womanTrad401K - calcRmdJoint(womanTrad401K, womanAge, manAge, gkJoint)) * (1 + yearReturn));
+            manTradIRA    = Math.max(0, (manTradIRA    - calcRmdJoint(manTradIRA,    manAge, womanAge, gkJoint, gkManStart)) * (1 + yearReturn));
+            manTrad401K   = Math.max(0, (manTrad401K   - calcRmdJoint(manTrad401K,   manAge, womanAge, gkJoint, gkManStart)) * (1 + yearReturn));
+            womanTradIRA  = Math.max(0, (womanTradIRA  - calcRmdJoint(womanTradIRA,  womanAge, manAge, gkJoint, gkWomanStart)) * (1 + yearReturn));
+            womanTrad401K = Math.max(0, (womanTrad401K - calcRmdJoint(womanTrad401K, womanAge, manAge, gkJoint, gkWomanStart)) * (1 + yearReturn));
         }
 
         gk.finalBalance = gk.rows.isEmpty() ? 0
@@ -11988,16 +12158,19 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         //   T1 (81.20+14.50)*12 = 1,148.40   T2 (202.90+37.50)*12 = 2,884.80
         //   T3 (324.60+60.40)*12 = 4,620.00  T4 (446.30+83.30)*12 = 6,355.20
         //   T5 (487.00+91.00)*12 = 6,936.00
-        // MFJ (both on Medicare) = 2 x per-person. Single = per-person.
+        // v1 2026-10-14: the surcharge is PER MEDICARE ENROLLEE (42 U.S.C.
+        // 1395r(i)(1)) -- compute() charges this per-person amount x the number
+        // of people enrolled this year. The filing status picks only the
+        // THRESHOLDS. (The former MFJ surcharge table, 2 x per-person, assumed
+        // both spouses were always enrolled; it is gone.)
         //
         // NOTE (v4 fix): the prior (v3) MFJ arrays had only four surcharge
         // tiers with stale values and collapsed the top two tiers; both the
         // thresholds and the surcharge amounts are corrected here to the full
         // six-tier 2026 CMS schedule.
         static final double[] IRMAA_THRESH_MFJ_2026    = {218_000, 274_000, 342_000, 410_000, 750_000};
-        static final double[] IRMAA_MFJ_YR_2026        = {0, 2_296.80, 5_769.60, 9_240.00, 12_710.40, 13_872.00};
         static final double[] IRMAA_THRESH_SINGLE_2026 = {109_000, 137_000, 171_000, 205_000, 500_000};
-        static final double[] IRMAA_SINGLE_YR_2026     = {0, 1_148.40, 2_884.80, 4_620.00,  6_355.20,  6_936.00};
+        static final double[] IRMAA_PER_PERSON_YR_2026 = {0, 1_148.40, 2_884.80, 4_620.00,  6_355.20,  6_936.00};
 
         // Social Security provisional-income thresholds. Statutory, NOT
         // inflation-indexed in real life (fixed since 1993) -- so we hold them
@@ -12576,6 +12749,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             double stateTax;
             double irmaaCost;      // surcharge PAID this year (based on 2yr-prior MAGI)
             int    irmaaTier;
+            int    irmaaEnrollees; // v1 2026-10-14: people paying it (0-2)
             String topBracket;
             double totalTax;       // fedTax + stateTax + irmaaCost
             // v12 2026-10-05: what conversionTax() needs to stack a conversion on
@@ -12643,9 +12817,6 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         }
         static double[] irmaaThresh(FilingStatus fs) {
             return (fs == FilingStatus.SINGLE) ? ACTIVE_IRMAA_SINGLE : ACTIVE_IRMAA_MFJ;
-        }
-        static double[] irmaaSurcharge(FilingStatus fs) {
-            return (fs == FilingStatus.SINGLE) ? IRMAA_SINGLE_YR_2026 : IRMAA_MFJ_YR_2026;
         }
 
         /** Taxable portion of Social Security via the provisional-income rule.
@@ -12784,12 +12955,17 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
          * @param irmaaThreshFactor factor for indexing IRMAA THRESHOLDS this
          *                       year (may differ from inflFactor: 1.0 = frozen,
          *                       reduced = chained-CPI, = inflFactor = full-CPI)
+         * @param irmaaFs        v1 2026-10-14: filing status on the LOOKBACK
+         *                       return (2 years prior) -- picks the IRMAA thresholds
+         * @param irmaaEnrollees v1 2026-10-14: people on Medicare this year (0-2);
+         *                       each pays the per-person surcharge
          */
         static TaxResult compute(double grossSS, double ordinaryOther,
                                  double magiTwoYrPrior,
                                  boolean man65, boolean woman65,
                                  double inflFactor, double fedFactor,
                                  double irmaaThreshFactor,
+                                 FilingStatus irmaaFs, int irmaaEnrollees,
                                  FilingStatus fs,
                                  StateTaxProfile stateProfile, int simYear,
                                  double retirementOrdinary,
@@ -12823,9 +12999,17 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
             // IRMAA THRESHOLDS index per the chosen mode; the surcharge AMOUNT
             // still tracks general inflation (Medicare costs rise with prices).
-            r.irmaaTier = irmaaTier(magiTwoYrPrior, irmaaThreshFactor, fs);
-            double[] tbl = irmaaSurcharge(fs);
-            r.irmaaCost = tbl[Math.min(r.irmaaTier, tbl.length - 1)] * inflFactor;
+            // v1 2026-10-14: the tier comes from the LOOKBACK return -- its MAGI
+            // AND its filing status (20 CFR 418.1120(a), 418.1135(a)) -- and the
+            // surcharge is paid per Medicare enrollee: the per-person amount x the
+            // number enrolled THIS year. Both used this year's status before, so a
+            // survivor's first two years were tiered on Single thresholds against
+            // a joint return's MAGI, and a couple paid twice even with one spouse
+            // not yet 65.
+            r.irmaaTier = irmaaTier(magiTwoYrPrior, irmaaThreshFactor, irmaaFs);
+            r.irmaaEnrollees = irmaaEnrollees;
+            r.irmaaCost = IRMAA_PER_PERSON_YR_2026[Math.min(r.irmaaTier,
+                    IRMAA_PER_PERSON_YR_2026.length - 1)] * irmaaEnrollees * inflFactor;
 
             r.topBracket = topBracket(r.taxableIncome, fedFactor, fs);
             r.totalTax   = r.fedTax + r.stateTax + r.irmaaCost;
@@ -13132,6 +13316,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         boolean convFillMode;       // true = fill-to-target, false = flat
         int convFlat, convBuffer, convCap;
         int irmaaThreshMode;        // 0=frozen 1=chained-CPI 2=full-CPI
+        // v1 2026-10-14 (F2): actual MAGI (that year's dollars) of the tax years 2
+        // and 1 before the simulation starts -- the IRMAA lookback for simulation
+        // years 0 and 1. 0 = not entered: use that year's own MAGI as the estimate.
+        int priorMagi2, priorMagi1;
         // v7: fill-to-target ceilings, both user-selected.
         //   fillIrmaaTierIdx: index into the IRMAA upper-boundary array; 0 = the
         //     first cliff (Standard->Tier1, the pre-v7 default). Fill stays under
@@ -13233,6 +13421,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int  living, medical, tax, totalSpend, totalIncome, surplus;
         // v3 tax engine detail
         int  irmaa, conversion, magi, taxableSS, ordinaryTax, fedTax, stateTax;
+        int  irmaaTier, irmaaPeople;   // v1 2026-10-14: tier and people paying (tooltip)
+        boolean irmaaJoint;            // v1 2026-10-14: lookback return was joint
+        int  irmaaSrc;                 // v1 2026-10-14 (F2): 0=simulated 1=entered 2=estimate
         // v12 2026-10-05: framework-state breakdown for the Tax (est) tooltip (nominal $):
         // starting income, SS + exempt-stream subtraction, retirement exclusion,
         // deductions/exemptions, state taxable income. stParts = false on Custom.
