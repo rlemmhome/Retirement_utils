@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Wednesday, October 14, 2026 at 06:52 PM MST (UTC-7)
+// Last modified: Thursday, October 15, 2026 at 04:15 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Wednesday, October 14, 2026 at 06:52 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Thursday, October 15, 2026 at 04:15 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -540,6 +540,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private boolean    showRealDollars = false;
     // Cache for SS Optimizer results -- repopulated when real/nominal toggle fires
     private java.util.List<SsOptResult> lastOptResults = null;
+    private boolean optBatchRunning = false;   // v1 2026-10-15 (FR): EDT only; true while a batch runs
     // v9: Option-2 optimizer inputs. Travel-headroom floors and the Green Surplus/Gap
     // (SS Optimizer tab ONLY -- they feed the feasibility test, never the Pro
     // engine's spending). Grid/fidelity controls for the two-stage scan, and the
@@ -4450,14 +4451,25 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "stop matching after a restart or after clicking a row. The file path is shown in the status line when a batch "
                 + "starts, and the fingerprint sits in its own selectable field beside Run SS Optimizer "
                 + "&mdash; click and drag to copy it. It stays put while the progress line scrolls, so a file that fails to match can be diagnosed without picking the hash "
-                + "out of the file. The first line of a new file is a CSV header naming all 41 columns. "
+                + "out of the file. The first line of a new file is a CSV header naming all 42 columns. "
                 + "An interrupted batch "
                 + "costs one run rather than the whole night &mdash; press Run again and it resumes. Change any "
-                + "input that would alter a result and the fingerprint changes, so a stale file is never "
+                + "input that would alter a simulation and the fingerprint changes, so a stale file is never "
                 + "silently reused. Each row stores its full working as well as its results &mdash; every "
                 + "per-year violation, every graced dip, the floors it was judged against and its margin to "
                 + "each &mdash; so a batch read back off disk explains its verdicts exactly as a fresh one "
                 + "does. Delete the file for a clean slate; it costs only the resume.</p>"
+                // v1 2026-10-15 (FR)
+                + "<p><b>Changing a floor never needs a re-run (since October 15, 2026).</b> The four "
+                + "optimizer floors &mdash; Go-go, Slow-go, Green Surplus/Gap and Term grace &mdash; are tests "
+                + "applied to rows already simulated; none of them reaches the simulation. Each row therefore "
+                + "keeps its per-year Surplus/gap, balance and phase (the last column of the file), the floors "
+                + "are left out of the fingerprint, and changing one re-scores every row on screen at once: "
+                + "PASS/FAIL, shortfall, binding floor, margins, Feasibility min and the worst no-go year "
+                + "(which skips the grace window). A batch resumed from disk is re-scored against the floors "
+                + "on screen the same way. The verdict columns in the file still show the floors each row "
+                + "was scored against when it was written. The <b>PoS target</b> is different: the withdrawal "
+                + "solver uses it, so it stays in the fingerprint and a change still needs a re-run.</p>"
                 // v12 2026-10-04: measured batch timings, the E-core pinning recipe, and
                 // the author's note -- all from Bob's runs on his 24-CPU laptop.
                 + "<p><b>Measured batch times</b> (author's 24-CPU laptop, October 2026 grid; "
@@ -4680,7 +4692,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
     /**
      * v11 2026-09-29: the version of the SCORING LOGIC, hashed into the batch
-     * fingerprint beside the floors.
+     * fingerprint beside the PoS target and run settings (the four floors left the
+     * fingerprint on 2026-10-15 -- see applyFloors).
      *
      * The fingerprint answers "is this the same plan?" by hashing the INPUTS. It
      * cannot see the code that turns those inputs into a scored row, so a fix to
@@ -4752,8 +4765,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *                  as before); the IRMAA test uses the premium year's thresholds
      *                  (changes Chained-CPI mode only). Rows move only for owners born
      *                  1951-1959, entered prior MAGI, or Chained-CPI mode.
+     *  13  2026-10-15  rows keep their per-year data (new last CSV column) and the
+     *                  four optimizer floors leave the fingerprint; applyFloors()
+     *                  re-scores saved rows when a floor changes. Scoring arithmetic
+     *                  unchanged; the row format changed, so every batch re-runs once.
      */
-    private static final int SCORER_VERSION = 12;
+    private static final int SCORER_VERSION = 13;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -4936,6 +4953,19 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "why moving the horizon from 95 to 94 used to flip rows to<br>"
                 + "feasible). Set it to 0 to require every single year to stay green<br>"
                 + "with no exceptions. SS Optimizer only.</html>");
+
+        // v1 2026-10-15 (FR): the four floors only test rows already simulated, so a
+        // change re-scores the results on screen at once -- no re-run -- and says so
+        // in each tooltip. (They are no longer part of the batch fingerprint.)
+        String rescoreNote = "<br><br><i>Changing this re-scores the results already on screen "
+                + "at once &mdash; no re-run.</i></html>";
+        for (JSpinner sp : new JSpinner[]{ spOptGoGoFloor, spOptSlowGoFloor,
+                spOptGreenBuffer, spOptTermGrace }) {
+            String tip = sp.getToolTipText();
+            if (tip != null && tip.endsWith("</html>"))
+                sp.setToolTipText(tip.substring(0, tip.length() - "</html>".length()) + rescoreNote);
+            sp.addChangeListener(e -> rescoreOptFloors());
+        }
 
         // v11: four granularities. The step in months is OPT_GRID_STEP[index].
         cmbOptGrid = new JComboBox<>(new String[]{
@@ -5632,6 +5662,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     //     around for hours while a batch ran behind it.
     // The Pro PoS tab therefore behaves exactly as it did before this change.
     private void runSsOptimizer() {
+        optBatchRunning = true;   // v1 2026-10-15 (FR)
         btnRunOpt.setEnabled(false);
         btnCancelOpt.setEnabled(true);
         optCancelRequested = false;
@@ -5649,6 +5680,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 if (!msgs.isEmpty()) lblOptStatus.setText(msgs.get(msgs.size()-1));
             }
             @Override protected void done() {
+                optBatchRunning = false;   // v1 2026-10-15 (FR)
                 btnRunOpt.setEnabled(true);
                 btnCancelOpt.setEnabled(false);
                 if (optCancelRequested)
@@ -5773,6 +5805,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 ? "   |   scored in Random (" + c.stressIgnored + " on the stress card ignored)"
                 : ""));
         java.util.Map<String, SsOptResult> onDisk = loadBatchResults(fp);
+        // v1 2026-10-15 (FR): the floors are no longer in the fingerprint, so a saved
+        // row may have been scored against different ones -- re-apply this batch's.
+        for (SsOptResult r : onDisk.values())
+            applyFloors(r, c.greenBuf, c.goGoFloor, c.slowGoFloor, c.termGrace, c.posTarget);
         int rowsInFile = countBatchRows(resultsFile);
         if (!onDisk.isEmpty()) {
             publish.accept(String.format("Resuming: %,d of %,d already on disk.", onDisk.size(), total));
@@ -5941,9 +5977,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             final java.util.List<SsOptResult> fin = results;
             final BatchCfg cc = c;
             final long elapsedMs = optRunElapsedMs;   // v12
-            SwingUtilities.invokeLater(() -> populateOptTable(
-                    fin, cc.manBY, cc.manBM, cc.womanBY, cc.womanBM, cc.manPIA, cc.womanPIA,
-                    elapsedMs));
+            SwingUtilities.invokeLater(() -> {
+                // v1 2026-10-15 (FR): a floor moved while the batch ran -- score the
+                // finished rows against the floors on screen now, not the ones read at Run.
+                int g = iv(spOptGreenBuffer), go = iv(spOptGoGoFloor), sl = iv(spOptSlowGoFloor),
+                        tg = iv(spOptTermGrace);
+                if (g != cc.greenBuf || go != cc.goGoFloor || sl != cc.slowGoFloor || tg != cc.termGrace) {
+                    for (SsOptResult r : fin) applyFloors(r, g, go, sl, tg, r.floorPoS);
+                    rankOptResults(fin, optRankMode());
+                }
+                populateOptTable(fin, cc.manBY, cc.manBM, cc.womanBY, cc.womanBM,
+                        cc.manPIA, cc.womanPIA, elapsedMs);
+            });
         }
     }
 
@@ -6018,7 +6063,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     + "survivor_years,spendable_is_couple,couple_spendable,floor_green,floor_gogo,"
                     + "floor_slowgo,floor_pos,margin_green,margin_gogo,margin_slowgo,margin_pos,"
                     + "bind_margin,violations,graced_dips,"
-                    + "no_go_total,no_go_worst,lifetime_spendable,early_spendable";   // v12 2026-10-11
+                    + "no_go_total,no_go_worst,lifetime_spendable,early_spendable"    // v12 2026-10-11
+                    + ",years";   // v1 2026-10-15 (FR): per-year data for floor re-scoring
     /** First write failure of the current batch, or null. Reported, never swallowed. */
     private volatile String batchWriteError = null;
 
@@ -6117,9 +6163,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 sb.append(n).append('=').append(f.get(in)).append(';');
             }
         } catch (Exception ex) { return "nofp"; }
-        sb.append(c.goGoFloor).append(';').append(c.slowGoFloor).append(';')
-                .append(c.greenBuf).append(';').append(c.termGrace).append(';')
-                .append(c.posTarget).append(';').append(c.gridStepMo).append(';')
+        // v1 2026-10-15 (FR): the four optimizer floors (go-go, slow-go, Green
+        // Surplus/Gap, terminal grace) are NOT hashed any more. They never reach the
+        // simulation -- applyFloors() tests rows already simulated -- so changing one
+        // re-scores the saved rows instead of orphaning them. The PoS target stays:
+        // the withdrawal solver uses it.
+        sb.append(c.posTarget).append(';').append(c.gridStepMo).append(';')
                 .append(c.fullPaths).append(';').append(c.fullFan).append(';')
                 .append(c.binIters).append(';')
                 // v11 2026-09-27: no seed here -- the batch seed is fixed at 0, so the hash identifies
@@ -6152,6 +6201,44 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      * carries only ints and a short floor name ("green" / "go-go" / "slow-go"), none
      * of which can contain either character.
      */
+    /**
+     * v1 2026-10-15 (FR): encode a row's per-year data for its CSV cell --
+     * "rows;idx:calYear:surplus:balance:phase|...". Empty when the row has none (the
+     * simulation threw), so it reads back as null. The surplus is written with
+     * Double.toString, which round-trips exactly, so a row re-scored from disk gets
+     * the same verdict and the same worst-no-go-year figure as a fresh one.
+     */
+    private static String encodeYears(SsOptResult r) {
+        if (r.yrCal == null) return "";
+        StringBuilder sb = new StringBuilder().append(r.yrRows).append(';');
+        for (int k = 0; k < r.yrCal.length; k++) {
+            if (k > 0) sb.append('|');
+            sb.append(r.yrIdx[k]).append(':').append(r.yrCal[k]).append(':')
+                    .append(Double.toString(r.yrSurp[k])).append(':')
+                    .append(r.yrBal[k]).append(':').append(r.yrPhase[k]);
+        }
+        return sb.toString();
+    }
+
+    /** v1 2026-10-15 (FR): the inverse of encodeYears. Leaves the arrays null for "". */
+    private static void decodeYears(String cell, SsOptResult r) {
+        if (cell == null || cell.isEmpty()) return;
+        int semi = cell.indexOf(';');
+        int rows = Integer.parseInt(cell.substring(0, semi));
+        String body = cell.substring(semi + 1);
+        String[] ys = body.isEmpty() ? new String[0] : body.split("\\|");
+        int n = ys.length;
+        int[] idx = new int[n], cal = new int[n], bal = new int[n], ph = new int[n];
+        double[] sur = new double[n];
+        for (int k = 0; k < n; k++) {
+            String[] f = ys[k].split(":");
+            idx[k] = Integer.parseInt(f[0]); cal[k] = Integer.parseInt(f[1]);
+            sur[k] = Double.parseDouble(f[2]); bal[k] = Integer.parseInt(f[3]);
+            ph[k]  = Integer.parseInt(f[4]);
+        }
+        r.yrRows = rows; r.yrIdx = idx; r.yrCal = cal; r.yrSurp = sur; r.yrBal = bal; r.yrPhase = ph;
+    }
+
     private static String encodeMisses(java.util.List<FloorMiss> list) {
         if (list == null || list.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
@@ -6238,6 +6325,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     if (p.length > 38) r.noGoWorst         = Double.parseDouble(p[38]);
                     if (p.length > 39) r.lifetimeSpendable = Double.parseDouble(p[39]);
                     if (p.length > 40) r.earlySpendable    = Double.parseDouble(p[40]);
+                    // v1 2026-10-15 (FR): per-year data; the caller re-applies the floors.
+                    if (p.length > 41) decodeYears(p[41], r);
                     r.fromDisk = true;
                     out.put(p[1], r);
                 } catch (RuntimeException bad) {
@@ -6267,7 +6356,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     new java.io.FileWriter(out, true))) {
                 pw.printf("%s,%s,%d,%d,%d,%d,%b,%.6f,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,"
                                 + "%.4f,%.4f,%d,%b,%d,%b,%.2f,%d,%d,%d,%d,%d,%d,%d,%.4f,%d,%s,%s,"
-                                + "%.2f,%.2f,%.2f,%.2f%n",
+                                + "%.2f,%.2f,%.2f,%.2f,%s%n",
                         fp, key, r.bobYear, r.bobMonth, r.joYear, r.joMonth, r.feasible,
                         r.actualPoS, r.feasMin, r.minSurplus, r.minGoGoSurplus, r.minSlowGoSurplus,
                         r.finalYearsDraw, r.endingBalance, r.survivorSpendable, r.survivorSS,
@@ -6277,7 +6366,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         r.floorGreen, r.floorGoGo, r.floorSlowGo, r.floorPoS,
                         r.marginGreen, r.marginGoGo, r.marginSlowGo, r.marginPoS, r.bindMargin,
                         encodeMisses(r.violations), encodeMisses(r.gracedDips),
-                        r.noGoTotal, r.noGoWorst, r.lifetimeSpendable, r.earlySpendable);   // v12 2026-10-11
+                        r.noGoTotal, r.noGoWorst, r.lifetimeSpendable, r.earlySpendable,   // v12 2026-10-11
+                        encodeYears(r));                                                   // v1 2026-10-15 (FR)
             } catch (Exception ex) {
                 // v11 2026-09-27: disk trouble must not kill a nine-hour run -- but it must not be
                 // invisible either. Pre-v15 this was swallowed silently, so an unwritable
@@ -6397,16 +6487,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int slowGoDur = Math.max(0, base.slowGoDuration);
         // v12 2026-10-11 (OF1): the ranking measures, accumulated below.
         double noGoSum = 0, earlySum = 0, lifeSum = 0;
-        double noGoWorst = Double.MAX_VALUE, noGoWorstAll = Double.MAX_VALUE;
         int noGoN = 0;
         int minGo = Integer.MAX_VALUE, minSlow = Integer.MAX_VALUE;
         boolean sawGo = false, sawSlow = false;
-        int minGreenTest = Integer.MAX_VALUE;   // drives feasibility
-        int minGreenTestYear = 0;               // calendar year of that worst counted year
-        // v11 2026-09-27: the floor THAT year was actually judged against -- greenBuf normally,
-        // 0 inside the terminal window. Tracked because the shortfall and the binding
-        // capture below must measure against the floor that applied, not the buffer.
-        int minGreenTestFloor = greenBuf;
+        // v1 2026-10-15 (FR): everything the four floors decide -- the green test,
+        // violations, graced dips, the worst no-go year (it skips the grace window),
+        // PASS/FAIL, shortfall and binding -- moved to applyFloors(), which reads the
+        // per-year data kept below. A floor change then re-scores saved rows without
+        // re-simulating them.
         int minRawSurplus = Integer.MAX_VALUE;  // shown in the Min surplus column
         // v11 2026-09-27: THE RANK METRIC. Spendable income is what is left after the two costs
         // that are not discretionary -- tax and medical -- so it is the money the
@@ -6426,6 +6514,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // label are KEPT so an archived file written before this change still reads back
         // with the units it was actually computed in.
         r.dollarsReal = true;
+        // v1 2026-10-15 (FR): per drawing year -- row index, calendar year, surplus and
+        // balance (today's $), phase. Empty, not null, when there are no rows.
+        java.util.List<Integer> yIdx = new java.util.ArrayList<>(), yCal = new java.util.ArrayList<>(),
+                yBal = new java.util.ArrayList<>(), yPh = new java.util.ArrayList<>();
+        java.util.List<Double> ySurp = new java.util.ArrayList<>();
         if (pr.medianRows != null) {
             int nRows = pr.medianRows.size();
             for (int i = 0; i < nRows; i++) {
@@ -6458,30 +6551,6 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 if (row.survivorYear) { survYears++; minSurvSpend = Math.min(minSurvSpend, spendable); }
                 else                  { coupYears++; minCoupSpend = Math.min(minCoupSpend, spendable); }
 
-                // v11 2026-09-27: inside the terminal window the green floor is ZERO, not the
-                // buffer. At 92 with three years left and the portfolio able to cover
-                // the gap, there is no reason to fail a plan for missing a comfort
-                // margin -- the money is right there. Outside the window the floor is
-                // the user's Green Surplus/Gap, unchanged. The coverage test is per-year by
-                // design: each year is judged against its own balance.
-                boolean inTerminalWindow = (i >= nRows - termGrace);
-                int effFloor      = inTerminalWindow ? 0 : greenBuf;
-                int shortfallHere = effFloor - surplusDisp;         // >0 means below the floor
-                boolean covered = (shortfallHere <= 0)              // at or above the floor, or
-                        || (inTerminalWindow && balanceDisp >= shortfallHere);  // portfolio covers it
-                if (!covered) {
-                    if (surplusDisp < minGreenTest) {
-                        minGreenTest = surplusDisp; minGreenTestYear = calY; minGreenTestFloor = effFloor;
-                    }
-                    // Record the green violation for the tooltip, against the floor that
-                    // actually applied to this year.
-                    r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "green", effFloor));
-                } else if (inTerminalWindow && surplusDisp < greenBuf) {
-                    // Inside the window and below the NORMAL buffer: still reported as
-                    // forgiven so the Why dialog shows what grace covered.
-                    r.gracedDips.add(new FloorMiss(calY, surplusDisp, balanceDisp, "green", greenBuf));
-                }
-
                 // v12 2026-10-11 (O2): phase from the year windows.
                 int yFromStart = row.calYear - inp.withdrawStartYear;
                 int phase = (yFromStart < goGoDur) ? 0
@@ -6490,22 +6559,21 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 double sReal = row.surplus / d;
                 lifeSum += sReal;
                 if (phase < 2) earlySum += sReal;
-                else {
-                    noGoSum += sReal; noGoN++;
-                    noGoWorstAll = Math.min(noGoWorstAll, sReal);
-                    if (!inTerminalWindow) noGoWorst = Math.min(noGoWorst, sReal);
-                }
-                if (phase == 0) {
-                    sawGo = true; if (surplusDisp < minGo) minGo = surplusDisp;
-                    if (surplusDisp < goGoFloor)
-                        r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "go-go", goGoFloor));
-                } else if (phase == 1) {
-                    sawSlow = true; if (surplusDisp < minSlow) minSlow = surplusDisp;
-                    if (surplusDisp < slowGoFloor)
-                        r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "slow-go", slowGoFloor));
-                }
+                else { noGoSum += sReal; noGoN++; }
+                if (phase == 0)      { sawGo = true;   if (surplusDisp < minGo)   minGo   = surplusDisp; }
+                else if (phase == 1) { sawSlow = true; if (surplusDisp < minSlow) minSlow = surplusDisp; }
+                // v1 2026-10-15 (FR): keep what the floors are tested on. sReal is the
+                // exact value surplusDisp was rounded from, so applyFloors() recovers
+                // surplusDisp bit for bit.
+                yIdx.add(i); yCal.add(calY); ySurp.add(sReal); yBal.add(balanceDisp); yPh.add(phase);
             }
         }
+        r.yrRows  = (pr.medianRows != null) ? pr.medianRows.size() : 0;
+        r.yrIdx   = yIdx.stream().mapToInt(Integer::intValue).toArray();
+        r.yrCal   = yCal.stream().mapToInt(Integer::intValue).toArray();
+        r.yrSurp  = ySurp.stream().mapToDouble(Double::doubleValue).toArray();
+        r.yrBal   = yBal.stream().mapToInt(Integer::intValue).toArray();
+        r.yrPhase = yPh.stream().mapToInt(Integer::intValue).toArray();
         // Min surplus SHOWN is the raw worst year (so the user still sees the dip).
         // v11 2026-09-27: reduce the two phases to the rank metric. Survivor years decide it when
         // a death event is set; with no death event there are no survivor years at all
@@ -6514,9 +6582,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // same definition and the comparison stays apples-to-apples.
         // v12 2026-10-11 (OF1): store every ranking measure on the row.
         r.noGoYears         = noGoN;
-        r.noGoTotal         = noGoSum;
-        r.noGoWorst         = (noGoWorst != Double.MAX_VALUE) ? noGoWorst
-                : (noGoWorstAll != Double.MAX_VALUE ? noGoWorstAll : 0);
+        r.noGoTotal         = noGoSum;       // noGoWorst: applyFloors() (it skips the grace window)
         r.lifetimeSpendable = lifeSum;
         r.earlySpendable    = earlySum;
         r.survivorYears     = survYears;
@@ -6580,6 +6646,80 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         r.minSurplus       = (minRawSurplus == Integer.MAX_VALUE) ? 0 : minRawSurplus;
         r.minGoGoSurplus   = sawGo   ? minGo   : Integer.MAX_VALUE;   // no go-go years -> not binding
         r.minSlowGoSurplus = sawSlow ? minSlow : Integer.MAX_VALUE;   // no slow-go years -> not binding
+        // v1 2026-10-15 (FR): the floor tests, from the per-year data just kept.
+        applyFloors(r, greenBuf, goGoFloor, slowGoFloor, termGrace, posTarget);
+        return r;
+    }
+
+    /**
+     * v1 2026-10-15 (FR): apply the optimizer floors to a row ALREADY SIMULATED --
+     * the green test (with terminal grace), the go-go and slow-go floors and the PoS
+     * target -- and set everything they decide: violations, graced dips, the worst
+     * no-go year (it skips the grace window), Feasibility min, PASS/FAIL, shortfall,
+     * the floors in force, margins and the binding floor. Nothing here simulates, so
+     * a floor change re-scores every saved row in milliseconds. The arithmetic is the
+     * scorer's own, moved here unchanged and run over the same years in the same
+     * order. A row without per-year data (the simulation threw) keeps its verdict.
+     */
+    static void applyFloors(SsOptResult r, int greenBuf, int goGoFloor, int slowGoFloor,
+                            int termGrace, int posTarget) {
+        if (r.yrCal == null) return;
+        r.violations.clear();
+        r.gracedDips.clear();
+        double noGoWorst = Double.MAX_VALUE, noGoWorstAll = Double.MAX_VALUE;
+        boolean sawGo = false, sawSlow = false;
+        int minGreenTest = Integer.MAX_VALUE;   // drives feasibility
+        int minGreenTestYear = 0;               // calendar year of that worst counted year
+        // v11 2026-09-27: the floor THAT year was actually judged against -- greenBuf normally,
+        // 0 inside the terminal window. Tracked because the shortfall and the binding
+        // capture below must measure against the floor that applied, not the buffer.
+        int minGreenTestFloor = greenBuf;
+        for (int k = 0; k < r.yrCal.length; k++) {
+            int i           = r.yrIdx[k];
+            int calY        = r.yrCal[k];
+            double sReal    = r.yrSurp[k];
+            int surplusDisp = (int) Math.round(sReal);
+            int balanceDisp = r.yrBal[k];
+            int phase       = r.yrPhase[k];
+            // v11 2026-09-27: inside the terminal window the green floor is ZERO, not the
+            // buffer. At 92 with three years left and the portfolio able to cover
+            // the gap, there is no reason to fail a plan for missing a comfort
+            // margin -- the money is right there. Outside the window the floor is
+            // the user's Green Surplus/Gap, unchanged. The coverage test is per-year by
+            // design: each year is judged against its own balance.
+            boolean inTerminalWindow = (i >= r.yrRows - termGrace);
+            int effFloor      = inTerminalWindow ? 0 : greenBuf;
+            int shortfallHere = effFloor - surplusDisp;         // >0 means below the floor
+            boolean covered = (shortfallHere <= 0)              // at or above the floor, or
+                    || (inTerminalWindow && balanceDisp >= shortfallHere);  // portfolio covers it
+            if (!covered) {
+                if (surplusDisp < minGreenTest) {
+                    minGreenTest = surplusDisp; minGreenTestYear = calY; minGreenTestFloor = effFloor;
+                }
+                // Record the green violation for the tooltip, against the floor that
+                // actually applied to this year.
+                r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "green", effFloor));
+            } else if (inTerminalWindow && surplusDisp < greenBuf) {
+                // Inside the window and below the NORMAL buffer: still reported as
+                // forgiven so the Why dialog shows what grace covered.
+                r.gracedDips.add(new FloorMiss(calY, surplusDisp, balanceDisp, "green", greenBuf));
+            }
+            if (phase == 2) {
+                noGoWorstAll = Math.min(noGoWorstAll, sReal);
+                if (!inTerminalWindow) noGoWorst = Math.min(noGoWorst, sReal);
+            }
+            if (phase == 0) {
+                sawGo = true;
+                if (surplusDisp < goGoFloor)
+                    r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "go-go", goGoFloor));
+            } else if (phase == 1) {
+                sawSlow = true;
+                if (surplusDisp < slowGoFloor)
+                    r.violations.add(new FloorMiss(calY, surplusDisp, balanceDisp, "slow-go", slowGoFloor));
+            }
+        }
+        r.noGoWorst = (noGoWorst != Double.MAX_VALUE) ? noGoWorst
+                : (noGoWorstAll != Double.MAX_VALUE ? noGoWorstAll : 0);
         // The stay-green feasibility figure is the worst NON-EXEMPT year. If every
         // below-buffer year was a covered terminal dip, this stays at MAX_VALUE and
         // the green test passes.
@@ -6606,7 +6746,6 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // arithmetic above is byte-for-byte the v10 logic.
         captureBinding(r, greenTestMin, minGreenTestFloor, sawGo, goGoFloor,
                 sawSlow, slowGoFloor, posTarget);
-        return r;
     }
 
     /**
@@ -6683,13 +6822,17 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *
      *   Between blocks : feasible first, always. A plan that misses a floor is
      *                    categorically different from one that does not.
-     *   Within each    : finalYearsDraw, descending -- total portfolio withdrawals
-     *                    across the final years of the horizon. With the SS bridge
-     *                    holding spending roughly constant across claim dates, this
-     *                    is where the difference between them actually lands.
-     *   Ties           : ending balance, then combined annual benefit, then the
-     *                    claim dates, so an identical batch always yields an
-     *                    identical table.
+     *   Within each    : the measure selected in "Rank passing rows by" (v12
+     *                    2026-10-11, OF1), descending -- see rankValue(). This
+     *                    one-argument form uses the default, the no-go spendable
+     *                    total (RANK_NOGO_TOTAL). Before OF1 it was always
+     *                    finalYearsDraw (now RANK_FINAL5).
+     *   Ties           : ending balance, then the earlier User claim, then the
+     *                    earlier Spouse claim, so an identical batch always yields
+     *                    an identical table. (Combined annual benefit was a
+     *                    tie-break before OF1; it was dropped.)
+     *
+     * v1 2026-10-15: this comment previously still described the pre-OF1 order.
      */
     private static void rankOptResults(java.util.List<SsOptResult> results) {
         rankOptResults(results, RANK_NOGO_TOTAL);
@@ -7279,6 +7422,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // score / boundaryDist / borderline fields are gone with the machinery that
         // needed them.
         int    shortfallDollars = 0;
+        // v1 2026-10-15 (FR): per drawing year, what applyFloors() tests -- row index
+        // in the median table (for the grace window), calendar year, surplus
+        // (today's $, unrounded), balance (today's $), phase (0 go-go, 1 slow-go,
+        // 2 no-go) -- and the table's row count. Null when the simulation threw.
+        int      yrRows;
+        int[]    yrIdx, yrCal, yrBal, yrPhase;
+        double[] yrSurp;
     }
 
     // v9: one floor miss (or graced dip) recorded for the SS Optimizer tooltip.
@@ -7592,6 +7742,29 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      * objective, and re-sort whatever results are on screen -- from memory, without
      * touching the batch or the file.
      */
+    /**
+     * v1 2026-10-15 (FR): a floor spinner changed. Re-apply all four floors to the
+     * results on screen, re-rank and redraw -- no simulation, no file access. Each
+     * row keeps the PoS target it was scored at (r.floorPoS): that one IS part of
+     * the fingerprint, because the solver uses it. Skipped while a batch runs; the
+     * batch applies the floors on screen when it finishes.
+     */
+    private void rescoreOptFloors() {
+        if (optBatchRunning || lastOptResults == null || lastOptResults.isEmpty()) return;
+        int g = iv(spOptGreenBuffer), go = iv(spOptGoGoFloor), sl = iv(spOptSlowGoFloor),
+                tg = iv(spOptTermGrace);
+        int n = 0;
+        for (SsOptResult r : lastOptResults)
+            if (r.yrCal != null) { applyFloors(r, g, go, sl, tg, r.floorPoS); n++; }
+        rankOptResults(lastOptResults, optRankMode());
+        populateOptTable(lastOptResults, lastOptManBY, lastOptManBM, lastOptWomanBY,
+                lastOptWomanBM, lastOptManPIA, lastOptWomanPIA, optRunElapsedMs);
+        if (lblOptStatus != null)
+            lblOptStatus.setText(String.format(
+                    "Re-scored %,d rows against the new floors (no re-run). ", n)
+                    + lblOptStatus.getText());
+    }
+
     private void reRankOptTable() {
         refreshOptObjective();
         if (tblOpt != null) {
