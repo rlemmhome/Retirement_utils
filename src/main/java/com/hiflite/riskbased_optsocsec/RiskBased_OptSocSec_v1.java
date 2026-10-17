@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Saturday, October 17, 2026 at 08:11 AM MST (UTC-7)
+// Last modified: Saturday, October 17, 2026 at 10:33 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Saturday, October 17, 2026 at 08:11 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, October 17, 2026 at 10:33 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -4699,15 +4699,21 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<li>an SS start date before age 62;</li>"
                 + "<li>a year of death before the simulation start year (an already-widowed household is a "
                 + "Single plan);</li>"
-                + "<li>withdrawals starting after the plan's last year.</li></ul>"
+                + "<li>withdrawals starting after the plan's last year;</li>"
+                // v1 2026-10-17 (V12/V13)
+                + "<li>a guaranteed-income stream (Annuity, Pension or Military retired pay card) whose end "
+                + "year is before its start year &mdash; it could never pay.</li></ul>"
                 + "<p><b>Warnings</b> let the run go ahead and appear on its status line: an SS start after "
                 + "70 (nothing accrues after 70); a plan stretched to the 10-year minimum past both life "
                 + "expectancies; a year of death in or after the plan's last year (no survivor year); go-go + "
-                + "slow-go years longer than the drawing years.</p>"
+                + "slow-go years longer than the drawing years; a guaranteed-income stream that pays nothing "
+                + "during the plan (it ended before the simulation start year, or starts after the plan's last "
+                + "year).</p>"
                 + "<p><b>Defined meanings</b> (allowed, explained in the input tooltips): a withdrawal start "
                 + "year before the simulation start means withdrawals are already under way (full from year 1); "
                 + "an SS start before the simulation start means benefits are already being received (full "
-                + "from year 1); a PIA as-of year after the start is treated as the start year. The "
+                + "from year 1); a PIA as-of year after the start is treated as the start year; a stream whose "
+                + "end year equals its start year pays only its prorated first year. The "
                 + "<i>Death event</i> is greyed in Single mode and ignored there.</p>"
                 + "<p><b>Portfolio field.</b> It always shows the sum of the eight account fields &mdash; the "
                 + "amount simulated (up to $80M; each account holds up to $10M). Typing a new total spreads "
@@ -9076,6 +9082,26 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         if (drawYears > 0 && phases > drawYears)
             warn.add("Go-go (" + inp.goGoDuration + ") + slow-go (" + inp.slowGoDuration + ") years exceed the "
                     + drawYears + " drawing years, so the later phase(s) never happen.");
+        // v1 2026-10-17 (V12/V13): an active guaranteed-income stream that can never
+        // pay (V12, error), or that pays nothing inside the plan (V13, warning). A
+        // stream ending in its own start year is allowed -- it pays the prorated
+        // first year.
+        String[] card = { "Annuity (non-COLA)", "Pension", "Military retired pay" };
+        FixedStream[] st = { inp.annuityStream, inp.pensionStream, inp.militaryStream };
+        for (int k = 0; k < st.length; k++) {
+            FixedStream s = st[k];
+            if (!s.active()) continue;
+            if (s.endYear() > 0 && s.endYear() < s.startYear())
+                err.add("The " + card[k] + " card's end year (" + s.endYear() + ") is before its start year ("
+                        + s.startYear() + "), so the stream would never pay. Set the end year to "
+                        + s.startYear() + " or later, or 0 for lifetime.");
+            else if (s.endYear() > 0 && s.endYear() < inp.baseYear)
+                warn.add("The " + card[k] + " card's stream ended in " + s.endYear() + ", before the simulation "
+                        + "start year (" + inp.baseYear + "), so it pays nothing.");
+            else if (s.startYear() > lastYear)
+                warn.add("The " + card[k] + " card's stream starts in " + s.startYear() + ", after the plan's "
+                        + "last year (" + lastYear + "), so it pays nothing.");
+        }
         java.util.List<java.util.List<String>> out = new java.util.ArrayList<>();
         out.add(err); out.add(warn);
         return out;
