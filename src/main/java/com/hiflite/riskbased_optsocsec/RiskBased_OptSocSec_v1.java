@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Friday, October 16, 2026 at 11:24 PM MST (UTC-7)
+// Last modified: Saturday, October 17, 2026 at 08:11 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Friday, October 16, 2026 at 11:24 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, October 17, 2026 at 08:11 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -402,7 +402,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         for (int i = 0; i < brk.length; i++) tops[i] = brk[i][1];
         return tops;
     }
-    private JComboBox<String> cmbDeathWho;  // v6: Neither / User dies / Spouse dies
+    private JComboBox<String> cmbDeathWho;  // v6: Neither / User dies / Spouse dies (+ v1: By life expectancy)
+    static final int DEATH_BY_LIFE_EXP = 3;  // v1 2026-10-17 (LE1): combo index, never an engine deathWho
     private JSpinner   spDeathYear;         // v6: calendar year of death
     private JSpinner   spHisRmdShare;       // v6: User's % of combined Traditional (RMD split)
     private JSpinner   spSurvivorSpendCut;  // v6: survivor living-expense reduction %
@@ -1609,9 +1610,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // mid-projection; the year field is the calendar year of death. The
         // survivor basis (Single tax, dropped SS, survivor-age RMD) begins the
         // following year. Both are saved/loaded with the scenario.
+        // v1 2026-10-17 (LE1): index 3 = "By life expectancy" -- whoever reaches their
+        // life-expectancy year first dies at the end of it. The default for a new
+        // scenario; a saved file keeps its own setting (a file without one loads Neither).
         cmbDeathWho = new JComboBox<>(new String[]{
-                "Neither (both survive)", "User dies", "Spouse dies" });
-        cmbDeathWho.setSelectedIndex(0);
+                "Neither (both survive)", "User dies", "Spouse dies",
+                "By life expectancy (first to reach it)" });
+        cmbDeathWho.setSelectedIndex(DEATH_BY_LIFE_EXP);
         cmbDeathWho.setToolTipText("<html><b>Death event (v6) -- mid-projection survivor transition</b><br>"
                 + "Models one spouse dying in a chosen year. Beginning the year AFTER<br>"
                 + "the death year, the run automatically switches to the <b>Single</b> tax<br>"
@@ -1625,11 +1630,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "date they never reached. Death is taken at the end of the death year.<br>"
                 + "Because the Traditional and Roth balances are already pooled, nothing<br>"
                 + "is dropped -- the whole portfolio carries to the survivor.<br><br>"
-                + "<b>Neither:</b> both survive the horizon (no transition).<br><br>"
+                + "<b>Neither:</b> both survive the horizon (no transition).<br>"
+                + "<b>By life expectancy</b> (the default for a new scenario): whoever reaches<br>"
+                + "their life-expectancy year first (birth year + life expectancy, People card)<br>"
+                + "dies at the end of that year, and the plan runs to the survivor's year. The<br>"
+                + "year is set for you (greyed). Equal years: no death. (v1 2026-10-17)<br>"
+                + "<b>User dies / Spouse dies:</b> you set the year; the plan then runs to the<br>"
+                + "survivor's life-expectancy year (or the year of death, if later).<br><br>"
                 + "Greyed in <b>Single</b> filing mode: a single filer has no spouse to<br>"
                 + "survive, so the event is ignored there.</html>");
 
         spDeathYear = spinI(2045, 2025, 2100, 1, "0");
+        spDeathYear.addChangeListener(e -> updateHorizonFromPlanAge());   // v1 2026-10-17 (LE4)
         spDeathYear.setToolTipText("<html><b>Year of death (v6)</b><br>"
                 + "Calendar year the selected spouse dies. The survivor tax basis and<br>"
                 + "SS/RMD changes take effect the FOLLOWING January. Ignored when the<br>"
@@ -1655,6 +1667,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "Part D and the self-insurance reserve all stop for the decedent).<br>"
                 + "This spinner does not affect medical.</html>");
         cmbDeathWho.addActionListener(e -> refreshDeathFieldsEnabled());
+        cmbDeathWho.addActionListener(e -> updateHorizonFromPlanAge());   // v1 2026-10-17 (LE2, LE4)
 
         JPanel convBtnRow = new JPanel();
         convBtnRow.setLayout(new BoxLayout(convBtnRow, BoxLayout.Y_AXIS));
@@ -4663,12 +4676,23 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<h3 style='color:#2a5d34;'><a name='sec13'></a>13. Input checks and plan length</h3>"
                 + "<p><b>Plan length.</b> Each person's life expectancy marks the last year funded for them: "
                 + "birth year + life expectancy. The plan runs from the simulation start year through the later "
-                + "of the two (the User's alone in Single mode), between 10 and 50 years. It is recalculated "
-                + "when a birth date, a life expectancy, the simulation start year or the filing status changes, "
-                + "and after a scenario loads. Life expectancy only sets this length &mdash; nobody dies at it; "
-                + "only the <i>Death event</i> does that. (Before 2026-10-16 the length was the larger life-"
-                + "expectancy AGE minus the User's age today, which ignored the start year, shifted with the "
-                + "day of the year it was run, and could cut off the years of a much younger spouse.)</p>"
+                + "of the two (the User's alone in Single mode), between 10 and 50 years. A person who dies in "
+                + "a <i>Death event</i> ends in their year of death instead, so the plan runs to the "
+                + "<b>survivor's</b> year (or to the year of death, if that is later). It is recalculated "
+                + "when a birth date, a life expectancy, the simulation start year, the filing status or the "
+                + "Death event changes, and after a scenario loads. (Before 2026-10-16 the length was the "
+                + "larger life-expectancy AGE minus the User's age today, which ignored the start year, shifted "
+                + "with the day of the year it was run, and could cut off the years of a much younger spouse.)</p>"
+                // v1 2026-10-17 (LE)
+                + "<p><b>Death by life expectancy (since 2026-10-17).</b> The Death event's fourth choice, "
+                + "<i>By life expectancy</i> &mdash; the default for a new scenario &mdash; has whoever reaches "
+                + "their life-expectancy year first die at the <b>end</b> of that year; the following years are "
+                + "survivor years, through the survivor's own year. Example: User born 1961 and Spouse born "
+                + "1962, both 95 &mdash; the User dies at the end of 2056, 2057 is the survivor year and the "
+                + "plan ends there. Equal years mean no death. The model works in whole years, so a death "
+                + "always counts at year end. The engine sees exactly the event <i>User dies 2056</i> would "
+                + "give, so the two settings share saved SS Optimizer rows. Saved scenarios keep their own "
+                + "setting; one saved before this choice existed loads as <i>Neither</i>.</p>"
                 + "<p><b>Checks on Run.</b> Pro PoS / GK runs and the Stress Test check their inputs first; the "
                 + "SS Optimizer checks once per batch (claim dates excepted &mdash; it sets those itself). "
                 + "<b>Errors stop the run</b> and one dialog lists them all:</p><ul>"
@@ -7914,8 +7938,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // v1 2026-10-16 (V2): greyed in Single mode too -- no spouse to survive.
         boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
         boolean hasDeath = computed && !single && cmbDeathWho.getSelectedIndex() != 0;
+        // v1 2026-10-17 (LE1): the year is chosen by hand only for User dies / Spouse
+        // dies; "By life expectancy" sets it (shown greyed).
+        boolean manualYear = hasDeath && cmbDeathWho.getSelectedIndex() != DEATH_BY_LIFE_EXP;
         cmbDeathWho.setEnabled(computed && !single);
-        if (spDeathYear != null)   spDeathYear.setEnabled(hasDeath);
+        if (spDeathYear != null)   spDeathYear.setEnabled(manualYear);
         if (spHisRmdShare != null) spHisRmdShare.setEnabled(computed);
         if (spSurvivorSpendCut != null) spSurvivorSpendCut.setEnabled(hasDeath);
     }
@@ -9027,13 +9054,15 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         if (death && inp.deathYear < inp.baseYear)
             err.add("Year of death (" + inp.deathYear + ") is before the simulation start year ("
                     + inp.baseYear + "). For a household already widowed, set Filing status to Single "
-                    + "and enter the survivor's accounts and benefit.");
+                    + "and enter the survivor's accounts and benefit. (With 'By life expectancy', the year "
+                    + "is the earlier life-expectancy year -- raise that life expectancy.)");
         // V4: nothing to solve.
         if (inp.withdrawStartYear > lastYear)
             err.add("Withdrawals start in " + inp.withdrawStartYear + ", after the plan's last year ("
                     + lastYear + "). Move the withdrawal start year earlier or extend a life expectancy.");
         // V5: the 10-year minimum stretches a shorter plan past both life expectancies.
-        int end = planEndYear(inp.manBirthYear, inp.manPlanAge, inp.womanBirthYear, inp.womanPlanAge, single);
+        int end = planEndYear(inp.manBirthYear, inp.manPlanAge, inp.womanBirthYear, inp.womanPlanAge, single,
+                inp.deathWho, inp.deathYear);
         if (end - inp.baseYear + 1 < 10)
             warn.add("Life expectancy ends in " + end + ", but the plan runs the 10-year minimum, to "
                     + lastYear + ".");
@@ -9295,8 +9324,15 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 ? TaxEngine.FilingStatus.SINGLE
                 : TaxEngine.FilingStatus.MFJ;
         // v6: mid-projection death event + RMD share split.
-        i.deathWho   = (cmbDeathWho != null) ? cmbDeathWho.getSelectedIndex() : 0; // 0/1/2
+        i.deathWho   = (cmbDeathWho != null) ? cmbDeathWho.getSelectedIndex() : 0; // 0/1/2 (3: below)
         i.deathYear  = (spDeathYear != null) ? iv(spDeathYear) : 0;
+        // v1 2026-10-17 (LE1, LE3): "By life expectancy" becomes an ordinary death
+        // event -- the engine (and the batch fingerprint) see exactly what "User dies
+        // 2056" would give, so the two settings share saved SS Optimizer rows.
+        if (i.deathWho == DEATH_BY_LIFE_EXP) {
+            int[] d = lifeExpDeath(i.manBirthYear, i.manPlanAge, i.womanBirthYear, i.womanPlanAge);
+            i.deathWho = d[0]; i.deathYear = d[1];
+        }
         // v1 2026-10-16 (V2): a single filer has no spouse to survive. The controls
         // are greyed in Single mode, and the values are cleared so they cannot apply
         // (before this a leftover death event still cut spending in later years) or
@@ -14135,10 +14171,29 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      * of the two. Single counts the User only. Life expectancy only sets this length;
      * nobody dies at it (only the Death event does that).
      */
-    static int planEndYear(int manBY, int manPlan, int womanBY, int womanPlan, boolean single) {
-        int end = manBY + manPlan;
-        if (!single) end = Math.max(end, womanBY + womanPlan);
-        return end;
+    static int planEndYear(int manBY, int manPlan, int womanBY, int womanPlan, boolean single,
+                           int deathWho, int deathYear) {
+        int manEnd = manBY + manPlan;
+        if (single) return manEnd;
+        int womEnd = womanBY + womanPlan;
+        // v1 2026-10-17 (LE2, LE4): a person who dies ends in their year of death, not
+        // their life-expectancy year -- so the plan runs to the SURVIVOR's year (or to
+        // the year of death, if that is later).
+        if (deathWho == 1 && deathYear > 0) manEnd = deathYear;
+        if (deathWho == 2 && deathYear > 0) womEnd = deathYear;
+        return Math.max(manEnd, womEnd);
+    }
+
+    /**
+     * v1 2026-10-17 (LE1, LE3): the death "By life expectancy" implies -- {who, year}:
+     * whoever reaches their life-expectancy year first dies at the end of it (1 =
+     * User, 2 = Spouse). Equal years: no death, {0, 0}.
+     */
+    static int[] lifeExpDeath(int manBY, int manPlan, int womanBY, int womanPlan) {
+        int manEnd = manBY + manPlan, womEnd = womanBY + womanPlan;
+        if (manEnd < womEnd) return new int[]{1, manEnd};
+        if (womEnd < manEnd) return new int[]{2, womEnd};
+        return new int[]{0, 0};
     }
 
     /**
@@ -14157,16 +14212,33 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             int start   = iv(spSimStartYear);
             int manPlan = iv(spManPlanAge),   manEnd = iv(spManBirthYear)   + manPlan;
             int womPlan = iv(spWomanPlanAge), womEnd = iv(spWomanBirthYear) + womPlan;
-            int end     = planEndYear(iv(spManBirthYear), manPlan, iv(spWomanBirthYear), womPlan, single);
+            // v1 2026-10-17 (LE1, LE2, LE4): the death event the run will use.
+            int dIdx = (cmbDeathWho != null) ? cmbDeathWho.getSelectedIndex() : 0;
+            int dWho = 0, dYear = 0;
+            boolean byLife = false;
+            if (!single && dIdx == DEATH_BY_LIFE_EXP) {
+                int[] d = lifeExpDeath(iv(spManBirthYear), manPlan, iv(spWomanBirthYear), womPlan);
+                dWho = d[0]; dYear = d[1]; byLife = true;
+                if (dWho != 0 && spDeathYear != null) spDeathYear.setValue(dYear);   // shown greyed
+            } else if (!single && (dIdx == 1 || dIdx == 2) && spDeathYear != null) {
+                dWho = dIdx; dYear = iv(spDeathYear);
+            }
+            int end     = planEndYear(iv(spManBirthYear), manPlan, iv(spWomanBirthYear), womPlan, single,
+                    dWho, dYear);
             int raw     = end - start + 1;
             int horizon = Math.max(10, Math.min(50, raw));
             spHorizon.setValue(horizon);
-            String driver = (single || manEnd >= womEnd)
-                    ? "User to " + manPlan + " in " + manEnd
-                    : "Spouse to " + womPlan + " in " + womEnd;
+            int manEff = (dWho == 1) ? dYear : manEnd, womEff = (dWho == 2) ? dYear : womEnd;
+            String driver = (single || manEff >= womEff)
+                    ? (dWho == 1 ? "User to " + dYear : "User to " + manPlan + " in " + manEnd)
+                    : (dWho == 2 ? "Spouse to " + dYear : "Spouse to " + womPlan + " in " + womEnd);
+            String deathNote = (dWho == 0)
+                    ? (byLife ? "; equal life-expectancy years, no death" : "")
+                    : "; " + (dWho == 1 ? "User" : "Spouse") + " dies " + dYear
+                    + (byLife ? ", by life expectancy" : "");
             if (lblHorizonNote != null)
                 lblHorizonNote.setText("<html><i>Horizon = " + horizon + " yrs (" + start + "&ndash;"
-                        + (start + horizon - 1) + "; " + driver
+                        + (start + horizon - 1) + "; " + driver + deathNote
                         + (single ? "; Single: Spouse ignored" : "")
                         + (raw < 10 ? "; stretched to the 10-year minimum" : "")
                         + ")</i></html>");
