@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Thursday, October 15, 2026 at 04:15 PM MST (UTC-7)
+// Last modified: Friday, October 16, 2026 at 11:24 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Thursday, October 15, 2026 at 04:15 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Friday, October 16, 2026 at 11:24 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -541,6 +541,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // Cache for SS Optimizer results -- repopulated when real/nominal toggle fires
     private java.util.List<SsOptResult> lastOptResults = null;
     private boolean optBatchRunning = false;   // v1 2026-10-15 (FR): EDT only; true while a batch runs
+    private String  optRunNotes = "";          // v1 2026-10-16 (V): the batch's input warnings, for its status line
     // v9: Option-2 optimizer inputs. Travel-headroom floors and the Green Surplus/Gap
     // (SS Optimizer tab ONLY -- they feed the feasibility test, never the Pro
     // engine's spending). Grid/fidelity controls for the two-stage scan, and the
@@ -864,7 +865,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "All other year-based inputs (withdrawal start, SS start,<br>"
                 + "annuity start) are interpreted relative to this base year.<br>"
                 + "Changing this shifts the entire simulation timeline forward or back.</html>");
-        spPortfolio          = spinI(1_500_000, 10_000, 20_000_000, 10_000, "#,###");
+        // v1 2026-10-16 (PT1): $0-$80M (eight accounts x $10M), so it can always show the
+        // account sum the simulation uses. It was capped at $20M.
+        spPortfolio          = spinI(1_500_000, 0, 80_000_000, 10_000, "#,###");
         spPortfolio.addChangeListener(e -> distributePortfolioDelta());
         spHorizon            = spinI(30, 10, 50, 1, "#");
         spHorizon.setEnabled(false);
@@ -874,6 +877,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         spTargetPoS          = spinI(80, 60, 99, 1, "#");
         spWithdrawStartYear  = spinI(2027, 2025, 2040, 1, "#");
         spWithdrawStartMonth = spinI(1, 1, 12, 1, "#");
+        // v1 2026-10-16 (V9): the defined meaning of a year before the simulation start.
+        spWithdrawStartYear.setToolTipText("<html><b>Withdrawal start year</b> (with the month beside it)<br>"
+                + "The first year of portfolio withdrawals; that year is prorated from the start month.<br><br>"
+                + "A year <b>before</b> the simulation start year means withdrawals are already<br>"
+                + "under way: full withdrawals from the first simulated year, no proration.<br>"
+                + "A year after the plan's last year stops the run (nothing to solve).</html>");
 
         chkRandomize = new JCheckBox("Re-randomize each run", true);
         chkRandomize.setToolTipText("<html><b>Re-randomize each run</b><br>"
@@ -926,6 +935,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // is added here (those inputs already have their own listeners).
         ChangeListener runTipOnly = e -> updateRunTooltip();
         spSimStartYear.addChangeListener(runTipOnly);
+        spSimStartYear.addChangeListener(e -> updateHorizonFromPlanAge());   // v1 2026-10-16 (HZ5)
         spWithdrawStartYear.addChangeListener(runTipOnly);
 
         // v11 2026-09-27: default raised 4.0% -> 5.4%.
@@ -1060,6 +1070,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "FRA = 67 for those born 1960 or later.</html>");
         spManSSStartYear   = spinI(2027,  2020, 2040, 1, "#");
         spManSSStartMonth  = spinI(1,     1,    12,   1, "#");
+        spManSSStartYear.setToolTipText(ssStartTip("User"));   // v1 2026-10-16 (V1, V6, V10)
         spWomanPIA         = spinI(3_897, 0, 6_000, 50, "#,###");
         spWomanPIA.setToolTipText("<html><b>Spouse's Primary Insurance Amount (PIA)</b><br>"
                 + "Monthly SS benefit payable at Full Retirement Age (FRA).<br>"
@@ -1073,6 +1084,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "FRA = 67 for those born 1960 or later.</html>");
         spWomanSSStartYear = spinI(2027,  2020, 2040, 1, "#");
         spWomanSSStartMonth= spinI(12,    1,    12,   1, "#");
+        spWomanSSStartYear.setToolTipText(ssStartTip("Spouse"));   // v1 2026-10-16 (V1, V6, V10)
         cmbBridgeMode = new JComboBox<>(BRIDGE_MODE_LABELS);
         cmbBridgeMode.setSelectedIndex(BRIDGE_SIM_START);   // v9: new default
         cmbBridgeMode.setToolTipText("<html><b>SS bridge mode (v9)</b> -- how the portfolio replaces<br>"
@@ -1573,6 +1585,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 "Married filing jointly", "Single" });
         cmbFilingStatus.setSelectedIndex(0); // default: MFJ (preserves prior behavior)
         cmbFilingStatus.addActionListener(e -> refreshTaxEngineEnabled());
+        cmbFilingStatus.addActionListener(e -> updateHorizonFromPlanAge());   // v1 2026-10-16 (HZ2)
         cmbFilingStatus.setToolTipText("<html><b>Filing status (federal + SS taxation + IRMAA basis)</b><br>"
                 + "Switches the entire tax basis between MFJ and Single. Affects the<br>"
                 + "standard deduction, the ordinary brackets, the age-65 add-on, the<br>"
@@ -1612,7 +1625,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "date they never reached. Death is taken at the end of the death year.<br>"
                 + "Because the Traditional and Roth balances are already pooled, nothing<br>"
                 + "is dropped -- the whole portfolio carries to the survivor.<br><br>"
-                + "<b>Neither:</b> both survive the horizon (no transition).</html>");
+                + "<b>Neither:</b> both survive the horizon (no transition).<br><br>"
+                + "Greyed in <b>Single</b> filing mode: a single filer has no spouse to<br>"
+                + "survive, so the event is ignored there.</html>");
 
         spDeathYear = spinI(2045, 2025, 2100, 1, "0");
         spDeathYear.setToolTipText("<html><b>Year of death (v6)</b><br>"
@@ -3304,6 +3319,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<li><a href='#sec10' style='color:#264653; text-decoration:none;'>10. Caveats</a></li>"
                 + "<li><a href='#sec11' style='color:#264653; text-decoration:none;'>11. SS Optimizer &mdash; objective, feasibility, and ranking</a></li>"
                 + "<li><a href='#sec12' style='color:#264653; text-decoration:none;'>12. Guaranteed income streams &mdash; annuity, pension, military retired pay</a></li>"
+                + "<li><a href='#sec13' style='color:#264653; text-decoration:none;'>13. Input checks and plan length</a></li>"
                 + "</ul></div>"
                 + "<h3 style='color:#2a5d34;'><a name='intro'></a>Three approaches to dynamic spending</h3>"
                 + "<p>This tool contains two spending engines, and it is worth understanding how each relates to "
@@ -4548,8 +4564,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<tt>java -jar IncomeLab.jar --batch scenario.properties</tt>. One codebase and one engine "
                 + "&mdash; deliberately not a second application, because a second copy of the engine would "
                 + "drift from this one, which is the failure mode the zero-diff gate exists to prevent.</p>"
-                + "<p><b>Scan granularity.</b> Year, half-year, quarterly or monthly steps from today "
-                + "to each person's age 70, with the exact age-70 date always included. Combinations "
+                + "<p><b>Scan granularity.</b> Year, half-year, quarterly or monthly steps from the later of "
+                + "today and each person's first month at 62 (the month after the 62nd-birthday month; since "
+                + "2026-10-16 -- it started at today, which scored dates SSA would not allow for anyone under "
+                + "62) to their age 70, with the exact age-70 date always included. Combinations "
                 + "are the PRODUCT of the two date lists, so the count rises steeply &mdash; a monthly "
                 + "grid is roughly 144 times a yearly one. At full fidelity that is the difference "
                 + "between minutes and most of a day, so start on a yearly or quarterly grid and go "
@@ -4640,6 +4658,38 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<p><b>Display.</b> The three streams share one Pro PoS column, <i>Annuity/Pen/Mil</i>, "
                 + "showing their total; hover any cell for the per-stream breakdown with each stream's COLA "
                 + "rule. <i>Fixed Inc</i> continues to mean User SS + Spouse SS + that total.</p>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                // v1 2026-10-16 (HZ, V, PT)
+                + "<h3 style='color:#2a5d34;'><a name='sec13'></a>13. Input checks and plan length</h3>"
+                + "<p><b>Plan length.</b> Each person's life expectancy marks the last year funded for them: "
+                + "birth year + life expectancy. The plan runs from the simulation start year through the later "
+                + "of the two (the User's alone in Single mode), between 10 and 50 years. It is recalculated "
+                + "when a birth date, a life expectancy, the simulation start year or the filing status changes, "
+                + "and after a scenario loads. Life expectancy only sets this length &mdash; nobody dies at it; "
+                + "only the <i>Death event</i> does that. (Before 2026-10-16 the length was the larger life-"
+                + "expectancy AGE minus the User's age today, which ignored the start year, shifted with the "
+                + "day of the year it was run, and could cut off the years of a much younger spouse.)</p>"
+                + "<p><b>Checks on Run.</b> Pro PoS / GK runs and the Stress Test check their inputs first; the "
+                + "SS Optimizer checks once per batch (claim dates excepted &mdash; it sets those itself). "
+                + "<b>Errors stop the run</b> and one dialog lists them all:</p><ul>"
+                + "<li>an SS start date before age 62;</li>"
+                + "<li>a year of death before the simulation start year (an already-widowed household is a "
+                + "Single plan);</li>"
+                + "<li>withdrawals starting after the plan's last year.</li></ul>"
+                + "<p><b>Warnings</b> let the run go ahead and appear on its status line: an SS start after "
+                + "70 (nothing accrues after 70); a plan stretched to the 10-year minimum past both life "
+                + "expectancies; a year of death in or after the plan's last year (no survivor year); go-go + "
+                + "slow-go years longer than the drawing years.</p>"
+                + "<p><b>Defined meanings</b> (allowed, explained in the input tooltips): a withdrawal start "
+                + "year before the simulation start means withdrawals are already under way (full from year 1); "
+                + "an SS start before the simulation start means benefits are already being received (full "
+                + "from year 1); a PIA as-of year after the start is treated as the start year. The "
+                + "<i>Death event</i> is greyed in Single mode and ignored there.</p>"
+                + "<p><b>Portfolio field.</b> It always shows the sum of the eight account fields &mdash; the "
+                + "amount simulated (up to $80M; each account holds up to $10M). Typing a new total spreads "
+                + "the change across the accounts in proportion; if an account's $10M limit clips it, the "
+                + "field shows the clipped total. With every account at $0 there is nothing to spread, so the "
+                + "field returns to $0 &mdash; enter an account first.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "</body></html>";
 
@@ -5499,6 +5549,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      */
     private void runStressTest() {
         if (tblStressModel == null) return;
+        // v1 2026-10-16 (V): input checks; an error stops the run.
+        final String[] stressNotes = new String[1];
+        if (!passInputChecks(readInputs(), true, "Cannot run the stress test", stressNotes)) return;
         tblStressModel.setRowCount(0);
         lblStressStatus.setText("Running guardrail plan through historical crises...");
 
@@ -5608,7 +5661,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + (stressOff > 0
                 ? " -- each sequence STARTING " + stressOff + " YEARS IN"
                 + " (from the 'Sequence starts N years in' spinner)."
-                : ", each starting in year 1."));
+                : ", each starting in year 1.") + stressNotes[0]);   // v1 2026-10-16 (V)
     }
 
     // == Apply SS dates and run IL simulation ================================
@@ -5662,6 +5715,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     //     around for hours while a batch ran behind it.
     // The Pro PoS tab therefore behaves exactly as it did before this change.
     private void runSsOptimizer() {
+        // v1 2026-10-16 (V): input checks once per batch. Claim dates are skipped --
+        // the batch sets them itself (and starts each person at 62, O1).
+        final String[] optNotes = new String[1];
+        if (!passInputChecks(readInputs(), false, "Cannot run the SS Optimizer", optNotes)) return;
+        optRunNotes = optNotes[0];
         optBatchRunning = true;   // v1 2026-10-15 (FR)
         btnRunOpt.setEnabled(false);
         btnCancelOpt.setEnabled(true);
@@ -5764,6 +5822,24 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     }
 
     /** v11 2026-09-27: the batch itself. Shared verbatim by the GUI worker and headless mode. */
+    /** v1 2026-10-16 (O1): the later of today and the month after the 62nd-birthday month. */
+    /** v1 2026-10-16 (V1, V6, V10): the SS start-year tooltip -- its limits and meanings. */
+    private static String ssStartTip(String who) {
+        return "<html><b>" + who + " SS start year</b> (with the month below) -- the claim date.<br><br>"
+                + "<b>Before age 62:</b> not allowed; the run stops (retirement benefits<br>"
+                + "cannot begin before 62).<br>"
+                + "<b>After age 70:</b> allowed, with a warning -- no credit accrues after 70,<br>"
+                + "so a later date only delays the payments.<br>"
+                + "<b>Before the simulation start year:</b> benefits are already being<br>"
+                + "received -- the full benefit is paid from the first simulated year.</html>";
+    }
+
+    static int[] firstScanMonth(int birthYear, int birthMonth, int todayY, int todayM) {
+        int y = birthYear + 62, m = birthMonth + 1;
+        if (m > 12) { m = 1; y++; }
+        return (y * 12 + m > todayY * 12 + todayM) ? new int[]{y, m} : new int[]{todayY, todayM};
+    }
+
     private void runSsOptimizerCore(BatchCfg c, java.util.function.Consumer<String> publish) {
         // v12 2026-10-04: wall clock from pressing Run -- grid build and resume-file
         // read included, not just scoring. Read by the progress line, the
@@ -5773,10 +5849,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         java.time.LocalDate today = java.time.LocalDate.now();
         int sy = today.getYear(), sm = today.getMonthValue();
 
-        java.util.List<int[]> bobMonths = buildSsRangeStep(c.manBY, c.manBM, sy, sm, c.gridStepMo);
+        // v1 2026-10-16 (O1): each person's scan starts at the later of today and their
+        // first month at 62 (the month after the 62nd-birthday month -- SSA's normal
+        // earliest month; birth day is not an input). It started at today, so anyone
+        // under 62 was scored on claim dates SSA would not allow.
+        int[] manFrom = firstScanMonth(c.manBY, c.manBM, sy, sm);
+        java.util.List<int[]> bobMonths = buildSsRangeStep(c.manBY, c.manBM, manFrom[0], manFrom[1], c.gridStepMo);
         java.util.List<int[]> joMonths;
         if (c.single) { joMonths = new java.util.ArrayList<>(); joMonths.add(new int[]{0,0}); }
-        else joMonths = buildSsRangeStep(c.womanBY, c.womanBM, sy, sm, c.gridStepMo);
+        else {
+            int[] womFrom = firstScanMonth(c.womanBY, c.womanBM, sy, sm);
+            joMonths = buildSsRangeStep(c.womanBY, c.womanBM, womFrom[0], womFrom[1], c.gridStepMo);
+        }
 
         int total = bobMonths.size() * joMonths.size();
 
@@ -7326,7 +7410,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 show, passCount, failCount, OPT_RANK_LABELS[optRankMode()]);   // v12 2026-10-11
         // v12 2026-10-04: the run's final wall-clock time stays on screen.
         if (elapsedMs > 0) head += "   [elapsed " + minSec(elapsedMs) + "]";
-        lblOptStatus.setText(head);
+        lblOptStatus.setText(head + optRunNotes);   // v1 2026-10-16 (V): the batch's input warnings
     }
 
     private static String ssAgeStr(int totalMonths) {
@@ -7827,8 +7911,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private void refreshDeathFieldsEnabled() {
         if (cmbDeathWho == null) return; // guard: called during construction
         boolean computed = (chkComputedTax != null) && chkComputedTax.isSelected();
-        boolean hasDeath = computed && cmbDeathWho.getSelectedIndex() != 0;
-        cmbDeathWho.setEnabled(computed);
+        // v1 2026-10-16 (V2): greyed in Single mode too -- no spouse to survive.
+        boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
+        boolean hasDeath = computed && !single && cmbDeathWho.getSelectedIndex() != 0;
+        cmbDeathWho.setEnabled(computed && !single);
         if (spDeathYear != null)   spDeathYear.setEnabled(hasDeath);
         if (spHisRmdShare != null) spHisRmdShare.setEnabled(computed);
         if (spSurvivorSpendCut != null) spSurvivorSpendCut.setEnabled(hasDeath);
@@ -8629,6 +8715,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         refreshTaxEngineEnabled();  // greying may change if loaded toggles differ
         refreshStateFieldsEnabled();  // v5: apply loaded state selection greying
         refreshDeathFieldsEnabled();  // v6: apply loaded death-event greying
+        updateHorizonFromPlanAge();   // v1 2026-10-16 (HZ3): after the filing status is loaded
         refreshColaWarn();            // v6: apply loaded COLA guard note
         refreshStreamFieldsEnabled();   // v11: apply loaded stream on/off state
         addRecentFile(file.getAbsolutePath());
@@ -8899,6 +8986,89 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // ========================================================================
     //  SIMULATION  (dispatches Enhanced Pro engine + Guyton-Klinger engine)
     // ========================================================================
+    /**
+     * v1 2026-10-16 (V): input checks, run before every Pro PoS / GK run, every
+     * Stress Test and once per SS Optimizer batch. ERRORS are combinations the law
+     * or the model cannot mean -- the run stops and one dialog lists them all.
+     * WARNINGS are legal but probably unintended -- the run goes ahead and the note
+     * is shown with its status line. Combinations with a defined meaning (already
+     * drawing, already receiving SS, PIA dated after the start) are not flagged;
+     * their meaning is in the input tooltips. `claimDates` is false for the SS
+     * Optimizer, which sets the claim dates itself.
+     */
+    static java.util.List<java.util.List<String>> checkInputs(SimInputs inp, boolean claimDates) {
+        java.util.List<String> err = new java.util.ArrayList<>(), warn = new java.util.ArrayList<>();
+        boolean single = inp.filingStatus == TaxEngine.FilingStatus.SINGLE;
+        int lastYear = inp.baseYear + inp.horizon - 1;
+        if (claimDates) {
+            // V1: Social Security retirement benefits cannot begin before age 62.
+            // V6: after 70 nothing more accrues -- a later date only delays payment.
+            String[] who = single ? new String[]{ "User" } : new String[]{ "User", "Spouse" };
+            for (String w : who) {
+                boolean man = w.equals("User");
+                int pia = man ? inp.manPIA : inp.womanPIA;
+                if (pia <= 0) continue;
+                int ageMo = man
+                        ? (inp.manSSStartYear - inp.manBirthYear) * 12 + (inp.manSSStartMonth - inp.manBirthMonth)
+                        : (inp.womanSSStartYear - inp.womanBirthYear) * 12 + (inp.womanSSStartMonth - inp.womanBirthMonth);
+                if (ageMo < 62 * 12)
+                    err.add(w + " SS start date is before age 62. Social Security retirement benefits "
+                            + "cannot begin before 62 -- move the " + w + " SS start year/month (Social "
+                            + "Security card) to the 62nd birthday month or later. (SSA's earliest month is "
+                            + "normally the one AFTER the birthday, unless it falls on the 1st or 2nd.)");
+                else if (ageMo > 70 * 12)
+                    warn.add(w + " SS starts after age 70: no credit accrues after 70, so the later "
+                            + "date only delays the payments.");
+            }
+        }
+        boolean death = inp.deathWho != 0 && inp.deathYear > 0;
+        // V3: the Death event models a death DURING the plan; an already-widowed
+        // household is a Single plan.
+        if (death && inp.deathYear < inp.baseYear)
+            err.add("Year of death (" + inp.deathYear + ") is before the simulation start year ("
+                    + inp.baseYear + "). For a household already widowed, set Filing status to Single "
+                    + "and enter the survivor's accounts and benefit.");
+        // V4: nothing to solve.
+        if (inp.withdrawStartYear > lastYear)
+            err.add("Withdrawals start in " + inp.withdrawStartYear + ", after the plan's last year ("
+                    + lastYear + "). Move the withdrawal start year earlier or extend a life expectancy.");
+        // V5: the 10-year minimum stretches a shorter plan past both life expectancies.
+        int end = planEndYear(inp.manBirthYear, inp.manPlanAge, inp.womanBirthYear, inp.womanPlanAge, single);
+        if (end - inp.baseYear + 1 < 10)
+            warn.add("Life expectancy ends in " + end + ", but the plan runs the 10-year minimum, to "
+                    + lastYear + ".");
+        // V7: no survivor year falls inside the plan.
+        if (death && inp.deathYear >= inp.baseYear && inp.deathYear >= lastYear)
+            warn.add("Year of death (" + inp.deathYear + ") is the plan's last year or later, so no "
+                    + "survivor year is simulated.");
+        // V8: the spending phases are longer than the drawing years.
+        int drawYears = lastYear - Math.max(inp.withdrawStartYear, inp.baseYear) + 1;
+        int phases = Math.max(0, inp.goGoDuration) + Math.max(0, inp.slowGoDuration);
+        if (drawYears > 0 && phases > drawYears)
+            warn.add("Go-go (" + inp.goGoDuration + ") + slow-go (" + inp.slowGoDuration + ") years exceed the "
+                    + drawYears + " drawing years, so the later phase(s) never happen.");
+        java.util.List<java.util.List<String>> out = new java.util.ArrayList<>();
+        out.add(err); out.add(warn);
+        return out;
+    }
+
+    /**
+     * v1 2026-10-16 (V): run checkInputs; on any error show ONE dialog listing them
+     * all and return false. Warnings go to notes[0] (" | Note: ..."), for the
+     * caller's status line; empty when there are none.
+     */
+    private boolean passInputChecks(SimInputs inp, boolean claimDates, String title, String[] notes) {
+        java.util.List<java.util.List<String>> r = checkInputs(inp, claimDates);
+        notes[0] = r.get(1).isEmpty() ? "" : "   |   Note: " + String.join("  ", r.get(1));
+        if (r.get(0).isEmpty()) return true;
+        StringBuilder sb = new StringBuilder("<html><body style='width:460px'><b>" + title + ":</b><ul>");
+        for (String e : r.get(0)) sb.append("<li>").append(e).append("</li>");
+        sb.append("</ul></body></html>");
+        javax.swing.JOptionPane.showMessageDialog(this, sb.toString(), title,
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+        return false;
+    }
+
     private void runSimulation() {
         // v12 2026-10-11 (O3): the v9 block that refused a death inside a spouse's
         // "From simulation start" bridge window is gone. It existed because that case
@@ -8908,32 +9078,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // Pro tab run every row the SS Optimizer scores.
 
         // v12 2026-10-11: Social Security retirement benefits cannot start before
-        // age 62. A claim date before then would be priced by extending the early-
-        // claim reduction past its legal range (age 60 -> 60% of PIA), a benefit SSA
-        // never pays. Refuse the run and say which date to fix.
-        {
-            boolean singleRun = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
-            String bad = null;
-            int manAgeMo = (iv(spManSSStartYear) - iv(spManBirthYear)) * 12
-                    + (iv(spManSSStartMonth) - iv(spManBirthMonth));
-            if (iv(spManPIA) > 0 && manAgeMo < 62 * 12) bad = "User";
-            if (bad == null && !singleRun && iv(spWomanPIA) > 0) {
-                int womAgeMo = (iv(spWomanSSStartYear) - iv(spWomanBirthYear)) * 12
-                        + (iv(spWomanSSStartMonth) - iv(spWomanBirthMonth));
-                if (womAgeMo < 62 * 12) bad = "Spouse";
-            }
-            if (bad != null) {
-                javax.swing.JOptionPane.showMessageDialog(this,
-                        "<html><b>Cannot run: " + bad + " SS start date is before age 62.</b><br><br>"
-                                + "Social Security retirement benefits cannot begin before age 62.<br>"
-                                + "Move the " + bad + " SS start year/month (Social Security card) to the<br>"
-                                + "month of the 62nd birthday or later. (SSA's earliest month is<br>"
-                                + "normally the one AFTER the 62nd birthday, unless the birthday<br>"
-                                + "falls on the 1st or 2nd of the month.)</html>",
-                        "SS start before age 62", javax.swing.JOptionPane.ERROR_MESSAGE);
-                return;   // do not start the simulation
-            }
-        }
+        // age 62 -- a claim date before then would be priced by extending the early-
+        // claim reduction past its legal range, a benefit SSA never pays.
+        // v1 2026-10-16 (V): that check is now V1 in checkInputs(), alongside the
+        // other input checks; any error stops the run with one dialog.
+        final String[] runNotes = new String[1];
+        if (!passInputChecks(readInputs(), true, "Cannot run the simulation", runNotes)) return;
 
         btnRun.setEnabled(false);
         progressBar.setValue(0);
@@ -9023,7 +9173,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             "Complete -- %s Monte Carlo paths (up to %s simulated years) . "
                                     + "%,d fan paths . %,d solve paths . %d iters . %s",
                             fmtWork(simCount.get()), fmtWork(simPathYears.get()),
-                            fanPaths, solvePaths, binIters, elapsedStr));
+                            fanPaths, solvePaths, binIters, elapsedStr) + runNotes[0]);   // v1 2026-10-16 (V)
                     // Save calibration entry for future countdown estimates
                     saveCalibrationEntry(solvePaths, binIters, fanPaths, horizon, elapsed);
                 } catch (Exception ex) {
@@ -9040,7 +9190,6 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         SimInputs i = new SimInputs();
         i.baseYear           = iv(spSimStartYear);
         BASE_YEAR            = i.baseYear;
-        i.portfolio          = iv(spPortfolio);
         i.horizon            = iv(spHorizon);
         i.targetPoS          = iv(spTargetPoS) / 100.0;
         i.withdrawStartYear  = iv(spWithdrawStartYear);
@@ -9103,7 +9252,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             i.womanSSMonthly = 0; i.womanSSAmount = 0;
             i.womanRoth401K = 0; i.womanRothIRA = 0;
             i.womanTradIRA = 0;  i.womanTrad401K = 0;
-            i.womanPlanAge = 0;  // horizon then follows the primary/User plan age
+            i.womanPlanAge = 0;  // v1 2026-10-16 (HZ4): keeps the greyed Spouse value out of the
+            // batch fingerprint only -- the horizon is set by
+            // updateHorizonFromPlanAge(), which ignores the Spouse in Single
         }
 
         i.portfolio      = i.manTradIRA + i.manRothIRA + i.manTrad401K + i.manRoth401K
@@ -9146,6 +9297,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // v6: mid-projection death event + RMD share split.
         i.deathWho   = (cmbDeathWho != null) ? cmbDeathWho.getSelectedIndex() : 0; // 0/1/2
         i.deathYear  = (spDeathYear != null) ? iv(spDeathYear) : 0;
+        // v1 2026-10-16 (V2): a single filer has no spouse to survive. The controls
+        // are greyed in Single mode, and the values are cleared so they cannot apply
+        // (before this a leftover death event still cut spending in later years) or
+        // move the batch fingerprint.
+        if (i.filingStatus == TaxEngine.FilingStatus.SINGLE) { i.deathWho = 0; i.deathYear = 0; }
         i.hisRmdShare = (spHisRmdShare != null) ? dv(spHisRmdShare) / 100.0 : 0.5;
         i.herRmdShare = 1.0 - i.hisRmdShare;   // shares are complementary
         i.survivorSpendCut = (spSurvivorSpendCut != null)
@@ -13973,23 +14129,47 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         } catch (Exception ignored) {}
     }
 
+    /**
+     * v1 2026-10-16 (HZ1): the plan's last calendar year -- for each person, birth
+     * year + life expectancy (the year they reach it; that year is funded), the later
+     * of the two. Single counts the User only. Life expectancy only sets this length;
+     * nobody dies at it (only the Death event does that).
+     */
+    static int planEndYear(int manBY, int manPlan, int womanBY, int womanPlan, boolean single) {
+        int end = manBY + manPlan;
+        if (!single) end = Math.max(end, womanBY + womanPlan);
+        return end;
+    }
+
+    /**
+     * v1 2026-10-16 (HZ1, HZ6): horizon = last plan year - simulation start year + 1,
+     * so the final row is the year the later of the two reaches their life
+     * expectancy. It was max(User plan age, Spouse plan age) - User's age TODAY,
+     * which ignored the simulation start year, moved with the day of the year it
+     * was run, compared plan AGES instead of plan YEARS (a much younger spouse's
+     * years could be cut off) and used the Spouse even in Single mode. Called when
+     * a birth date, life expectancy, the simulation start year (HZ5) or the filing
+     * status (HZ2) changes, and after a scenario loads (HZ3).
+     */
     private void updateHorizonFromPlanAge() {
         try {
-            int manAge    = computeAge(iv(spManBirthYear), iv(spManBirthMonth));
-            int manPlan   = iv(spManPlanAge);
-            int womanPlan = iv(spWomanPlanAge);
-            int horizon   = Math.max(10, Math.min(50, Math.max(manPlan, womanPlan) - manAge));
+            boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
+            int start   = iv(spSimStartYear);
+            int manPlan = iv(spManPlanAge),   manEnd = iv(spManBirthYear)   + manPlan;
+            int womPlan = iv(spWomanPlanAge), womEnd = iv(spWomanBirthYear) + womPlan;
+            int end     = planEndYear(iv(spManBirthYear), manPlan, iv(spWomanBirthYear), womPlan, single);
+            int raw     = end - start + 1;
+            int horizon = Math.max(10, Math.min(50, raw));
             spHorizon.setValue(horizon);
-            // v11 2026-09-27: every field on this card is labelled User / Spouse, so this
-            // summary said "man" / "woman" for the same two people and read as a third
-            // party. "man age 65" also never said the 65 was a CURRENT age. Note that the
-            // horizon is always measured from the User's current age, even when the
-            // Spouse's plan age is the later one -- the wording now makes that visible
-            // rather than leaving it to be inferred.
-            String driver = (manPlan >= womanPlan) ? "User to " + manPlan : "Spouse to " + womanPlan;
+            String driver = (single || manEnd >= womEnd)
+                    ? "User to " + manPlan + " in " + manEnd
+                    : "Spouse to " + womPlan + " in " + womEnd;
             if (lblHorizonNote != null)
-                lblHorizonNote.setText("<html><i>Horizon = " + horizon + " yrs (" + driver
-                        + ", User current age " + manAge + ")</i></html>");
+                lblHorizonNote.setText("<html><i>Horizon = " + horizon + " yrs (" + start + "&ndash;"
+                        + (start + horizon - 1) + "; " + driver
+                        + (single ? "; Single: Spouse ignored" : "")
+                        + (raw < 10 ? "; stretched to the 10-year minimum" : "")
+                        + ")</i></html>");
         } catch (Exception ignored) {}
     }
 
@@ -14015,7 +14195,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             if (!distributing) {
                 distributing = true;
                 long shown = single ? userTotal : total;
-                spPortfolio.setValue((int) Math.min(shown, 20_000_000));
+                spPortfolio.setValue((int) shown);   // v1 2026-10-16 (PT1): no display cap
                 distributing = false;
             }
         } catch (Exception ignored) {}
@@ -14036,7 +14216,15 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             long oldTotal = 0;
             for (JSpinner s : accts) oldTotal += iv(s);
             long delta = newTotal - oldTotal;
-            if (delta == 0 || oldTotal == 0) return;
+            if (delta == 0) return;
+            if (oldTotal == 0) {
+                // v1 2026-10-16 (PT3): no account holds money, so there is nothing to
+                // scale -- snap back to $0 (the amount the simulation would use).
+                distributing = true;
+                spPortfolio.setValue(0);
+                distributing = false;
+                return;
+            }
             distributing = true;
             double[] shares = new double[accts.length];
             for (int k = 0; k < accts.length; k++)
@@ -14056,6 +14244,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             }
             long finalTotal = 0;
             for (JSpinner s : accts) finalTotal += iv(s);
+            // v1 2026-10-16 (PT2): show what will be simulated. Each account stops at
+            // $10M, so a large increase can be clipped; the field must not keep
+            // showing the amount typed.
+            spPortfolio.setValue((int) finalTotal);
             if (single) {
                 lblAccountTotal.setText("Account total: " + CURRENCY.format(finalTotal)
                         + "   (spouse accounts excluded -- consolidate manually)");
