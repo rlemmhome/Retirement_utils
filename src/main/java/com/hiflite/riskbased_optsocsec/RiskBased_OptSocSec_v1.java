@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Saturday, October 17, 2026 at 12:16 PM MST (UTC-7)
+// Last modified: Saturday, October 17, 2026 at 01:01 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Saturday, October 17, 2026 at 12:16 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, October 17, 2026 at 01:01 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -4100,6 +4100,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "retirement: early dollars have far higher utility than late-life dollars, when travel "
                 + "stops, socializing narrows, and spending concentrates on housing, food, and medical. A "
                 + "flat or back-loaded curve is not the intent.</p>"
+                // v1 2026-10-17 (SG1)
+                + "<p><b>The solver uses the same calendar (since 2026-10-17).</b> Each year's re-solve tests "
+                + "the spending curve actually left from that year: the go-go years remaining, then what is "
+                + "left of the slow-go window, then 1.0. Before this date, once go-go had ended, every later "
+                + "re-solve assumed a <i>full</i> slow-go duration still lay ahead &mdash; even in no-go years. "
+                + "With a slow-go multiplier above 1.0 that made the slow-go and no-go withdrawals too low "
+                + "(about 3&ndash;9% in years 13&ndash;24 at 1.4x/10 and 1.2x/7), with more left over at the "
+                + "end; below 1.0 it made them too high. The headline (the first year) was never affected.</p>"
                 + "<p><b>Travel money lives in the multiplier.</b> The go-go bump is not a separate travel "
                 + "line item on top of ordinary spending; it <i>is</i> the travel-and-active-living uplift. "
                 + "A 1.5x multiplier on a $105K base moves living expenses to $157.5K &mdash; the extra "
@@ -4864,8 +4872,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *                  own inflation -- brackets, standard deduction, IRMAA
      *                  thresholds and inflation-tracking streams -- not the flat
      *                  entered rate. Rows with conversions move; every batch re-runs.
+     *  15  2026-10-17  the PoS solver takes its go-go / slow-go / no-go multipliers
+     *                  from spendMultFor on the real phase position; after go-go it
+     *                  had assumed a full slow-go window ahead at every re-solve.
+     *                  Rows from the 12th drawing year on move; every batch re-runs.
      */
-    private static final int SCORER_VERSION = 14;
+    private static final int SCORER_VERSION = 15;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -9514,12 +9526,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     mmPath    = g;
                 }
 
-                int goGoRem = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
                 int wd = 0;
                 if (drawing && b > 0) {
                     wd = solveWithdrawalPro((int) b, calYear, inp.horizon - y,
                             inp, p * 1000L + y * 37 + seed,
-                            Math.max(20, solvePaths / 8), Math.min(binIters, 10), goGoRem,
+                            Math.max(20, solvePaths / 8), Math.min(binIters, 10), y - startY,   // v1 2026-10-17 (SG1)
                             java.util.Arrays.copyOfRange(ssBridge, y, ssBridge.length));
                 }
                 double mult   = spendMultFor(inp, y, startY);   // v6
@@ -9723,7 +9734,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             int goGoRem = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
             int wd = drawing && medBal > 0
                     ? solveWithdrawalPro(medBal, calYear, inp.horizon - y,
-                    inp, 999L + y * 37 + seed, solvePaths, binIters, goGoRem,
+                    inp, 999L + y * 37 + seed, solvePaths, binIters, y - startY,   // v1 2026-10-17 (SG1)
                     java.util.Arrays.copyOfRange(ssBridge, y, ssBridge.length))
                     : 0;
             // v1 2026-10-12: the headline comes from the first drawing row.
@@ -10157,7 +10168,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      */
     private int solveWithdrawalPro(int balance, int fromYear, int horizon,
                                    SimInputs inp, long seed,
-                                   int solvePaths, int binIters, int goGoYearsRemaining,
+                                   int solvePaths, int binIters, int yearsSinceStart,
                                    double[] bridgeFromHere) {
         // NOTE (v2): this solver is deliberately calendar-agnostic about income --
         // it sizes the MAXIMUM sustainable PORTFOLIO draw at the target PoS,
@@ -10175,7 +10186,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         for (int i = 0; i < binIters; i++) {
             double mid = (lo + hi) / 2.0;
             double rate = survivalRatePro(balance, horizon, mid,
-                    inp, seed + i * 31L, solvePaths, goGoYearsRemaining, bridgeFromHere,
+                    inp, seed + i * 31L, solvePaths, yearsSinceStart, bridgeFromHere,
                     firstPror);
             if (rate > inp.targetPoS) lo = mid; else hi = mid;
         }
@@ -10198,7 +10209,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     /**
      * Fraction of Monte Carlo trial paths that survive {@code horizon} years
      * given an inflation-indexed withdrawal stream. For each path, year y
-     * spending = firstYrWd * goGoMult(y) * cumInflFactor(y), where
+     * spending = firstYrWd * spendMultFor(yearsSinceStart + y) * cumInflFactor(y),
+     * where `yearsSinceStart` is how far into the withdrawal years this solve
+     * begins (v1 2026-10-17, SG1), and
      * cumInflFactor chains the per-year stochastic inflation draws
      * multiplicatively (year 0 = 1.0; thereafter cumInflFactor *= (1 + infl_y)).
      * No inner binary search and no balance-aware re-optimization occurs
@@ -10206,7 +10219,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      * by the outer binary search in {@link #solveWithdrawalPro}.
      */
     private double survivalRatePro(int balance, int horizon, double firstYrWd,
-                                   SimInputs inp, long seed, int solvePaths, int goGoYearsRemaining,
+                                   SimInputs inp, long seed, int solvePaths, int yearsSinceStart,
                                    double[] bridgeFromHere, double firstPror) {
         int survived = 0;
         for (int i = 0; i < solvePaths; i++) {
@@ -10230,13 +10243,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 // was computed against go-go-then-flat spending while the display
                 // and fan paths used three tiers. It reported a spending level as
                 // safe that had not actually been tested.
-                // goGoYearsRemaining counts go-go years left from THIS point, so
-                // slow-go occupies the window immediately after it.
-                int goGoRem = Math.max(0, goGoYearsRemaining - y);
-                double mult;
-                if (goGoRem > 0)                                        mult = inp.goGoMultiplier;
-                else if (y < goGoYearsRemaining + inp.slowGoDuration)    mult = inp.slowGoMultiplier;
-                else                                                     mult = 1.0;
+                // v1 2026-10-17 (SG1): the multiplier comes from spendMultFor on the
+                // real phase position, the same calendar the fan paths and the table
+                // use. The solver had its own copy, which put a FULL slow-go window
+                // after the remaining go-go years -- so once go-go was over, every
+                // later re-solve assumed `slowGoDuration` more slow-go years, even
+                // in no-go years (too conservative with slow-go above 1.0, too
+                // optimistic below it). Year-1 solves were unaffected.
+                double mult = spendMultFor(inp, yearsSinceStart + y, 0);
                 // v6: the SS bridge is an extra draw the portfolio must fund, so
                 // PoS reflects the true cost of delaying rather than only the
                 // display showing a lower balance.
@@ -10986,7 +11000,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // phase 2 = slow-go (immediately after), phase 3 = no-go at 1.0. Centralised
     // so the display, the fan paths and the PoS SOLVER cannot drift apart --
     // if the solver missed slow-go it would report a spending level as safe
-    // that had never been tested.
+    // that had never been tested. v1 2026-10-17 (SG1): the solver now really does
+    // call this; until then it kept its own copy (see survivalRatePro).
     static double spendMultFor(SimInputs inp, int simYear, int startY) {
         int y = simYear - startY;
         if (y < 0) return 1.0;
