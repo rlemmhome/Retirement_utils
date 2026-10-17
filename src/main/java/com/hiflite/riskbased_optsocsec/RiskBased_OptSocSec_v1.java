@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Saturday, October 17, 2026 at 10:33 AM MST (UTC-7)
+// Last modified: Saturday, October 17, 2026 at 12:16 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Saturday, October 17, 2026 at 10:33 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, October 17, 2026 at 12:16 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -3544,7 +3544,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "zero, and flooring them lifted the simulated mean to 2.61% and the median 30-year price level "
                 + "about 8% above the entered rate. Since v1 (2026-10-12) the draws are centred on a lower mean "
                 + "(1.91% for these inputs) chosen so the floored draws average <b>exactly</b> the entered mean, "
-                + "which also matches the 2.3% the deterministic helpers (conversion sizing, SS bridge) use.</li>"
+                + "which also matches the 2.3% the one deterministic helper, the SS bridge schedule, uses. (Fan-path "
+                + "Roth conversions follow each path's own inflation since 2026-10-17; see section 7.)</li>"
                 + "<li>Social Security COLA: 2.4% (matches SSA Trustees intermediate assumption). Always "
                 + "used for the gap years from the PIA as-of year to the simulation start year; from the "
                 + "start year on, used only when <i>SS COLA tracks simulated inflation</i> is off (it is on "
@@ -4063,6 +4064,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "practice the IRMAA cliff usually binds first; the table reports which ceiling bound the "
                 + "conversion each year.</li>"
                 + "</ul>"
+                // v1 2026-10-17 (C1/C2)
+                + "<p><b>Whose inflation (since 2026-10-17).</b> The table sizes and taxes each conversion on "
+                + "the median price level (the row's <i>Infl factor</i>). Each fan path does the same on "
+                + "<b>its own</b> simulated inflation: the brackets, the standard deduction, the IRMAA thresholds "
+                + "and any guaranteed-income stream set to track inflation all move with that path's prices, as "
+                + "the law indexes them to the inflation that actually happens. Before this date the fan paths "
+                + "indexed those at the flat entered rate while their Social Security and withdrawals followed "
+                + "the path's inflation, so high-inflation paths converted too little and low-inflation paths "
+                + "too much. The headline is unaffected (the first-year solve comes before any conversion); "
+                + "later years, the fan chart and the median balances move slightly.</p>"
                 + "<p><b>Fill mode + go-go interaction.</b> In Fill mode + go-go, the code protects a "
                 + "<b>Roth conversion</b> from crossing the line, but nothing stops the <b>go-go withdrawal</b> "
                 + "alone from pushing MAGI over an IRMAA threshold or into the 24% bracket. A go-go multiplier "
@@ -4849,8 +4860,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *                  four optimizer floors leave the fingerprint; applyFloors()
      *                  re-scores saved rows when a floor changes. Scoring arithmetic
      *                  unchanged; the row format changed, so every batch re-runs once.
+     *  14  2026-10-17  fan-path Roth conversions are sized and taxed on each path's
+     *                  own inflation -- brackets, standard deduction, IRMAA
+     *                  thresholds and inflation-tracking streams -- not the flat
+     *                  entered rate. Rows with conversions move; every batch re-runs.
      */
-    private static final int SCORER_VERSION = 13;
+    private static final int SCORER_VERSION = 14;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -9568,14 +9583,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     double convGross = fanConversion(inp, y, calYear, manAge,
                             womanAge, tradDraw,
                             res.fanInflFactors[p][y], pManStartInfl, pWomanStartInfl,
-                            mmIntPath);
+                            mmIntPath, res.fanInflFactors[p]);
                     convGross = Math.min(convGross, Math.max(0, trad));
                     if (convGross > 0) {
                         fpConv[p][y] = convGross;      // v6: record for display consistency
                         double convNet = fanConversionNet(inp, y, calYear, manAge,
                                 womanAge, tradDraw, convGross,
                                 res.fanInflFactors[p][y], pManStartInfl, pWomanStartInfl,
-                                mmIntPath);
+                                mmIntPath, res.fanInflFactors[p]);
                         double convTax = Math.max(0, convGross - Math.max(0, convNet));
                         trad -= convGross;              // gross leaves Traditional
                         roth += convGross;              // gross lands in Roth...
@@ -10832,30 +10847,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *
      * Start factors are passed in rather than looked up here because each call
      * site carries a different inflation basis: the Pro loop has the median path's
-     * factors, the conversion sizers use the deterministic Math.pow basis they
-     * already use for everything else, and the GK loop has its own per-path
-     * running factor. Explicit doubles rather than a lambda keep the
-     * conversion-sizing path -- which runs inside the binary search -- free of
-     * per-call allocation.
+     * factors, the fan-path conversion sizers have that path's own factors (v1
+     * 2026-10-17; they used a flat Math.pow basis before), and the GK loop has its
+     * own per-path running factor. Explicit doubles rather than a lambda keep the
+     * conversion-sizing path free of per-call allocation.
      */
     private static double streamsThisYear(SimInputs inp, int calYear, double inflNow,
                                           double fAnnuity, double fPension, double fMilitary) {
         return streamThisYear(inp.annuityStream,  inp, calYear, inflNow, fAnnuity)
                 + streamThisYear(inp.pensionStream,  inp, calYear, inflNow, fPension)
                 + streamThisYear(inp.militaryStream, inp, calYear, inflNow, fMilitary);
-    }
-
-    /** v11: the deterministic inflation basis the conversion sizers already use. */
-    private static double detInflAt(SimInputs inp, int calYear) {
-        return Math.pow(1 + inp.inflation, Math.max(0, calYear - inp.baseYear));
-    }
-
-    /** v11: streams summed on the deterministic basis (conversion sizing). */
-    private static double streamsDet(SimInputs inp, int calYear) {
-        return streamsThisYear(inp, calYear, detInflAt(inp, calYear),
-                detInflAt(inp, inp.annuityStream.startYear()),
-                detInflAt(inp, inp.pensionStream.startYear()),
-                detInflAt(inp, inp.militaryStream.startYear()));
     }
 
     /**
@@ -10885,14 +10886,6 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + taxablePart(inp.militaryStream, inp, calYear, inflNow, fM);
     }
 
-    /** v11: taxable portion on the deterministic basis (conversion sizing). */
-    private static double streamsTaxableDet(SimInputs inp, int calYear) {
-        return streamsTaxable(inp, calYear, detInflAt(inp, calYear),
-                detInflAt(inp, inp.annuityStream.startYear()),
-                detInflAt(inp, inp.pensionStream.startYear()),
-                detInflAt(inp, inp.militaryStream.startYear()));
-    }
-
     /**
      * v11: the part of the streams eligible for a STATE retirement-income
      * exclusion. Arizona, for instance, exempts military retired pay entirely
@@ -10911,25 +10904,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         return t;
     }
 
-    /** v11: state-exempt portion on the deterministic basis. */
-    private static double streamsStateExemptDet(SimInputs inp, int calYear) {
-        return streamsStateExempt(inp, calYear, detInflAt(inp, calYear),
-                detInflAt(inp, inp.annuityStream.startYear()),
-                detInflAt(inp, inp.pensionStream.startYear()),
-                detInflAt(inp, inp.militaryStream.startYear()));
-    }
-
     /** v12 2026-10-05: one stream's taxable part, or 0 when the user marked it
      *  state-exempt (that income is already subtracted on its own). */
     private static double nonExemptTaxable(FixedStream s, SimInputs inp, int calYear,
                                            double inflNow, double startFactor) {
         return s.stateExempt() ? 0 : taxablePart(s, inp, calYear, inflNow, startFactor);
-    }
-
-    /** v12: nonExemptTaxable on the deterministic basis (conversion sizing). */
-    private static double nonExemptTaxableDet(FixedStream s, SimInputs inp, int calYear) {
-        return nonExemptTaxable(s, inp, calYear, detInflAt(inp, calYear),
-                detInflAt(inp, s.startYear()));
     }
 
     /**
@@ -11240,19 +11219,30 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // displayed table uses. The old max(RMD, min(wdActual, trad)) left out the
     // bridge, so in bridge years the fan paths understated MAGI by the whole
     // bridge and over-converted.
+    // v1 2026-10-17 (C1/C2): indexed on THIS PATH's price level. `iNow` is the
+    // path's inflation factor this year and `pInfl` its whole factor array (for
+    // each stream's start year). Brackets, the standard deduction and the IRMAA
+    // thresholds follow the inflation that actually happens on the path, as the
+    // law indexes them, and so do streams set to track inflation. Before this the
+    // fan paths indexed them at the flat entered rate while their Social Security
+    // and draws rode the path's inflation, so high-inflation paths under-converted
+    // and low-inflation paths over-converted.
     private double fanConversion(SimInputs inp, int y, int calYear,
                                  int manAge, int womanAge,
                                  double tradDraw,
                                  double iNow, double iManStart, double iWomanStart,
-                                 double mmInterest) {
+                                 double mmInterest, double[] pInfl) {
         TaxEngine.FilingStatus fs = filingFor(inp, calYear);
-        double inflFactor = Math.pow(1 + inp.inflation, y);
+        double inflFactor = iNow;   // v1 2026-10-17 (C1): the path's own price level
         double grossSS = manSSSurv(inp, y, iNow, iManStart, iWomanStart)
                 + womanSSSurv(inp, y, iNow, iManStart, iWomanStart);
-        // v11: TAXABLE portion of the three streams, on this method's existing
-        // deterministic inflation basis. With every stream at its v10-equivalent
-        // settings (no COLA, 100% taxable) this equals the old annuity figure.
-        double ann     = streamsTaxableDet(inp, calYear);
+        // v11: TAXABLE portion of the three streams. With every stream at its
+        // v10-equivalent settings (no COLA, 100% taxable) this equals the old
+        // annuity figure. v1 2026-10-17 (C2): on the path's own inflation.
+        double ann     = streamsTaxable(inp, calYear, iNow,
+                inflAt(pInfl, inp.baseYear, inp.annuityStream.startYear()),
+                inflAt(pInfl, inp.baseYear, inp.pensionStream.startYear()),
+                inflAt(pInfl, inp.baseYear, inp.militaryStream.startYear()));
         // v6 FIX: match the display basis -- ordinary income is the actual
         // Traditional portion of the draw (RMD floors it), not the full
         // withdrawal and not the RMD alone. Sizing conversions off RMD only
@@ -11278,17 +11268,23 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // Net-to-Roth for a given gross conversion on the fan path (gross minus the
     // stacked marginal conversion tax), using the per-year filing status.
     // v1 2026-10-12: `tradDraw` as in fanConversion.
+    // v1 2026-10-17 (C1/C2): `iNow` and `pInfl` as in fanConversion -- the tax
+    // and the streams are on the path's own price level.
     private double fanConversionNet(SimInputs inp, int y, int calYear,
                                     int manAge, int womanAge,
                                     double tradDraw,
                                     double convGross,
                                     double iNow, double iManStart, double iWomanStart,
-                                    double mmInterest) {
+                                    double mmInterest, double[] pInfl) {
         TaxEngine.FilingStatus fs = filingFor(inp, calYear);
-        double inflFactor = Math.pow(1 + inp.inflation, y);
+        double inflFactor = iNow;   // v1 2026-10-17 (C1)
         double grossSS = manSSSurv(inp, y, iNow, iManStart, iWomanStart)
                 + womanSSSurv(inp, y, iNow, iManStart, iWomanStart);
-        double ann     = streamsTaxableDet(inp, calYear);   // v11
+        // v1 2026-10-17 (C2): each stream's start factor on this path.
+        double fA = inflAt(pInfl, inp.baseYear, inp.annuityStream.startYear());
+        double fP = inflAt(pInfl, inp.baseYear, inp.pensionStream.startYear());
+        double fM = inflAt(pInfl, inp.baseYear, inp.militaryStream.startYear());
+        double ann     = streamsTaxable(inp, calYear, iNow, fA, fP, fM);   // v11
         double ordinaryBeforeConv = tradDraw + ann   // v1 2026-10-12: actual Traditional draw
                 + mmInterest;   // v12: interest raises the base the conversion stacks on
         TaxEngine.StateTaxProfile stProfile = TaxEngine.stateProfile(inp.stateCode);
@@ -11300,8 +11296,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 manSSSurv(inp, y, iNow, iManStart, iWomanStart),
                 womanSSSurv(inp, y, iNow, iManStart, iWomanStart),
                 tradDraw,
-                nonExemptTaxableDet(inp.pensionStream, inp, calYear),
-                nonExemptTaxableDet(inp.annuityStream, inp, calYear));
+                nonExemptTaxable(inp.pensionStream, inp, calYear, iNow, fP),
+                nonExemptTaxable(inp.annuityStream, inp, calYear, iNow, fA));
         TaxEngine.TaxResult tr = TaxEngine.compute(grossSS, ordinaryBeforeConv,
                 magiBeforeForConv(grossSS, ordinaryBeforeConv, inflFactor, fs),
                 primary65(inp, calYear, manAge, womanAge), womanAge >= 65, inflFactor,
@@ -11311,7 +11307,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 // v11: retirementOrdinary is the Traditional draw ONLY; the stream
                 // exemption travels in its own parameter (see stateTaxLiving).
                 fs, stProfile, calYear, tradDraw,
-                streamsStateExemptDet(inp, calYear), stCtx);
+                streamsStateExempt(inp, calYear, iNow, fA, fP, fM), stCtx);
         // v12 2026-10-11: include the tax on the Social Security the conversion
         // makes taxable (tax torpedo), as in the display loop.
         double convSSInd = TaxEngine.convInducedTaxableSS(grossSS, ordinaryBeforeConv,
