@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Sunday, October 18, 2026 at 08:31 AM MST (UTC-7)
+// Last modified: Sunday, October 18, 2026 at 12:18 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Sunday, October 18, 2026 at 08:31 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, October 18, 2026 at 12:18 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -534,6 +534,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private ProChartPanel     chartPanel;
     private JComboBox<String> cmbChartType;
     private JTextArea         txaSummary;
+    // v1 2026-10-18 (EX): the panels above (and, for Stress Test, below) each
+    // result table, read by Export Results for the description file.
+    private JComponent        exHdrPro, exHdrGk, exHdrOpt, exHdrStress, exFtrStress;
     private JToggleButton     tglDollars;
     private JButton           btnRun;
     private JProgressBar      progressBar;
@@ -578,6 +581,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private static final java.io.File DIR_INCOMELAB = new java.io.File(DIR_ROOT,     ".incomelab");
     private static final java.io.File DIR_SCENARIOS = new java.io.File(DIR_INCOMELAB,"scenarios");
     private static final java.io.File DIR_CALIB     = new java.io.File(DIR_INCOMELAB,"calibration");
+    // v1 2026-10-18 (EX): Export Results writes here (created on first export).
+    private static final java.io.File DIR_EXPORTS   = new java.io.File(DIR_INCOMELAB,"exports");
     private static final String CALIB_FILE   = new java.io.File(DIR_CALIB, "calibration.ilscen.prefs").getAbsolutePath();
     private static final String RECENT_FILE  = new java.io.File(DIR_CALIB, "recent.ilscen.prefs").getAbsolutePath();
     // v7: collapsible input-section state is an APP preference (per-user layout),
@@ -759,6 +764,25 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         btnLoad.setBorderPainted(true);
         btnLoad.setBorder(BorderFactory.createLineBorder(new Color(55, 95, 40), 1));
 
+        // v1 2026-10-18 (EX): one click writes the four result tables as CSV plus a
+        // description file, all with the same timestamp prefix.
+        JButton btnExport = new JButton("Export Results");
+        btnExport.setFont(new Font("SansSerif", Font.BOLD, 12));
+        btnExport.setBackground(new Color(90, 90, 90));
+        btnExport.setForeground(Color.WHITE);
+        btnExport.setFocusPainted(false);
+        btnExport.setOpaque(true);
+        btnExport.setBorderPainted(true);
+        btnExport.setBorder(BorderFactory.createLineBorder(new Color(60, 60, 60), 1));
+        btnExport.setToolTipText("<html><b>Export Results</b><br>"
+                + "Writes the Pro PoS, SS Optimizer, Guyton-Klinger and Stress Test tables<br>"
+                + "as CSV files (column names, then plain numbers; every column, hidden or<br>"
+                + "not) plus a Description text file -- the Summary tab and the text above<br>"
+                + "each table. All five share one timestamp, e.g.<br>"
+                + "<i>20261018-103905_MyPlan_ProPoS_real.csv</i>. A table with no results<br>"
+                + "yet is skipped.<br>"
+                + "Folder: ~/.retirement_utils/.incomelab/exports/</html>");
+        btnExport.addActionListener(e -> exportResults(tfScenDesc));
         btnSave.addActionListener(e -> saveScenario(tfScenDesc));
         btnLoad.addActionListener(e -> loadScenario(tfScenDesc, cmbRecent));
         cmbRecent.addActionListener(e -> {
@@ -812,6 +836,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         JPanel scenBtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         scenBtnRow.setOpaque(false); scenBtnRow.setAlignmentX(LEFT_ALIGNMENT);
         scenBtnRow.add(btnSave); scenBtnRow.add(btnLoad);
+        JPanel exportRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));   // v1 2026-10-18 (EX)
+        exportRow.setOpaque(false); exportRow.setAlignmentX(LEFT_ALIGNMENT);
+        exportRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        exportRow.add(btnExport);
         JPanel baseRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         baseRow.setOpaque(false); baseRow.setAlignmentX(LEFT_ALIGNMENT);
         baseRow.add(btnSetBaseline);
@@ -844,6 +872,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         scenBtnRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,32));
         scenSaveCard.add(Box.createVerticalStrut(4));
         scenSaveCard.add(scenBtnRow);
+        scenSaveCard.add(Box.createVerticalStrut(4));
+        scenSaveCard.add(exportRow);   // v1 2026-10-18 (EX)
         scenSaveCard.add(baseRow);
         JLabel recentFilesLbl = new JLabel("Recent files");
         recentFilesLbl.setFont(new Font("SansSerif",Font.PLAIN,13));
@@ -2156,6 +2186,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         topSection.add(answerBox,  BorderLayout.NORTH);
         topSection.add(metricsRow, BorderLayout.CENTER);
         topSection.add(badge,      BorderLayout.SOUTH);
+        exHdrPro = topSection;   // v1 2026-10-18 (EX)
 
         // == Tabs: table / chart / summary ================================
         mainTabs = new JTabbedPane();
@@ -4753,6 +4784,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "the change across the accounts in proportion; if an account's $10M limit clips it, the "
                 + "field shows the clipped total. With every account at $0 there is nothing to spread, so the "
                 + "field returns to $0 &mdash; enter an account first.</p>"
+                // v1 2026-10-18 (EX)
+                + "<p><b>Export Results (since 2026-10-18).</b> The button on the Scenario card writes five "
+                + "files to <i>~/.retirement_utils/.incomelab/exports/</i>, all starting with the same local "
+                + "24-hour timestamp (yyyyMMdd-HHmmss): one CSV each for the Pro PoS, SS Optimizer, "
+                + "Guyton-Klinger and Stress Test tables, and a Description text file &mdash; the Summary tab, "
+                + "then the text above each table, in the order Pro PoS, SS Optimizer, GK, Stress Test. Each CSV "
+                + "has the column names first, then plain numbers ($, commas, % and + removed; -- left blank), "
+                + "every column included whether shown or hidden. The Pro PoS and GK files follow the Today's $ "
+                + "toggle and say which in their names (_real or _nominal). A table with no results yet is "
+                + "skipped.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "</body></html>";
 
@@ -4892,8 +4933,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *                  Rows from the 12th drawing year on move; every batch re-runs.
      *  16  2026-10-17  random annual returns are floored at -100% (NB1). Rows move
      *                  only when the return spread is extreme; every batch re-runs.
+     *  17  2026-10-18  RMDs before withdrawals start reach the Money Mkt reserve
+     *                  (P1), and those years record MAGI for the IRMAA lookback (P2).
+     *                  Rows move only when RMDs or income precede withdrawals.
      */
-    private static final int SCORER_VERSION = 16;
+    private static final int SCORER_VERSION = 17;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -5320,6 +5364,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         north.add(clickHint);
         north.add(modeHint);
 
+        exHdrOpt = north;   // v1 2026-10-18 (EX)
         p.add(north,                   BorderLayout.NORTH);
         p.add(new JScrollPane(tblOpt), BorderLayout.CENTER);
         return p;
@@ -5609,6 +5654,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         south.setBackground(new Color(245, 245, 242));
         south.add(lblStressVerdict, BorderLayout.CENTER);
 
+        exHdrStress = north; exFtrStress = south;   // v1 2026-10-18 (EX)
         p.add(north,                       BorderLayout.NORTH);
         p.add(new JScrollPane(tblStress),  BorderLayout.CENTER);
         p.add(south,                       BorderLayout.SOUTH);
@@ -8351,6 +8397,194 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 iv(spStreamFullTaxFrom[k]));
     }
 
+    // ========================================================================
+    //  v1 2026-10-18 (EX): EXPORT RESULTS -- the four result tables as CSV plus
+    //  one Description text file (the Summary tab and the text above each
+    //  table). Every file name starts with the same local 24-hour timestamp,
+    //  yyyyMMdd-HHmmss, so one export sorts together as a set.
+    // ========================================================================
+    private void exportResults(javax.swing.JTextField tfDesc) {
+        String desc = tfDesc.getText().trim();
+        if (desc.isEmpty()) desc = "scenario";
+        String scen = desc.replaceAll("[^a-zA-Z0-9_-]", "_");   // as saveScenario names files
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        String ts = now.format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+        String basis = showRealDollars ? "_real" : "_nominal";   // Pro PoS and GK follow the toggle
+        // {section title, file suffix, table, panel above, panel below}
+        Object[][] parts = {
+                { "PRO POS",        "_ProPoS" + basis, tblProModel,    exHdrPro,    null },
+                { "SS OPTIMIZER",   "_SSOptimizer",    tblOptModel,    exHdrOpt,    null },
+                { "GUYTON-KLINGER", "_GK" + basis,     tblGkModel,     exHdrGk,     null },
+                { "STRESS TEST",    "_StressTest",     tblStressModel, exHdrStress, exFtrStress } };
+        StringBuilder txt = new StringBuilder(), written = new StringBuilder(), skipped = new StringBuilder();
+        txt.append("Exported ").append(now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
+                .append(" (local time) . Build ").append(BUILD_STAMP).append(" . Scenario \"").append(desc).append("\"\n")
+                .append("Dollar basis: ").append(showRealDollars ? "Today's $ (real)" : "Future $ (nominal)")
+                .append(" in the Pro PoS and GK files; the SS Optimizer and Stress Test files are as shown on their tabs.\n")
+                .append("CSV values are plain numbers ($, commas, % and + removed; -- is blank). Every column is included,"
+                        + " hidden or not.\n");
+        exSection(txt, "SCENARIO");
+        String summary = (txaSummary == null) ? "" : txaSummary.getText().trim();
+        txt.append(summary.isEmpty() ? "(no simulation run yet)" : summary).append('\n');
+        try {
+            DIR_EXPORTS.mkdirs();
+            for (Object[] part : parts) {
+                exSection(txt, (String) part[0]);
+                exPanelText((java.awt.Component) part[3], txt);
+                exPanelText((java.awt.Component) part[4], txt);
+                javax.swing.table.TableModel m = (javax.swing.table.TableModel) part[2];
+                if (m == null || m.getRowCount() == 0) {
+                    txt.append("Table: no results yet -- not exported\n");
+                    skipped.append("\n  ").append(part[0]).append(" (no results yet)");
+                    continue;
+                }
+                java.io.File f = new java.io.File(DIR_EXPORTS, ts + "_" + scen + part[1] + ".csv");
+                writeTableCsv(m, f);
+                txt.append("Table: ").append(f.getName()).append(" (").append(m.getRowCount()).append(" rows)\n");
+                written.append("\n  ").append(f.getName());
+            }
+            java.io.File d = new java.io.File(DIR_EXPORTS, ts + "_" + scen + "_Description.txt");
+            java.nio.file.Files.writeString(d.toPath(), txt.toString(), java.nio.charset.StandardCharsets.UTF_8);
+            written.append("\n  ").append(d.getName());
+        } catch (java.io.IOException ex) {
+            JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage(),
+                    "Export Results", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        JOptionPane.showMessageDialog(this, "Saved to " + DIR_EXPORTS.getAbsolutePath() + ":" + written
+                        + (skipped.length() > 0 ? "\n\nSkipped:" + skipped : ""),
+                "Export Results", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private static void exSection(StringBuilder sb, String name) {
+        sb.append("\n==================== ").append(name).append(" ====================\n");
+    }
+
+    /** v1 2026-10-18 (EX): a table as CSV -- column names, then one line per row. */
+    static void writeTableCsv(javax.swing.table.TableModel m, java.io.File f) throws java.io.IOException {
+        StringBuilder sb = new StringBuilder();
+        for (int c = 0; c < m.getColumnCount(); c++) {
+            if (c > 0) sb.append(',');
+            sb.append(csvQuote(exPlainText(m.getColumnName(c)).replace('\n', ' ')));
+        }
+        sb.append('\n');
+        for (int r = 0; r < m.getRowCount(); r++) {
+            for (int c = 0; c < m.getColumnCount(); c++) {
+                if (c > 0) sb.append(',');
+                sb.append(csvCell(m.getValueAt(r, c)));
+            }
+            sb.append('\n');
+        }
+        java.nio.file.Files.writeString(f.toPath(), sb.toString(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /**
+     * v1 2026-10-18 (EX): one cell as a plain value. Money, signed money and
+     * percentages become bare numbers ("$1,234" -> 1234, "-$5,254" -> -5254,
+     * "+$22,478" -> 22478, "8.66%" -> 8.66, "1.300x" -> 1.300); "--" becomes blank; anything else
+     * (dates, flags, abbreviated $362K) stays text.
+     */
+    static String csvCell(Object o) {
+        if (o == null) return "";
+        if (o instanceof Double || o instanceof Float)
+            return java.math.BigDecimal.valueOf(((Number) o).doubleValue()).toPlainString();
+        if (o instanceof Number) return o.toString();
+        String s = exPlainText(o.toString()).replace('\n', ' ').trim();
+        if (s.isEmpty() || s.equals("--") || s.equals("-")) return "";
+        String t = s;
+        boolean neg = false;
+        if (t.startsWith("(") && t.endsWith(")")) { neg = true; t = t.substring(1, t.length() - 1); }
+        if (t.startsWith("+"))      t = t.substring(1);
+        else if (t.startsWith("-")) { neg = !neg; t = t.substring(1); }
+        if (t.startsWith("$"))      t = t.substring(1);
+        if (t.startsWith("-"))      { neg = !neg; t = t.substring(1); }
+        if (t.endsWith("%") || t.endsWith("x")) t = t.substring(0, t.length() - 1);   // 8.66% / 1.000x
+        if (t.matches("[0-9]+(\\.[0-9]+)?") || t.matches("[0-9]{1,3}(,[0-9]{3})+(\\.[0-9]+)?"))
+            return (neg ? "-" : "") + t.replace(",", "");
+        return csvQuote(s);
+    }
+
+    static String csvQuote(String s) {
+        if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0)
+            return '"' + s.replace("\"", "\"\"") + '"';
+        return s;
+    }
+
+    /** v1 2026-10-18 (EX): label HTML as plain text -- line breaks kept, tags
+     *  dropped, the entities this app uses spelled in ASCII. */
+    static String exPlainText(String h) {
+        if (h == null) return "";
+        String t = h.replaceAll("(?i)<br\\s*/?>|</p>|</li>|</tr>|</h[1-6]>", "\n")
+                .replaceAll("(?i)<li>", "- ")
+                .replaceAll("<[^>]*>", "");
+        String[][] ent = { {"&nbsp;", " "}, {"&mdash;", "--"}, {"&ndash;", "-"}, {"&minus;", "-"},
+                {"&rarr;", "->"}, {"&larr;", "<-"}, {"&uarr;", "^"}, {"&darr;", "v"}, {"&times;", "x"},
+                {"&le;", "<="}, {"&ge;", ">="}, {"&asymp;", "~"}, {"&bull;", "*"}, {"&hellip;", "..."},
+                {"&quot;", "\""}, {"&#39;", "'"}, {"&lt;", "<"}, {"&gt;", ">"} };
+        for (String[] e : ent) t = t.replace(e[0], e[1]);
+        t = t.replaceAll("&(?!amp;)[a-zA-Z]+;", "").replace("&amp;", "&");   // unknown entities dropped; &amp; last
+        StringBuilder out = new StringBuilder();
+        for (String line : t.split("\n")) {
+            String l = line.trim().replaceAll("\\s{2,}", " ");
+            if (!l.isEmpty()) out.append(out.length() > 0 ? "\n" : "").append(l);
+        }
+        return out.toString();
+    }
+
+    /** v1 2026-10-18 (EX): the visible text of a panel, top to bottom. A row
+     *  (FlowLayout) prints as one line; a metric card as "title: value -- note";
+     *  plain buttons, tables and progress bars are skipped. */
+    private static void exPanelText(java.awt.Component c, StringBuilder out) {
+        if (c == null || !c.isVisible()) return;
+        if (c instanceof JComponent jc && Boolean.TRUE.equals(jc.getClientProperty("ex.metric"))
+                && jc.getLayout() instanceof BorderLayout bl) {
+            String title = exLeafText(bl.getLayoutComponent(BorderLayout.NORTH));
+            String val   = exLeafText(bl.getLayoutComponent(BorderLayout.CENTER));
+            String note  = exLeafText(bl.getLayoutComponent(BorderLayout.SOUTH));
+            out.append(title).append(": ").append(val)
+                    .append(note == null || note.isBlank() ? "" : " -- " + note).append('\n');
+            return;
+        }
+        String leaf = exLeafText(c);
+        if (leaf != null) { if (!leaf.isBlank()) out.append(leaf).append('\n'); return; }
+        if (!(c instanceof java.awt.Container k)) return;
+        if (k.getLayout() instanceof java.awt.FlowLayout) {
+            StringBuilder row = new StringBuilder();
+            exFlatten(k, row);
+            if (row.length() > 0) out.append(row).append('\n');
+            return;
+        }
+        for (java.awt.Component ch : k.getComponents()) exPanelText(ch, out);
+    }
+
+    private static void exFlatten(java.awt.Container k, StringBuilder row) {
+        for (java.awt.Component ch : k.getComponents()) {
+            if (!ch.isVisible()) continue;
+            String t = exLeafText(ch);
+            if (t == null) { if (ch instanceof java.awt.Container cc) exFlatten(cc, row); continue; }
+            if (t.isBlank()) continue;
+            if (row.length() > 0) row.append("  ");
+            row.append(t.replace('\n', ' '));
+        }
+    }
+
+    /** Text a component shows; "" when it shows nothing worth exporting; null
+     *  for a container to look inside. */
+    private static String exLeafText(java.awt.Component c) {
+        if (c == null)                    return "";
+        if (c instanceof JLabel l)        return exPlainText(l.getText());
+        if (c instanceof JCheckBox b)     return (b.isSelected() ? "[x] " : "[ ] ") + exPlainText(b.getText());
+        if (c instanceof JToggleButton b) return exPlainText(b.getText());
+        if (c instanceof AbstractButton)  return "";
+        if (c instanceof JSpinner sp)
+            return (sp.getEditor() instanceof JSpinner.DefaultEditor ed) ? ed.getTextField().getText()
+                    : String.valueOf(sp.getValue());
+        if (c instanceof JComboBox<?> cb) return String.valueOf(cb.getSelectedItem());
+        if (c instanceof javax.swing.text.JTextComponent tc) return tc.getText();
+        if (c instanceof JProgressBar || c instanceof JScrollPane || c instanceof JTable) return "";
+        return null;
+    }
+
     private void saveScenario(javax.swing.JTextField tfDesc) {
         String desc = tfDesc.getText().trim();
         if (desc.isEmpty()) desc = "scenario";
@@ -9784,7 +10018,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             // up as a lower portfolio balance instead of reduced spending.
             int bridgeThisYear = drawing ? (int) ssBridge[y] : 0;
             wdActual += bridgeThisYear;
-            int rmdOverage = drawing ? Math.max(0, (int) combRmd - wdActual) : 0;
+            // v1 2026-10-18 (P1): every year, not only drawing years. Before
+            // withdrawals start, the fan paths already moved each RMD out of the
+            // portfolio into the reserve (wdActual is 0, so the whole RMD is the
+            // overage); the table skipped those years, so Portfolio + Money Mkt
+            // came up short by every pre-withdrawal RMD.
+            int rmdOverage = Math.max(0, (int) combRmd - wdActual);
             // v8: fold this year's overage into the exact-tie-out MM reserve.
             // (Runs every displayed year in order, so the reserve is the true
             // running sum mmPrior + cumulative overage.)
@@ -10049,6 +10288,19 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 if (drawing) {
                     double grossSS = manSS + womanSS;
                     magiHistory[y] = grossSS * 0.85 + Math.max(combRmd, wdActual) + ann;
+                } else if (inp.computedTax) {
+                    // v1 2026-10-18 (P2): a year before withdrawals still has income --
+                    // the RMD, Social Security, the streams, reserve interest -- and the
+                    // IRMAA test two years later looks back to it. Record its MAGI the
+                    // way the drawing years do (taxable SS + ordinary income); it was
+                    // left at $0. No tax is shown: spending and taxes before withdrawals
+                    // are paid outside the portfolio, by design.
+                    double grossSS = manSS + womanSS;
+                    double ordPre  = combRmd + streamsTaxable(inp, calYear, ssInflNow, fAnn, fPen, fMil)
+                            + mmInterest;
+                    double magiPre = TaxEngine.taxableSocialSecurity(grossSS, ordPre, inflFactor, fsYear) + ordPre;
+                    magiInt        = (int) magiPre;
+                    magiHistory[y] = magiPre;
                 }
             }
             double totalSpend = drawing ? living + medical + tax : 0;
@@ -10422,6 +10674,20 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int manRmdYear   = inp.manBirthYear   + rmdStartAge(inp.manBirthYear);     // v1 2026-10-14 (F1)
         int womanRmdYear = inp.womanBirthYear + rmdStartAge(inp.womanBirthYear);
 
+        // v1 2026-10-18 (SUM1): the tax model actually in use (the flat Base tax
+        // input was printed even with the computed engine on), and the whole
+        // go-go / slow-go / no-go curve (slow-go was missing).
+        String taxLine = inp.computedTax
+                ? "Tax: computed engine (federal + " + TaxEngine.stateProfile(inp.stateCode).displayName + ")"
+                : String.format("Base tax %s in %d (flat escalator)", CURRENCY.format(inp.baseTax), inp.withdrawStartYear);
+        int goStart = inp.withdrawStartYear, slowStart = goStart + Math.max(0, inp.goGoDuration);
+        String phaseLine = (inp.goGoDuration > 0
+                ? String.format("Go-go %.2fx %d-%d", inp.goGoMultiplier, goStart, slowStart - 1) : "No go-go")
+                + " . " + (inp.slowGoDuration > 0
+                ? String.format("slow-go %.2fx %d-%d", inp.slowGoMultiplier, slowStart,
+                slowStart + inp.slowGoDuration - 1) : "no slow-go")
+                + " . then 1.00x";
+
         String preDrawSection = "";
         if (inp.baseYear < inp.withdrawStartYear) {
             preDrawSection = String.format(
@@ -10442,15 +10708,15 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         + "== SOCIAL SECURITY ==\n"
                         + "  User: %s/yr from %02d/%d (age %d) . Spouse: %s/yr from %02d/%d (age %d)\n"
                         + "  Amounts above are in %d dollars (PIA as-of year); COLA %.1f%%/yr%s\n\n"
-                        + "== ANNUITY ==\n"
-                        + "  %s/yr from %d (non-COLA)\n\n"
+                        + "== GUARANTEED INCOME STREAMS ==\n"   // v1 2026-10-18 (SUM1)
+                        + "  %s\n\n"
                         + "== RMD SCHEDULE (SECURE 2.0 -- 73 or 75 by birth year) ==\n"
                         + "  User's trad IRA + 401K: %s . RMDs begin %d\n"
                         + "  Spouse's trad IRA + 401K: %s . RMDs begin %d\n"
                         + "  Roth accounts (no RMD): %s\n\n"
                         + "== SPENDING ==\n"
-                        + "  Base tax %s in %d . Medical %s at %.1f%%/yr\n"
-                        + "  Go-go multiplier: %.3fx for first %d years (through %d)\n\n"
+                        + "  %s . Medical %s at %.1f%%/yr\n"   // v1 2026-10-18 (SUM1)
+                        + "  %s\n\n"
                         + "== MARKET ASSUMPTIONS ==\n"
                         + "  Return: %.2f%% / %.2f%% std dev . Inflation: %.2f%% / %.2f%% std dev\n\n"
                         + "== RESULTS ==\n"
@@ -10473,16 +10739,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         ? String.format("  [COLA TRACKS SIMULATED INFLATION, shortfall %.1f%%/yr"
                         + " -- the fixed COLA above is NOT in use]", inp.ssColaShortfall * 100)
                         : "",
-                streamSummary(inp), streamSummaryStartYear(inp),
+                streamSummary(inp),
                 CURRENCY.format(inp.manTradIRA) + " + " + CURRENCY.format(inp.manTrad401K), manRmdYear,
                 CURRENCY.format(inp.womanTradIRA) + " + " + CURRENCY.format(inp.womanTrad401K), womanRmdYear,
                 CURRENCY.format(inp.manRothIRA) + " (User Roth IRA) + "
                         + CURRENCY.format(inp.manRoth401K) + " (User Roth 401K) + "
                         + CURRENCY.format(inp.womanRoth401K) + " (Spouse Roth 401K) + "
                         + CURRENCY.format(inp.womanRothIRA) + " (Spouse Roth IRA)",
-                CURRENCY.format(inp.baseTax), inp.withdrawStartYear,
+                taxLine,
                 CURRENCY.format(inp.medical), inp.medInflation * 100,
-                inp.goGoMultiplier, inp.goGoDuration, inp.withdrawStartYear + inp.goGoDuration - 1,
+                phaseLine,
                 inp.nomReturn * 100, inp.stdDev * 100, inp.inflation * 100, inp.inflationStdDev * 100,
                 res.actualPoS * 100, res.fanPathCount,
                 formatMoney(res.medianFinalBalance),
@@ -10995,28 +11261,26 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         return "non-COLA";
     }
 
-    /** v11: the active streams, named, for the plain-text scenario summary. */
+    /**
+     * v11: the active streams, named, for the plain-text scenario summary.
+     * v1 2026-10-18 (SUM1): one line per stream with its own start (and end)
+     * date and COLA rule; "none" when no stream is on. The summary used to print
+     * "<streams>/yr from <earliest year> (non-COLA)", which mislabeled a COLA
+     * stream and read "$0/yr from 0" with none.
+     */
     private static String streamSummary(SimInputs inp) {
         StringBuilder sb = new StringBuilder();
-        String[] names = { "Annuity", "Pension", "Military" };
+        String[] names = { "Annuity", "Pension", "Military retired pay" };
         FixedStream[] ss = { inp.annuityStream, inp.pensionStream, inp.militaryStream };
         for (int k = 0; k < 3; k++) {
             if (!ss[k].active()) continue;
-            if (sb.length() > 0) sb.append(" + ");
+            if (sb.length() > 0) sb.append("\n  ");
             sb.append(names[k]).append(' ').append(CURRENCY.format(ss[k].amount()))
+                    .append(String.format("/yr from %02d/%d", ss[k].startMonth(), ss[k].startYear()))
+                    .append(ss[k].endYear() > 0 ? " through " + ss[k].endYear() : "")
                     .append(" (").append(colaDesc(ss[k])).append(')');
         }
-        return sb.length() == 0 ? CURRENCY.format(0) : sb.toString();
-    }
-
-    /** v11: earliest active stream start year, for the summary's "from" year. */
-    private static int streamSummaryStartYear(SimInputs inp) {
-        int best = 0;
-        for (FixedStream s : new FixedStream[]{
-                inp.annuityStream, inp.pensionStream, inp.militaryStream }) {
-            if (s.active() && (best == 0 || s.startYear() < best)) best = s.startYear();
-        }
-        return best;
+        return sb.length() == 0 ? "none" : sb.toString();
     }
 
     // v6: spending multiplier for a given simulation year. Phase 1 = go-go,
@@ -11535,7 +11799,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             double combRmd  = manRmd + womanRmd;
 
             int wdActual   = drawing ? (int)(wdGK * goGoMult) : 0;
-            int rmdOverage = drawing ? Math.max(0, (int) combRmd - wdActual) : 0;
+            int rmdOverage = Math.max(0, (int) combRmd - wdActual);   // v1 2026-10-18 (P1): pre-withdrawal RMDs too
             double wdPct   = (drawing && bal > 0) ? wdActual / (double) bal * 100.0 : 0.0;
 
             double totalIncome = guaranteed + wdActual;
@@ -12006,6 +12270,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         topGkWrap.setBackground(new Color(245, 245, 242));
         topGkWrap.add(topGk,   BorderLayout.NORTH);
         topGkWrap.add(gkNotes, BorderLayout.SOUTH);
+        exHdrGk = topGkWrap;   // v1 2026-10-18 (EX)
 
         JScrollPane gkScroll = new JScrollPane(tblGk);
         gkScroll.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
@@ -14206,6 +14471,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         JLabel t = new JLabel(title); t.setFont(new Font("SansSerif",Font.PLAIN,12)); t.setForeground(new Color(110,110,110));
         s.setFont(new Font("SansSerif",Font.PLAIN,12)); s.setForeground(new Color(140,140,140));
         p.add(t,BorderLayout.NORTH); p.add(val,BorderLayout.CENTER); p.add(s,BorderLayout.SOUTH);
+        p.putClientProperty("ex.metric", Boolean.TRUE);   // v1 2026-10-18 (EX): exported as one line
         return p;
     }
 
