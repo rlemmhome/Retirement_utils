@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Saturday, October 17, 2026 at 08:21 PM MST (UTC-7)
+// Last modified: Sunday, October 18, 2026 at 08:31 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Saturday, October 17, 2026 at 08:21 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, October 18, 2026 at 08:31 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -9769,14 +9769,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
             // Share-split, survivor-aware RMD. The User/Spouse split is for the
             // display columns; combRmd is the total that drives ordinary income.
-            double hs = inp.hisRmdShare, ws = inp.herRmdShare;
-            if (isSurvivorYear(inp, calYear)) {
-                if (inp.deathWho == 1) { hs = 0; ws = 1; } else { hs = 1; ws = 0; }
-            } else if (filingFor(inp, calYear) == TaxEngine.FilingStatus.SINGLE) {
-                hs = 1; ws = 0;   // v1 2026-10-12: a single filer owns all of Traditional
-            }
-            double manRmd   = ownerRmd(inp, medTrad * hs, calYear, true,  manAge, womanAge);   // v1: Joint table aware
-            double womanRmd = ownerRmd(inp, medTrad * ws, calYear, false, manAge, womanAge);
+            double[] sh = rmdShares(inp, calYear);   // v1 2026-10-18: shared rule
+            double manRmd   = ownerRmd(inp, medTrad * sh[0], calYear, true,  manAge, womanAge);   // v1: Joint table aware
+            double womanRmd = ownerRmd(inp, medTrad * sh[1], calYear, false, manAge, womanAge);
             double combRmd  = manRmd + womanRmd;
 
             double goGoMult  = spendMultFor(inp, y, startY);   // v6
@@ -11219,19 +11214,28 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     double combinedRmd(SimInputs inp, double tradBal,
                        int calYear, int manAge, int womanAge) {
         if (tradBal <= 0) return 0;
-        double hs = inp.hisRmdShare, ws = inp.herRmdShare;
-        if (isSurvivorYear(inp, calYear)) {
-            if (inp.deathWho == 1) { hs = 0; ws = 1; }   // user died -> survivor = spouse
-            else                   { hs = 1; ws = 0; }   // spouse died -> survivor = user
-        } else if (filingFor(inp, calYear) == TaxEngine.FilingStatus.SINGLE) {
-            // v1 2026-10-12: a single filer owns ALL of Traditional. Single mode
-            // zeroes the spouse's birth year, so the spouse's "age" became the
-            // calendar year and the spouse share drew a phantom RMD every year
-            // (stateCtx already handled this case; the RMD split did not).
-            hs = 1; ws = 0;
-        }
-        return ownerRmd(inp, tradBal * hs, calYear, true,  manAge, womanAge)
-                + ownerRmd(inp, tradBal * ws, calYear, false, manAge, womanAge);
+        double[] sh = rmdShares(inp, calYear);   // v1 2026-10-18: shared rule
+        return ownerRmd(inp, tradBal * sh[0], calYear, true,  manAge, womanAge)
+                + ownerRmd(inp, tradBal * sh[1], calYear, false, manAge, womanAge);
+    }
+
+    /**
+     * v1 2026-10-18: who owns Traditional this year, as {User share, Spouse share}.
+     * The one rule behind every RMD split -- the fan paths (combinedRmd), the Pro
+     * PoS table and the GK tab, which each had their own copy or none:
+     *   - a survivor year: the survivor owns ALL of it (the decedent's IRA is
+     *     rolled over), so it follows the survivor's age;
+     *   - a single filer owns ALL of it. (v1 2026-10-12: Single mode zeroes the
+     *     spouse's birth year, so the spouse's "age" became the calendar year and
+     *     the spouse share drew a phantom RMD every year);
+     *   - otherwise the User Traditional share input (Tax Engine card).
+     */
+    static double[] rmdShares(SimInputs inp, int calYear) {
+        if (isSurvivorYear(inp, calYear))
+            return inp.deathWho == 1 ? new double[]{0, 1}    // user died -> survivor = spouse
+                    : new double[]{1, 0};   // spouse died -> survivor = user
+        if (filingFor(inp, calYear) == TaxEngine.FilingStatus.SINGLE) return new double[]{1, 0};
+        return new double[]{inp.hisRmdShare, inp.herRmdShare};
     }
 
     // v1 2026-10-12: one owner's RMD on their share of Traditional. The Joint Life
@@ -11425,10 +11429,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // time it is paying, that slot is already filled.
         double[] gkInflByYear = new double[inp.horizon + 1];
 
-        double manTradIRA    = inp.manTradIRA;
-        double manTrad401K   = inp.manTrad401K;
-        double womanTradIRA  = inp.womanTradIRA;
-        double womanTrad401K = inp.womanTrad401K;
+        // v1 2026-10-18 (G5/G7): one Traditional balance, as in the Pro PoS engine.
+        // It replaced four per-owner buckets that were reduced ONLY by their own
+        // RMDs -- never by spending -- and kept a decedent's IRA on the decedent's
+        // age after death, so the RMD columns ran far too high and ignored the
+        // survivor's rollover.
+        double gkTrad = (double) inp.manTradIRA + inp.manTrad401K
+                + inp.womanTradIRA + inp.womanTrad401K;
 
         for (int y = 0; y < inp.horizon; y++) {
             int calYear   = inp.baseYear + y;
@@ -11518,17 +11525,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 }
             }
 
-            // v1 2026-10-12: Joint Life table when the other spouse is alive, on a
-            // joint return and more than 10 years younger (see ownerRmd).
-            boolean gkJoint = !isSurvivorYear(inp, calYear)
-                    && filingFor(inp, calYear) == TaxEngine.FilingStatus.MFJ;
-            // v1 2026-10-14 (F1): each owner's own starting age.
-            int gkManStart   = rmdStartAge(inp.manBirthYear);
-            int gkWomanStart = rmdStartAge(inp.womanBirthYear);
-            double manRmd   = calcRmdJoint(manTradIRA,   manAge, womanAge, gkJoint, gkManStart)
-                    + calcRmdJoint(manTrad401K,  manAge, womanAge, gkJoint, gkManStart);
-            double womanRmd = calcRmdJoint(womanTradIRA,  womanAge, manAge, gkJoint, gkWomanStart)
-                    + calcRmdJoint(womanTrad401K, womanAge, manAge, gkJoint, gkWomanStart);
+            // v1 2026-10-18 (G5): the Pro PoS rule -- the shared ownership split
+            // (survivor owns all after a death; single filer owns all), each share
+            // on its owner's age, Joint Life table when it applies, RMD start age
+            // by birth year (ownerRmd).
+            double[] sh = rmdShares(inp, calYear);
+            double manRmd   = ownerRmd(inp, gkTrad * sh[0], calYear, true,  manAge, womanAge);
+            double womanRmd = ownerRmd(inp, gkTrad * sh[1], calYear, false, manAge, womanAge);
             double combRmd  = manRmd + womanRmd;
 
             int wdActual   = drawing ? (int)(wdGK * goGoMult) : 0;
@@ -11577,11 +11580,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             bal            = nextBal;
             gk.rows.add(row);
 
-            // v1 2026-10-12: the RMD comes out at the start of the year too.
-            manTradIRA    = Math.max(0, (manTradIRA    - calcRmdJoint(manTradIRA,    manAge, womanAge, gkJoint, gkManStart)) * (1 + yearReturn));
-            manTrad401K   = Math.max(0, (manTrad401K   - calcRmdJoint(manTrad401K,   manAge, womanAge, gkJoint, gkManStart)) * (1 + yearReturn));
-            womanTradIRA  = Math.max(0, (womanTradIRA  - calcRmdJoint(womanTradIRA,  womanAge, manAge, gkJoint, gkWomanStart)) * (1 + yearReturn));
-            womanTrad401K = Math.max(0, (womanTrad401K - calcRmdJoint(womanTrad401K, womanAge, manAge, gkJoint, gkWomanStart)) * (1 + yearReturn));
+            // v1 2026-10-18 (G7): the year's GK withdrawal leaves Traditional FIRST,
+            // with the RMD as its floor, at the start of the year (the Pro PoS
+            // order); the rest grows at the year's return.
+            double gkTradDraw = Math.max(combRmd, Math.min(wdActual, gkTrad));
+            gkTrad = Math.max(0, gkTrad - gkTradDraw) * (1 + yearReturn);
         }
 
         gk.finalBalance = gk.rows.isEmpty() ? 0
@@ -11606,7 +11609,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 "Living Exp", "Medical", "Tax (est) *",                      // 12 13 14 (v6: * legacy)
                 "Total spend", "Total income", "Surplus/gap",                // 15 16 17
                 "Infl factor",                                                // 18
-                "User RMD *", "Spouse RMD *", "Combined RMD *", "-> Roth/MM *", // 19 20 21 22 (v6: * legacy)
+                "User RMD", "Spouse RMD", "Combined RMD", "-> Roth/MM",         // 19 20 21 22 (v1 2026-10-18: no longer legacy)
                 "Portfolio Chg"                                                  // 23
         };
         tblGkModel = new DefaultTableModel(gkCols, 0) {
@@ -11822,26 +11825,20 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                     + "= market growth - GK spending withdrawal.<br>"
                                     + "Green = grew. Red = shrank.</html>");
                     case 19, 20, 21 -> gkHeader.setToolTipText(
-                            "<html><b>RMD -- legacy basis (GK tab)</b><br>"
-                                    + "This tab computes RMDs on the ORIGINAL pre-v6 account model: the<br>"
-                                    + "Traditional buckets grow at the portfolio return and are reduced<br>"
-                                    + "<b>only by their own RMDs</b>. They are never drawn down by spending<br>"
-                                    + "or by Roth conversions.<br><br>"
-                                    + "Consequence: those balances -- and therefore these RMD figures --<br>"
-                                    + "are <b>overstated, increasingly so over time</b>. The Pro PoS tab uses<br>"
-                                    + "the v6 combined-bucket model where Traditional is genuinely spent<br>"
-                                    + "down, and typically shows much smaller RMDs, falling to zero once<br>"
-                                    + "Traditional is exhausted. On the same scenario, 2051 can read<br>"
-                                    + "~$140K here versus $0 there.<br><br>"
-                                    + "<b>Use the Pro PoS RMD columns for planning.</b> These are retained so<br>"
-                                    + "the Guyton-Klinger methodology stays self-contained and comparable<br>"
-                                    + "to its published form.</html>");
+                            "<html><b>RMD (GK tab)</b><br>"
+                                    + "Same rule as the Pro PoS tab (since 2026-10-18): one Traditional<br>"
+                                    + "balance split by the User Traditional share, each share on its<br>"
+                                    + "owner's age; after a death the survivor owns all of it (rolled<br>"
+                                    + "over) and it follows the survivor's age. Each year's GK withdrawal<br>"
+                                    + "comes out of Traditional first, with the RMD as its floor.<br><br>"
+                                    + "Still higher than the Pro PoS RMDs: this tab makes <b>no Roth<br>"
+                                    + "conversions</b>, so Traditional lasts longer. Display only -- the<br>"
+                                    + "GK withdrawal and balance do not use these figures.</html>");
                     case 22 -> gkHeader.setToolTipText(
-                            "<html><b>-&gt; Roth/MM -- legacy basis (GK tab)</b><br>"
+                            "<html><b>-&gt; Roth/MM (GK tab)</b><br>"
                                     + "The part of the forced distribution larger than that year's GK<br>"
-                                    + "spending. It is derived from the RMD columns, so it <b>inherits the<br>"
-                                    + "same overstatement</b> described there: the Traditional buckets behind<br>"
-                                    + "it are never reduced by spending or conversions.<br><br>"
+                                    + "spending, from the RMD columns (same rule as Pro PoS since<br>"
+                                    + "2026-10-18).<br><br>"
                                     + "Display only -- it does not move money in this tab.<br>"
                                     + "<b>Use the Pro PoS Money Mkt column for planning.</b></html>");
                     case 14 -> gkHeader.setToolTipText(
@@ -11957,7 +11954,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         legend.add(gkLegendChip(new Color(255, 210, 210), new Color(150, 30, 30),  "CPR[v] -- cut 10%"));
         legend.add(gkLegendChip(new Color(210, 240, 210), new Color(30, 110, 30),  "PR[^]  -- raised 10%"));
         legend.add(gkLegendChip(new Color(255, 200, 120), new Color(140, 60, 0),   "RMD overage -> Roth/MM"));
-        // v6: flag the columns that are still computed on the pre-v6 basis.
+        // v6: flag the columns that are still computed on the pre-v6 basis
+        // (v1 2026-10-18: only Tax (est) now; the RMD columns left it).
         legend.add(gkLegendChip(new Color(232, 232, 232), new Color(90, 90, 90),
                 "* legacy basis -- see tooltips"));
 
