@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Sunday, October 18, 2026 at 12:18 PM MST (UTC-7)
+// Last modified: Sunday, October 18, 2026 at 03:05 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Sunday, October 18, 2026 at 12:18 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, October 18, 2026 at 03:05 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1060,7 +1060,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "buffer, like the rest of Money Mkt (total)).<br><br>"
                 + "<b>Excluded from Portfolio balance</b> (Option A): the Portfolio column is<br>"
                 + "the money the sim actually draws on (Traditional + Roth).<br>"
-                + "Your ACTUAL total = Portfolio balance + Money Mkt (total). Because this<br>"
+                + "Your ACTUAL total at the start of a year = that row's Portfolio balance<br>"
+                + "+ the PREVIOUS row's Money Mkt (total), an end-of-year figure. Because this<br>"
                 + "reserve is walled off from spending, it is NOT added to the Account<br>"
                 + "total above and does NOT redistribute into the qualified accounts.</html>");
         lblAccountTotal  = new JLabel("Account total: --");
@@ -2240,22 +2241,32 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         // selected, tooltip figures are shown in today's dollars
                         // (value / inflFactor), same as every other cell tooltip.
                         double d = showRealDollars ? er.inflFactor : 1.0;
+                        // v1 2026-10-18 (PX1): both figures as of January. This row's
+                        // balance is the start of the year, but its Money Mkt cell is the
+                        // END of the year (this year's overage already added), so adding the
+                        // two counted that overage twice. The January reserve is the previous
+                        // row's Money Mkt -- or, in the first row, the Money Mkt (prior) input.
+                        double mmJan = row > 0 ? rows.get(row - 1).mmBal
+                                : Math.max(0, lastResults.inp.mmPrior);
                         long port   = Math.round(er.balance / d);
-                        long mm     = Math.round(er.mmBal   / d);
+                        long mm     = Math.round(mmJan      / d);
                         long actual = port + mm;
                         return "<html><b>Portfolio balance -- true 50th percentile</b><br>"
                                 + "The median of all " + lastResults.fanPathCount
-                                + " stochastic fan paths at this year.<br>"
+                                + " stochastic fan paths at the start of this year.<br>"
                                 + "More conservative and accurate than a mean-return path.<br><br>"
                                 + "<b>This column is the money the simulation actually draws on</b><br>"
                                 + "(Traditional + Roth accounts). It does NOT include<br>"
                                 + "the Money Mkt (total) reserve, which is real, already-taxed<br>"
                                 + "cash the sim leaves untouched.<br><br>"
-                                + "<b>Your ACTUAL total is Portfolio + Money Mkt (total):</b><br>"
+                                + "<b>Your ACTUAL total at the start of this year (January):</b><br>"
                                 + "&nbsp;&nbsp;Portfolio balance:&nbsp;&nbsp;&nbsp;" + CURRENCY.format(port) + "<br>"
-                                + "&nbsp;&nbsp;+ Money Mkt (total): " + CURRENCY.format(mm) + "<br>"
+                                + "&nbsp;&nbsp;+ Money Mkt, end of last year: " + CURRENCY.format(mm) + "<br>"
                                 + "&nbsp;&nbsp;<b>= ACTUAL total:&nbsp;&nbsp;&nbsp;&nbsp;" + CURRENCY.format(actual) + "</b>"
                                 + (showRealDollars ? " <i>(today's $)</i>" : "") + "<br><br>"
+                                + "The Money Mkt (total) column shows each year's END balance, after<br>"
+                                + "that year's RMD overage, so it pairs with the NEXT row's Portfolio<br>"
+                                + "balance, not this one.<br><br>"
                                 + "The Money Mkt reserve is real spendable money you manage by<br>"
                                 + "hand; it is simply walled off from the sim's withdrawal logic.</html>"; }
                     case 3 -> { return "<html><b>Pro PoS withdrawal</b><br>"
@@ -2525,7 +2536,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                 CURRENCY.format(Math.round(er.wdActual / d)));
                     }
                     case COL_TAX -> {
-                        if (!er.drawing) return null;
+                        // v1 2026-10-18 (A2): rows before withdrawals start explain the "--".
+                        if (!er.drawing)
+                            return "<html><b>Tax (est): not modeled before withdrawals start</b><br>"
+                                    + "Until the Withdrawal start year (Portfolio &amp; Simulation card),<br>"
+                                    + "spending, income taxes and the IRMAA surcharge are assumed to be<br>"
+                                    + "paid from outside the portfolio. \"--\" means not modeled, not $0<br>"
+                                    + "owed. See Assumptions &amp; Methods, section 3.</html>";
                         double d = showRealDollars ? er.inflFactor : 1.0;
                         if (er.magi == 0 && er.taxableSS == 0) {
                             // Legacy flat escalator was used (computed tax OFF).
@@ -2569,7 +2586,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                 dollarBasisNote(er));
                     }
                     case COL_IRMAA -> {
-                        if (!er.drawing) return null;
+                        // v1 2026-10-18 (A3): rows before withdrawals start explain the "--".
+                        // The look-back sentence only with the computed tax engine on --
+                        // without it no MAGI is recorded in those years (P2).
+                        if (!er.drawing)
+                            return "<html><b>IRMAA surcharge: not modeled before withdrawals start</b><br>"
+                                    + "This year's surcharge is assumed to be paid from outside the<br>"
+                                    + "portfolio. "
+                                    + (lastResults.inp.computedTax
+                                    ? "This year's income still counts toward the MAGI that sets<br>"
+                                    + "IRMAA two years later. "
+                                    : "")
+                                    + "See Assumptions &amp; Methods, section 3.</html>";
                         // v1 2026-10-14: thresholds follow the LOOKBACK return's
                         // filing status; the surcharge is per Medicare enrollee.
                         String basis = er.irmaaJoint
@@ -2998,15 +3026,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "taxed cash. Each year it (1) grows at that year's inflation rate,<br>"
                             + "then (2) adds that year's RMD overage (the -&gt; Roth/MM (year) value):<br>"
                             + "&nbsp;&nbsp;row 1 = <b>Money Mkt (prior, $)</b> input (carry-in from a past run)<br>"
-                            + "&nbsp;&nbsp;each year: balance x (1 + inflation) + overage<br><br>"
+                            + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ row 1's overage<br>"
+                            + "&nbsp;&nbsp;each year: balance x (1 + inflation) + overage<br>"
+                            + "Each cell is the balance at the <b>END</b> of its year.<br><br>"
                             + "The inflation growth reflects the assumption that money-market<br>"
                             + "return roughly equals inflation (~0% real), so the reserve holds<br>"
                             + "its purchasing power rather than eroding. It is strictly increasing<br>"
                             + "and computed as a true running balance -- no wobble, no lag. (v8<br>"
                             + "replaced the old median-composite version, which wobbled/lagged.)<br><br>"
                             + "<b>Never spent by the sim</b> -- it is your manual safety buffer and is<br>"
-                            + "EXCLUDED from the Portfolio balance column. Your ACTUAL total =<br>"
-                            + "Portfolio balance + Money Mkt (total) (see the Portfolio tooltip).<br><br>"
+                            + "EXCLUDED from the Portfolio balance column. Your ACTUAL total at<br>"
+                            + "the start of a year = that row's Portfolio balance + the PREVIOUS<br>"
+                            + "row's Money Mkt (total) (see the Portfolio tooltip).<br><br>"
                             + "<b>Reads '--'</b> when it is zero: no prior carry-in and no overage yet.</html>";
                     case 28 -> "<html><b>Roth Bal (v6) -- combined Roth balance, 50th pct</b><br>"
                             + "The median combined Roth bucket (User + Spouse, IRA + 401k).<br>"
@@ -3654,6 +3685,15 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "direction. This is the well-known 'widow's penalty': the survivor keeps much of the couple's "
                 + "income but loses half the deduction and hits the brackets and IRMAA tiers at about half the "
                 + "income.</p>"
+                // v1 2026-10-18 (A1): what the rows before withdrawals start do and do not show.
+                + "<p><b>Taxes before withdrawals start.</b> Until the <i>Withdrawal start year</i> (Portfolio "
+                + "&amp; Simulation card), spending, income taxes and the Medicare IRMAA surcharge are assumed to "
+                + "be paid from resources outside the modeled portfolio. In those rows the Living Exp, Medical, "
+                + "Tax (est), Total spend, Surplus/gap, IRMAA and MAGI columns show &quot;--&quot;. That means "
+                + "not modeled, not $0 owed. RMDs taken in those years go into the Money Market reserve in full, "
+                + "with no tax taken out. Each year's income (taxable Social Security, guaranteed-income streams, "
+                + "RMDs and Money Market interest) still counts toward the MAGI that sets IRMAA two years "
+                + "later.</p>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec3a'></a>3a. Single mode &mdash; spouse fields disabled (v4)</h3>"
@@ -11987,13 +12027,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                     + CURRENCY.format(Math.round(Math.abs(gr.surplus) / d)));
                 }
                 if (col == 22 && gr.rmdOverage > 0) { // Roth/MM
+                    // v1 2026-10-18 (D-1): says what the GK engine actually does with it.
                     return "<html><b>RMD overage -> Roth/MM</b><br>"
                             + "Combined RMD (" + CURRENCY.format(gr.combRmd) + ")<br>"
                             + "exceeds planned GK withdrawal (" + CURRENCY.format(gr.wdActual) + ").<br>"
-                            + "Overage (" + CURRENCY.format(gr.rmdOverage) + ") goes to Roth/MM -- not spent.<br>"
-                            + "The simulated portfolio balance is not reduced by RMDs; the overage<br>"
-                            + "is assumed re-invested at a return at least matching inflation and<br>"
-                            + "remains in your asset base.</html>";
+                            + "Overage (" + CURRENCY.format(gr.rmdOverage) + ") is not spent.<br>"
+                            + "The GK portfolio balance is not reduced by RMDs: the overage stays<br>"
+                            + "invested in the portfolio and earns the portfolio's return. This tab<br>"
+                            + "has no separate Money Mkt reserve (Pro PoS does).</html>";
                 }
                 if (col == 23) { // Bal Chg tooltip
                     double d = showRealDollars ? gr.inflFactor : 1.0;
