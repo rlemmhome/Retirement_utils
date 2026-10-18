@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Saturday, October 17, 2026 at 01:01 PM MST (UTC-7)
+// Last modified: Saturday, October 17, 2026 at 08:21 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Saturday, October 17, 2026 at 01:01 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, October 17, 2026 at 08:21 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -488,6 +488,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private double  lastRunGoGoMult = 1.0;
     private boolean lastRunValid = false;
     private JLabel            lblActualPoS, lblMedianFinal, lblYr10Wd, lblInitRate;
+    private JLabel            lblActualPoSSub;   // v1 2026-10-17 (PD1): paths that ran out
     private JTable            tblPro;
     private DefaultTableModel tblProModel;
     // v9/v19: Pro PoS column picker state. Model-column indices the user has hidden,
@@ -719,7 +720,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         spFontDelta = new JSpinner(new SpinnerNumberModel(2, -6, 6, 1));
         spFontDelta.setToolTipText("<html><b>Font size adjustment (pt)</b><br>"
                 + "Shifts all application fonts by this many points relative to<br>"
-                + "the Swing default. Default = +2. Range: ?4 to +4.<br>"
+                + "the Swing default. Default = +2. Range: -4 to +4.<br>"
                 + "Font update applies ~1 second after you stop adjusting.</html>");
         spFontDelta.setFont(new Font("SansSerif", Font.PLAIN, BASE_FONT_SIZE + fontDelta));
         fontDebounceTimer = new javax.swing.Timer(1000, e -> {
@@ -2123,7 +2124,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         lblMedianFinal = mkMetricLabel();
         lblYr10Wd      = mkMetricLabel();
         lblInitRate    = mkMetricLabel();
-        metricsRow.add(wrapMetric(lblActualPoS,   "Actual PoS",                "from fan simulation"));
+        // v1 2026-10-17 (PD1): the line under Actual PoS reports the paths that ran out.
+        lblActualPoSSub = new JLabel("from fan simulation");
+        lblActualPoSSub.setToolTipText("<html><b>Paths that ran out</b><br>"
+                + "A fan path runs out when its portfolio reaches $0. It stays at $0 and counts<br>"
+                + "as a failure in Actual PoS, so Actual PoS = 100% minus this share.<br>"
+                + "<i>first</i> and <i>median</i> are the calendar years those paths ran out.</html>");
+        metricsRow.add(wrapMetric(lblActualPoS,   "Actual PoS",                lblActualPoSSub));
         metricsRow.add(wrapMetric(lblMedianFinal, "True median final balance", "50th pct of fan paths"));
         metricsRow.add(wrapMetric(lblYr10Wd,      "Yr 10 withdrawal (median)", "see dollar toggle"));
         metricsRow.add(wrapMetric(lblInitRate,    "Initial withdrawal rate",   "% of portfolio"));
@@ -3537,7 +3544,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<li>Return standard deviation: <b>10.79%</b> (1961-2024 historical S&amp;P 500). Long-run "
                 + "equity volatility is more stable than long-run mean return, so retaining the historical "
                 + "volatility while using a forward mean is standard practice. Volatility, not average return, "
-                + "dominates sequence-of-returns risk and the sustainable withdrawal.</li>"
+                + "dominates sequence-of-returns risk and the sustainable withdrawal. "
+                // v1 2026-10-17 (NB1)
+                + "<b>Each year's random return is floored at &minus;100%</b> (a total loss; since 2026-10-17): "
+                + "a portfolio cannot lose more than everything. At this spread the floor never binds; with a "
+                + "very wide spread the bell curve would otherwise draw losses beyond &minus;100%, which drove "
+                + "depleted paths into negative balances that compounded as debt. A path that runs out now "
+                + "stays at $0.</li>"
                 + "<li>Inflation standard deviation: 2.73% (1961-2024 historical CPI). <b>Each year's draw is "
                 + "floored at 0%</b> &mdash; no deflation, which keeps Social Security legally correct (there is no "
                 + "negative COLA). A floor alone raises the average: at 2.3% and 2.73% about 20% of draws fall below "
@@ -4727,7 +4740,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "expectancies; a year of death in or after the plan's last year (no survivor year); go-go + "
                 + "slow-go years longer than the drawing years; a guaranteed-income stream that pays nothing "
                 + "during the plan (it ended before the simulation start year, or starts after the plan's last "
-                + "year).</p>"
+                + "year); a return spread wide enough that years worse than &minus;100% are drawn more often than "
+                + "1 in 10,000 (each counts as a total loss).</p>"
                 + "<p><b>Defined meanings</b> (allowed, explained in the input tooltips): a withdrawal start "
                 + "year before the simulation start means withdrawals are already under way (full from year 1); "
                 + "an SS start before the simulation start means benefits are already being received (full "
@@ -4876,8 +4890,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *                  from spendMultFor on the real phase position; after go-go it
      *                  had assumed a full slow-go window ahead at every re-solve.
      *                  Rows from the 12th drawing year on move; every batch re-runs.
+     *  16  2026-10-17  random annual returns are floored at -100% (NB1). Rows move
+     *                  only when the return spread is extreme; every batch re-runs.
      */
-    private static final int SCORER_VERSION = 15;
+    private static final int SCORER_VERSION = 16;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -9109,6 +9125,17 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         if (drawYears > 0 && phases > drawYears)
             warn.add("Go-go (" + inp.goGoDuration + ") + slow-go (" + inp.slowGoDuration + ") years exceed the "
                     + drawYears + " drawing years, so the later phase(s) never happen.");
+        // v1 2026-10-17 (V14): a return spread wide enough that the bell curve draws
+        // years worse than -100% more often than 1 in 10,000; NB1 counts each as a
+        // total loss, so results at such a setting mostly reflect that assumption.
+        if (inp.stdDev > 0) {
+            double pLoss = normCdf((-1.0 - inp.nomReturn) / inp.stdDev);
+            if (pLoss > 1e-4)
+                warn.add(String.format("Return SD %.1f%% with a %.1f%% mean (Market Assumptions card) draws a "
+                                + "loss worse than -100%% about once every %,d years; those count as a total loss, so "
+                                + "results at this setting mostly reflect that assumption.",
+                        inp.stdDev * 100, inp.nomReturn * 100, Math.round(1.0 / pLoss)));
+        }
         // v1 2026-10-17 (V12/V13): an active guaranteed-income stream that can never
         // pay (V12, error), or that pays nothing inside the plan (V13, warning). A
         // stream ending in its own start year is allowed -- it pays the prorated
@@ -10316,6 +10343,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         refreshBaselineLine();
 
         lblActualPoS.setText(String.format("%.1f%%", res.actualPoS * 100));
+        lblActualPoSSub.setText(depletionNote(res.fanBalances, inp.baseYear));   // v1 2026-10-17 (PD1)
         lblMedianFinal.setText(showRealDollars
                 ? formatMoney(Math.round(res.medianFinalBalance / dEnd)) + " (real)"
                 : formatMoney(res.medianFinalBalance) + " (nom.)");
@@ -12083,7 +12111,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      * sizes the withdrawal without foreknowledge of the crisis.
      */
     private double[] getRandomReturnAndInflation(SimInputs inp, SeededRng rng) {
-        double ret  = inp.nomReturn + inp.stdDev * rng.nextGaussian();
+        // v1 2026-10-17 (NB1): floored at -100% -- a portfolio cannot lose more than
+        // everything. The bell curve has no floor, so with a wide spread a draw below
+        // -100% made (1 + ret) negative: a fan-path balance went negative and then
+        // compounded as debt, and in the solver a depleted trial could flip back to
+        // positive. At the default spread (10.79%) such a draw is a 10^-22 event,
+        // so nothing changes there.
+        double ret  = Math.max(-1.0, inp.nomReturn + inp.stdDev * rng.nextGaussian());
         // v1 2026-10-12: drawn around the SHIFTED mean so that, after the 0%
         // floor, the draws average exactly the entered mean (see inflDrawMean).
         double infl = Math.max(0, inflDrawMean(inp) + inp.inflationStdDev * rng.nextGaussian());
@@ -12121,6 +12155,27 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             if (e > target) hi = mid; else lo = mid;
         }
         return 0.5 * (lo + hi);
+    }
+
+    /**
+     * v1 2026-10-17 (PD1): how many fan paths ran out, and when -- the detail the
+     * Actual PoS percentage alone cannot show. fanBalances[p][i] is the balance at
+     * the end of sim year i-1, so a path first at or below $0 at index i ran out
+     * during calendar year baseYear + i - 1. With NB1 a path that reaches $0 stays
+     * there, so this count is exactly the failures in Actual PoS.
+     */
+    static String depletionNote(double[][] fanBalances, int baseYear) {
+        if (fanBalances == null || fanBalances.length == 0) return "from fan simulation";
+        int n = fanBalances.length, out = 0;
+        int[] yrs = new int[n];
+        for (double[] f : fanBalances) {
+            for (int i = 1; i < f.length; i++) {
+                if (f[i] <= 0) { yrs[out++] = baseYear + i - 1; break; }
+            }
+        }
+        if (out == 0) return "no path ran out";
+        java.util.Arrays.sort(yrs, 0, out);
+        return out + " of " + n + " paths ran out . first " + yrs[0] + ", median " + yrs[out / 2];
     }
 
     /** Standard normal CDF via erfc (Numerical Recipes erfcc, |error| < 1.2e-7). */
@@ -12370,8 +12425,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             return switch (scenarioIndex) {
                 case 1 -> "<html><b>Great Depression (1929-1942)</b><br>"
                         + "14 years of actual S&P 500 total returns and CPI data.<br>"
-                        + "Includes the crash (1929-1932, cumulative ?79%), the volatile<br>"
-                        + "recovery (1933-1936), the 1937 relapse (?35%), and stabilization.<br>"
+                        + "Includes the crash (1929-1932, cumulative -79%), the volatile<br>"
+                        + "recovery (1933-1936), the 1937 relapse (-35%), and stabilization.<br>"
                         + "After 1942 the simulation reverts to your random distribution.</html>";
                 case 2 -> "<html><b>Stagflation Era (1966-1982)</b><br>"
                         + "17 years of actual S&P 500 total returns and CPI data.<br>"
@@ -12384,7 +12439,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         + "After 2006 the simulation reverts to your random distribution.</html>";
                 case 4 -> "<html><b>Housing Crisis / GFC (2007-2013)</b><br>"
                         + "7 years of actual S&P 500 total returns and CPI data.<br>"
-                        + "The 2008 crash (?37%) followed by one of the fastest recoveries<br>"
+                        + "The 2008 crash (-37%) followed by one of the fastest recoveries<br>"
                         + "on record. After 2013 reverts to your random distribution.</html>";
                 default -> "<html>Random normal distribution based on your input parameters.</html>";
             };
@@ -14140,13 +14195,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     }
 
     private JPanel wrapMetric(JLabel val, String title, String sub) {
+        return wrapMetric(val, title, new JLabel(sub));
+    }
+
+    // v1 2026-10-17 (PD1): the caller keeps the sub-label so it can update it.
+    private JPanel wrapMetric(JLabel val, String title, JLabel s) {
         JPanel p = new JPanel(new BorderLayout(2,2));
         p.setBackground(new Color(240,240,237));
         p.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(210,208,203),1),
                 BorderFactory.createEmptyBorder(8,10,8,10)));
         JLabel t = new JLabel(title); t.setFont(new Font("SansSerif",Font.PLAIN,12)); t.setForeground(new Color(110,110,110));
-        JLabel s = new JLabel(sub);   s.setFont(new Font("SansSerif",Font.PLAIN,12)); s.setForeground(new Color(140,140,140));
+        s.setFont(new Font("SansSerif",Font.PLAIN,12)); s.setForeground(new Color(140,140,140));
         p.add(t,BorderLayout.NORTH); p.add(val,BorderLayout.CENTER); p.add(s,BorderLayout.SOUTH);
         return p;
     }
