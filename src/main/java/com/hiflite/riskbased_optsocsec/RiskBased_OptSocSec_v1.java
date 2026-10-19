@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Sunday, October 18, 2026 at 03:05 PM MST (UTC-7)
+// Last modified: Sunday, October 18, 2026 at 10:33 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Sunday, October 18, 2026 at 03:05 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, October 18, 2026 at 10:33 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1132,7 +1132,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<b>From first claim (v6):</b> the earlier behavior. Only the LATER<br>"
                 + "claimant is bridged, and only across the gap between the first and<br>"
                 + "second claim dates. The early claimant's pre-claim years are left<br>"
-                + "unbridged (Surplus/gap can go negative there).<br><br>"
+                + "unbridged (Surplus/gap can go negative there). It never starts before<br>"
+                + "the withdrawal-start month: until then, spending is paid from<br>"
+                + "outside the portfolio.<br><br>"
                 + "<b>No bridge:</b> the portfolio carries the full load and spending<br>"
                 + "simply falls until each benefit actually begins.<br><br>"
                 + "<b>Reference benefit</b> is the smaller EARLY-claim amount, not the<br>"
@@ -3000,7 +3002,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "This fills the early pre-claim years so Surplus/gap does not go<br>"
                             + "negative just because SS has not switched on yet.<br><br>"
                             + "<b>From first claim (v6):</b> only the later claimant is bridged,<br>"
-                            + "across the gap between the two claim dates.<br><br>"
+                            + "from the first claim date -- or the withdrawal start, if later --<br>"
+                            + "to the second claim date.<br><br>"
                             + "The amount is grossed up to cover the extra tax an IRA<br>"
                             + "withdrawal carries versus Social Security.<br><br>"
                             + "<b>Partial years are prorated by month.</b> A claim starting mid-year<br>"
@@ -3505,6 +3508,27 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "spending money earns nothing in the model while it sits in cash, which is slightly conservative. "
                 + "The <b>headline</b> is the first withdrawal year's Pro PoS withdrawal (the first drawing row), and "
                 + "a first year that starts after January is prorated by the start month in every engine.</p>"
+                // v1 2026-10-18 (AP1): what Actual PoS does and does not measure.
+                + "<p><b>What Actual PoS measures.</b> Actual PoS answers only one question: did the money "
+                + "ever run out completely? It does not ask whether you got all the spending money you wanted. "
+                + "The program cuts your spending at the next yearly check (each January), so the money almost "
+                + "never runs out. The bad luck shows up as smaller paychecks, which this number doesn't "
+                + "count.</p>"
+                + "<p><b>Q) Why 100% when the target is 80%</b><br>"
+                + "A) The 80% check pretends you'll never adjust after this year. Real lifetimes in the program "
+                + "adjust every year, so they do far better than 80% at never running dry.</p>"
+                + "<p><b>Q) What does each number tell you</b></p>"
+                + "<table border='1' cellpadding='3' cellspacing='0'>"
+                + "<tr><th>Question you're asking</th><th>Where to look</th></tr>"
+                + "<tr><td>Did the money ever run out completely?</td>"
+                + "<td>Actual PoS and its line &quot;no path ran out&quot;</td></tr>"
+                + "<tr><td>Did I get as much to spend as I planned?</td>"
+                + "<td>Surplus/gap column (red means spending was more than income that year); the table "
+                + "follows the typical (middle) lifetime</td></tr>"
+                + "<tr><td>How small could my yearly withdrawal get?</td>"
+                + "<td>Simulation Chart, Chart type <i>Withdrawal $ -- fan + percentiles</i>: the 25th pct "
+                + "line and the lowest fan lines</td></tr>"
+                + "</table>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec1a'></a>1a. Engine parameters &mdash; solve paths, binary-search iterations, fan paths</h3>"
@@ -4396,7 +4420,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "from the withdrawal-start year up to that spouse's own claim date. Correct treatment of "
                 + "asymmetric claim strategies (e.g., User claims early, Spouse delays to 70).</li>"
                 + "<li><b>From first claim</b> &mdash; legacy v6 behavior. The bridge starts at whichever "
-                + "spouse claims first. Retained byte-identical for regression checks.</li>"
+                + "spouse claims first, but never before the withdrawal-start month (since 2026-10-18; "
+                + "before then the fan paths drew it in years before withdrawals began while the table "
+                + "showed none). Otherwise retained byte-identical for regression checks.</li>"
                 + "<li><b>None</b> &mdash; no bridge; the pre-claim years show whatever the portfolio can "
                 + "actually cover without a phantom SS income stream. Useful for stress cases.</li>"
                 + "</ul>"
@@ -4976,8 +5002,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *  17  2026-10-18  RMDs before withdrawals start reach the Money Mkt reserve
      *                  (P1), and those years record MAGI for the IRMAA lookback (P2).
      *                  Rows move only when RMDs or income precede withdrawals.
+     *  18  2026-10-18  the "From first claim (v6)" SS bridge starts no earlier than
+     *                  the withdrawal-start month (B1); the fan paths had drawn it
+     *                  before withdrawals began while the table showed none. Rows
+     *                  move only in that mode, when the first claim comes before
+     *                  withdrawals start; every batch re-runs.
      */
-    private static final int SCORER_VERSION = 17;
+    private static final int SCORER_VERSION = 18;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -10918,11 +10949,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     //
     //   NONE (2)        -- no bridge at all.
     //
-    //   FIRST_CLAIM (1) -- the v6 behavior, preserved byte-for-byte. Reference
-    //                      date = the EARLIER of the two claim dates; only the
-    //                      LATER claimant is bridged, across the gap between the
-    //                      two claim dates, at the benefit they WOULD have had
-    //                      claiming at the reference (the smaller early amount).
+    //   FIRST_CLAIM (1) -- the v6 behavior. Reference date = the EARLIER of the
+    //                      two claim dates; only the LATER claimant is bridged,
+    //                      across the gap between the two claim dates, at the
+    //                      benefit they WOULD have had claiming at the reference
+    //                      (the smaller early amount). Since 2026-10-18 (B1) the
+    //                      gap starts no earlier than the withdrawal-start month;
+    //                      otherwise unchanged from v6.
     //
     //   SIM_START (0)   -- the new default. BOTH spouses are bridged, each from
     //                      the WITHDRAWAL-START date to that spouse's OWN claim
@@ -10972,7 +11005,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             return bridge;
         }
 
-        // ---- BRIDGE_FIRST_CLAIM : the v6 path, unchanged in result ----------
+        // ---- BRIDGE_FIRST_CLAIM : the v6 path (window clipped, B1) ----------
         int manStart   = inp.manSSStartYear   * 12 + inp.manSSStartMonth;
         int womanStart = inp.womanSSStartYear * 12 + inp.womanSSStartMonth;
         if (manStart == womanStart) return bridge;   // nobody is delaying
@@ -10984,7 +11017,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int ownM  = manDelays ? inp.manSSStartMonth   : inp.womanSSStartMonth;
         // The delayer is bridged from the reference (the earlier claim) to their
         // own start, at the counterfactual reference-date benefit.
-        addBridgeForPerson(inp, bridge, manDelays, refY, refM, refY, refM, ownY, ownM);
+        // v1 2026-10-18 (B1): the window starts no earlier than the withdrawal-
+        // start month. Before it, spending is paid from outside the portfolio,
+        // so the table showed no bridge -- but the fan paths drew one, and their
+        // balances (the table's Portfolio bal) fell with no outflow shown. SIM_START
+        // already starts its window there. The reference date is unchanged.
+        int wsMo    = inp.withdrawStartYear * 12 + inp.withdrawStartMonth;
+        boolean wsLater = wsMo > refY * 12 + refM;
+        int gapY    = wsLater ? inp.withdrawStartYear  : refY;
+        int gapM    = wsLater ? inp.withdrawStartMonth : refM;
+        addBridgeForPerson(inp, bridge, manDelays, refY, refM, gapY, gapM, ownY, ownM);
         return bridge;
     }
 
