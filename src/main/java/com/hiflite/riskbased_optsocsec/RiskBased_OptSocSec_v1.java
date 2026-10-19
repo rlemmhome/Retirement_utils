@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Monday, October 19, 2026 at 02:03 PM MST (UTC-7)
+// Last modified: Monday, October 19, 2026 at 04:26 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Monday, October 19, 2026 at 02:03 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, October 19, 2026 at 04:26 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -359,6 +359,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private final JSpinner[]  spStreamFullTaxFrom  = new JSpinner[STREAM_COUNT];
     private JSpinner spNomReturn, spStdDev, spInflation, spInflationStdDev;
     private JSpinner spLivingExp, spMedical, spMedInflation;
+    // v1 2026-10-19 (L1): the Annual Spending card's title label, which shows the
+    // simulation-start year. The card is BUILT with this fixed title because its
+    // collapse state is saved under sectionKey(title); only the visible label
+    // follows the year. v1 2026-10-19 (K1): the key is "annualspendingbase" (it was
+    // "annualspending2027base"; loadPanelState moves an old setting across).
+    private static final String SPENDING_CARD_KEY_TITLE = "Annual Spending Base";
+    private static final String SPENDING_CARD_OLD_KEY   = "annualspending2027base";
+    private JLabel lblSpendingCardTitle;
     private JSpinner spBaseTax, spTaxInflation;
     private JSpinner spGoGo, spGoGoDuration;
     private JSpinner spSlowGo, spSlowGoDuration;   // v6: slow-go tier
@@ -445,6 +453,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private JCheckBox chkRandomize;
     private long      runSeedOffset = 0L;
     private JSpinner  spMcSolvePaths, spBinaryIters, spMcFanPaths;
+    private JSpinner  spShortfallGrace;   // v1 2026-10-19 (SL1): final years a covered shortfall is forgiven
 
     // == SS Optimizer fields ================================================
     private JCheckBox  chkOptimize;                  // true = scan, false = manual
@@ -947,6 +956,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<b>Default: 500</b> -- smooth fan chart, stable PoS reading.<br>"
                 + "100 = ~4x faster but noisier. 50 = rough but usable for quick checks.<br>"
                 + "Each fan path re-solves the withdrawal annually against its current balance -- most expensive per path.</html>");
+        // v1 2026-10-19 (SL1): grace years for the "short year" count under Actual PoS.
+        spShortfallGrace = spinI(3, 0, 10, 1, "#");
+        spShortfallGrace.setToolTipText("<html><b>Shortfall grace (final years)</b><br>"
+                + "The line under Actual PoS counts the fan paths with at least one<br>"
+                + "<b>short year</b>: a withdrawal year whose income (Social Security,<br>"
+                + "pensions and the year's withdrawal) fell short of its spending<br>"
+                + "(Living, Medical and taxes). In the final N years a shortfall is<br>"
+                + "forgiven when that path's portfolio can cover it -- the SS Optimizer's<br>"
+                + "terminal-grace rule.<br><br>"
+                + "<b>Default: 3.</b> Changing it re-counts the last run instantly; it does<br>"
+                + "not change any simulated number.</html>");
+        spShortfallGrace.addChangeListener(e -> refreshActualPoSSub(lastResults));
 
         // Mark optimizer results stale whenever any input changes
         ChangeListener markStale = e -> {
@@ -990,6 +1011,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 "MC solve paths",              spMcSolvePaths,
                 "Binary search iterations",    spBinaryIters,
                 "Fan chart paths",             spMcFanPaths,
+                "Shortfall grace (final years)", spShortfallGrace,   // v1 2026-10-19 (SL1)
         }));
         inner.add(Box.createVerticalStrut(4));
 
@@ -1396,7 +1418,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "spending multiplier applies.<br><br>"
                 + "<b>Default: 10 years</b> -- roughly covers ages 65-75 for a typical<br>"
                 + "early retiree. Set to 0 to disable the go-go multiplier entirely.</html>");
-        inner.add(card("Annual Spending (2027 Base $)", new Object[]{
+        JPanel spendCard = card(SPENDING_CARD_KEY_TITLE, new Object[]{
                 "Living expenses ($/yr)",             spLivingExp,
                 "Medical -- premiums & out-of-pocket ($/yr)", spMedical,
                 "Medical Cost Increase (%/yr)",       spMedInflation,
@@ -1404,7 +1426,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 "Go-go years duration (from wd start)", spGoGoDuration,
                 "Slow-go multiplier (v6)",             spSlowGo,
                 "Slow-go years (after go-go)",         spSlowGoDuration,
-        }));
+        });
+        // v1 2026-10-19 (L1): show the simulation-start year in the title, and follow
+        // the Simulation start year spinner (a scenario load sets it, so this fires).
+        lblSpendingCardTitle = findLabel(spendCard, SPENDING_CARD_KEY_TITLE.toUpperCase());
+        updateSpendingCardTitle();
+        spSimStartYear.addChangeListener(e -> updateSpendingCardTitle());
+        inner.add(spendCard);
         // v6: frame the multiplier as a spending-curve lever rather than a
         // travel line item -- the distinction drives how it should be set.
         JLabel lblGoGoNote = new JLabel(
@@ -2162,7 +2190,15 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         lblActualPoSSub.setToolTipText("<html><b>Paths that ran out</b><br>"
                 + "A fan path runs out when its portfolio reaches $0. It stays at $0 and counts<br>"
                 + "as a failure in Actual PoS, so Actual PoS = 100% minus this share.<br>"
-                + "<i>first</i> and <i>median</i> are the calendar years those paths ran out.</html>");
+                + "<i>first</i> and <i>median</i> are the calendar years those paths ran out.<br><br>"
+                // v1 2026-10-19 (SL1)
+                + "<b>Short years</b> (second line)<br>"
+                + "How many fan paths had at least one withdrawal year whose income -- Social<br>"
+                + "Security, pensions and the year's withdrawal -- fell short of its spending<br>"
+                + "(Living, Medical and taxes), by any amount. A shortfall in the final<br>"
+                + "<i>Shortfall grace</i> years (Portfolio &amp; Simulation card) is forgiven when that<br>"
+                + "path's portfolio covers it, as in the SS Optimizer. Actual PoS can be 100%<br>"
+                + "while this count is not zero: the money lasted, but some years came up short.</html>");
         metricsRow.add(wrapMetric(lblActualPoS,   "Actual PoS",                lblActualPoSSub));
         metricsRow.add(wrapMetric(lblMedianFinal, "True median final balance", "50th pct of fan paths"));
         metricsRow.add(wrapMetric(lblYr10Wd,      "Yr 10 withdrawal (median)", "see dollar toggle"));
@@ -2230,7 +2266,20 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         };
 
         tblPro = new JTable(tblProModel) {
+            // v1 2026-10-19 (PR-2): in a first withdrawal year that starts after
+            // January, the income and spending cells add a note that the row counts
+            // only the months from the start month on.
             @Override public String getToolTipText(MouseEvent e) {
+                String tip = cellTip(e);
+                int row = rowAtPoint(e.getPoint());
+                if (row < 0 || lastResults == null || row >= lastResults.medianRows.size()) return tip;
+                EnhRow er = lastResults.medianRows.get(row);
+                int col = convertColumnIndexToModel(columnAtPoint(e.getPoint()));
+                boolean money = (col >= 7 && col <= 16) || col == COL_IRMAA;
+                if (!money || er.startShare >= 1.0) return tip;
+                return withFirstYearNote(tip, er.calYear, lastResults.inp.withdrawStartMonth, er.startShare);
+            }
+            private String cellTip(MouseEvent e) {
                 int col = convertColumnIndexToModel(columnAtPoint(e.getPoint()));
                 int row = rowAtPoint(e.getPoint());
                 if (row < 0 || lastResults == null) return null;
@@ -3529,6 +3578,22 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<td>Simulation Chart, Chart type <i>Withdrawal $ -- fan + percentiles</i>: the 25th pct "
                 + "line and the lowest fan lines</td></tr>"
                 + "</table>"
+                // v1 2026-10-19 (SL1)
+                + "<p><b>Short years (since 2026-10-19).</b> The second line under Actual PoS counts the fan "
+                + "paths that had at least one <i>short year</i>: a withdrawal year whose income (Social Security, "
+                + "pensions and the year's withdrawal) fell short of its spending (Living, Medical and taxes), by "
+                + "any amount. Each path is costed on its own inflation and its own tax. In the final "
+                + "<i>Shortfall grace</i> years (Portfolio &amp; Simulation card, default 3) a shortfall is forgiven "
+                + "when that path's portfolio covers it &mdash; the SS Optimizer's terminal-grace rule. Changing "
+                + "the grace years re-counts the last run without re-running it.</p>"
+                // v1 2026-10-19 (PR-2)
+                + "<p><b>A first withdrawal year that starts after January (since 2026-10-19).</b> That year's "
+                + "row counts only the months from the start month on, as the withdrawal already did: Living, "
+                + "Medical and the year's tax are that share of the year, and each income source counts the months "
+                + "it pays from the start month on. The months before belong outside the portfolio (section 3). "
+                + "The tax is still computed on the whole year, so MAGI and IRMAA do not change. Before this date "
+                + "the row set a part-year withdrawal against a full year of spending, which made its Surplus/gap "
+                + "look far worse than it was.</p>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec1a'></a>1a. Engine parameters &mdash; solve paths, binary-search iterations, fan paths</h3>"
@@ -3909,6 +3974,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "$32,000 and $44,000 up to 50% is taxable; above $44,000 up to 85% is taxable (capped at 85% of "
                 + "gross SS). These provisional thresholds are statutory and NOT inflation-indexed (fixed since "
                 + "1993), which realistically pulls more SS into the taxable base over time.</p>"
+                // v1 2026-10-19 (TS1)
+                + "<p><b>The 50% tier is capped at half the benefit (since 2026-10-19).</b> The engine follows IRS "
+                + "Publication 915, Worksheet 1, line by line: the 50% portion is the smaller of half the benefit "
+                + "(line 2) and half of the first band (line 14) &mdash; line 15. Before this date the half-benefit "
+                + "limit was missing, which over-taxed a small benefit (under $12,000 joint, $9,000 single) "
+                + "whose provisional income sat near the thresholds.</p>"
                 + "<p><b>The tax torpedo and Roth conversions (v12 2026-10-11).</b> A conversion is ordinary "
                 + "income, so it raises provisional income too. While Social Security is still below its 85% "
                 + "taxable cap, each converted dollar makes up to $0.85 <i>more</i> of the benefit taxable. The "
@@ -5012,8 +5083,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *                  year. The optimizer's spendable figure subtracts Medical, so
      *                  rows move when the simulation starts before withdrawals do;
      *                  every batch re-runs.
+     *  20  2026-10-19  taxable Social Security follows IRS Pub 915 Worksheet 1 line 15
+     *                  (TS1), and a first withdrawal year that starts after January
+     *                  counts only the months from the start month (PR-2). Rows move
+     *                  only for a small benefit near the thresholds or a mid-year
+     *                  start; every batch re-runs.
      */
-    private static final int SCORER_VERSION = 19;
+    private static final int SCORER_VERSION = 20;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -6909,14 +6985,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             int fIdx   = Math.max(0, Math.min(n - 1, Math.max(fyMan, fyWom) - inp.baseYear));
             EnhRow fr  = pr.medianRows.get(fIdx);
             double dfr = (fr.inflFactor > 0) ? fr.inflFactor : 1.0;
-            r.combinedAnnual = (fr.manSS + fr.womanSS) / dfr;
-            double surv = Math.max(fr.manSS, fr.womanSS) / dfr;
+            // v1 2026-10-19 (PR-2): the full-calendar-year benefits, not the share a
+            // mid-year first withdrawal year counts.
+            r.combinedAnnual = (fr.manSSYear + fr.womanSSYear) / dfr;
+            double surv = Math.max(fr.manSSYear, fr.womanSSYear) / dfr;
             if (inp.deathWho != 0) {
                 int sIdx = inp.deathYear + 1 - inp.baseYear;         // first survivor year
                 if (sIdx >= 0 && sIdx < n) {
                     EnhRow sr = pr.medianRows.get(sIdx);
                     double ds = (sr.inflFactor > 0) ? sr.inflFactor : 1.0;
-                    surv = (sr.manSS + sr.womanSS) / ds;             // decedent's slot is 0
+                    surv = (sr.manSSYear + sr.womanSSYear) / ds;     // decedent's slot is 0
                 }
             }
             r.survivorSS = surv;
@@ -8618,7 +8696,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             String val   = exLeafText(bl.getLayoutComponent(BorderLayout.CENTER));
             String note  = exLeafText(bl.getLayoutComponent(BorderLayout.SOUTH));
             out.append(title).append(": ").append(val)
-                    .append(note == null || note.isBlank() ? "" : " -- " + note).append('\n');
+                    .append(note == null || note.isBlank() ? "" : " -- " + note.replace("\n", " . ")).append('\n');   // v1 2026-10-19: two-line notes
             return;
         }
         String leaf = exLeafText(c);
@@ -8794,6 +8872,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         props.setProperty("mc.solvePaths",          String.valueOf(iv(spMcSolvePaths)));
         props.setProperty("mc.binIters",            String.valueOf(iv(spBinaryIters)));
         props.setProperty("mc.fanPaths",            String.valueOf(iv(spMcFanPaths)));
+        props.setProperty("pro.shortfallGrace",     String.valueOf(iv(spShortfallGrace)));   // v1 2026-10-19 (SL1)
         props.setProperty("opt.scenario",           String.valueOf(
                 cmbScenario != null ? cmbScenario.getSelectedIndex() : 0));
         // v9: per-scenario Pro PoS column view (model indices, CSV). Absent keys on
@@ -9061,6 +9140,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         setSpinnerI(spMcSolvePaths,       props, "mc.solvePaths",          warnings);
         setSpinnerI(spBinaryIters,        props, "mc.binIters",            warnings);
         setSpinnerI(spMcFanPaths,         props, "mc.fanPaths",            warnings);
+        // v1 2026-10-19 (SL1): files saved before this input load with the default, 3.
+        spShortfallGrace.setValue(3);
+        setSpinnerIfPresent(spShortfallGrace, props, "pro.shortfallGrace");
         if (cmbScenario != null) {
             String si = props.getProperty("opt.scenario");
             if (si != null) { try { cmbScenario.setSelectedIndex(Integer.parseInt(si.trim())); } catch (Exception ignored) {} }
@@ -9273,6 +9355,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         } catch (Exception ignored) { return; }
         for (String name : p.stringPropertyNames()) {
             sectionExpanded.put(name, Boolean.parseBoolean(p.getProperty(name)));
+        }
+        // v1 2026-10-19 (K1): the Annual Spending card's key was renamed -- carry an
+        // old saved setting across once, and drop the old entry from the file.
+        String newKey = sectionKey(SPENDING_CARD_KEY_TITLE);
+        if (sectionExpanded.containsKey(SPENDING_CARD_OLD_KEY)) {
+            Boolean old = sectionExpanded.remove(SPENDING_CARD_OLD_KEY);
+            sectionExpanded.putIfAbsent(newKey, old);
+            savePanelState();
         }
     }
 
@@ -9796,6 +9886,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // == Step 1: Run all fan paths =====================================
         res.fanBalances    = new double[fanPaths][inp.horizon + 1];
         res.fanWithdrawals = new double[fanPaths][inp.horizon];
+        res.fanShort       = new double[fanPaths][inp.horizon];   // v1 2026-10-19 (SL1)
         res.fanInflFactors = new double[fanPaths][inp.horizon + 1];
 
         // v6: two combined buckets that together ARE the portfolio b
@@ -9843,6 +9934,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             // old in-loop capture never fired and tracking silently fell back.
             double pManStartInfl   = res.fanInflFactors[p][0];
             double pWomanStartInfl = res.fanInflFactors[p][0];
+            // v1 2026-10-19 (SL1): this path's MAGI by year, for its own IRMAA lookback.
+            double[] pMagi = new double[inp.horizon];
 
             for (int y = 0; y < inp.horizon; y++) {
                 int calYear  = inp.baseYear + y;
@@ -9944,6 +10037,75 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         roth += convGross;              // gross lands in Roth...
                         roth -= convTax;                // ...less the tax: net = gross - tax
                         roth  = Math.max(0, roth);
+                    }
+                }
+
+                // v1 2026-10-19 (SL1): this path's spending shortfall, for the "short
+                // year" count under Actual PoS. DISPLAY ONLY -- nothing here feeds the
+                // path's balance, draws or conversions. The table row's rules on this
+                // path's own inflation: income = Social Security + streams + the year's
+                // draw (SS bridge included); spending = Living + Medical + Tax (est);
+                // a mid-year first withdrawal year counts from the start month (PR-2).
+                if (drawing || inp.computedTax) {
+                    double iNow = res.fanInflFactors[p][y];
+                    double[] pInfl = res.fanInflFactors[p];
+                    double fA = inflAt(pInfl, inp.baseYear, inp.annuityStream.startYear());
+                    double fP = inflAt(pInfl, inp.baseYear, inp.pensionStream.startYear());
+                    double fM = inflAt(pInfl, inp.baseYear, inp.militaryStream.startYear());
+                    double pManSS   = manSSSurv(inp, y, iNow, pManStartInfl, pWomanStartInfl);
+                    double pWomanSS = womanSSSurv(inp, y, iNow, pManStartInfl, pWomanStartInfl);
+                    double grossSS  = pManSS + pWomanSS;
+                    double ordinary = tradDraw + streamsTaxable(inp, calYear, iNow, fA, fP, fM) + mmIntPath;
+                    TaxEngine.FilingStatus fsP = filingFor(inp, calYear);
+                    double taxP = 0;
+                    if (drawing && inp.computedTax) {
+                        double magiPre = TaxEngine.taxableSocialSecurity(grossSS, ordinary, iNow, fsP) + ordinary;
+                        double conv    = fpConv[p][y];
+                        double convSSInd = (conv > 0)
+                                ? TaxEngine.convInducedTaxableSS(grossSS, ordinary, conv, iNow, fsP) : 0;
+                        int priorEntered = (y == 0) ? inp.priorMagi2 : (y == 1) ? inp.priorMagi1 : 0;
+                        double magi2 = (y >= 2) ? pMagi[y - 2]
+                                : (priorEntered > 0) ? priorEntered : (magiPre + conv + convSSInd);
+                        TaxEngine.TaxResult trP = TaxEngine.compute(grossSS, ordinary, magi2,
+                                primary65(inp, calYear, manAge, womanAge), womanAge >= 65, iNow,
+                                TaxEngine.fedIndexFactor(iNow, y),
+                                TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, iNow, y),
+                                filingFor(inp, calYear - 2), irmaaEnrollees(inp, calYear, manAge, womanAge),
+                                fsP, TaxEngine.stateProfile(inp.stateCode), calYear, tradDraw,
+                                streamsStateExempt(inp, calYear, iNow, fA, fP, fM),
+                                stateCtx(inp, calYear, manAge, womanAge, pManSS, pWomanSS, tradDraw,
+                                        nonExemptTaxable(inp.pensionStream, inp, calYear, iNow, fP),
+                                        nonExemptTaxable(inp.annuityStream, inp, calYear, iNow, fA)));
+                        taxP     = trP.totalTax;
+                        pMagi[y] = trP.magi + conv + convSSInd;
+                    } else if (inp.computedTax) {
+                        // a year before withdrawals: MAGI only, for the lookback (as P2)
+                        pMagi[y] = TaxEngine.taxableSocialSecurity(grossSS, ordinary, iNow, fsP) + ordinary;
+                    } else {
+                        taxP = taxThisYear(inp, y);
+                    }
+                    if (drawing) {
+                        double living  = inp.livingExp * iNow;
+                        double medical = inp.medical * Math.pow(1 + inp.medInflation, y);
+                        if (isSurvivorYear(inp, calYear)) {
+                            living  *= (1.0 - inp.survivorSpendCut);
+                            medical *= SimInputs.SURVIVOR_MEDICAL_FACTOR;
+                        }
+                        double annP = streamThisYear(inp.annuityStream,  inp, calYear, iNow, fA);
+                        double penP = streamThisYear(inp.pensionStream,  inp, calYear, iNow, fP);
+                        double milP = streamThisYear(inp.militaryStream, inp, calYear, iNow, fM);
+                        double spend = living + medical + taxP;
+                        if (calYear == inp.withdrawStartYear && inp.withdrawStartMonth > 1) {
+                            int sm = inp.withdrawStartMonth;
+                            pManSS   *= fromStartShare(ssFirstMonth(inp, calYear, true),  sm);
+                            pWomanSS *= fromStartShare(ssFirstMonth(inp, calYear, false), sm);
+                            annP *= fromStartShare(streamFirstMonth(inp.annuityStream,  calYear), sm);
+                            penP *= fromStartShare(streamFirstMonth(inp.pensionStream,  calYear), sm);
+                            milP *= fromStartShare(streamFirstMonth(inp.militaryStream, calYear), sm);
+                            spend *= startPror;
+                        }
+                        double income = pManSS + pWomanSS + annP + penP + milP + wdActual + ssBridge[y];
+                        res.fanShort[p][y] = Math.max(0, spend - income);
                     }
                 }
 
@@ -10381,6 +10543,31 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     magiHistory[y] = magiPre;
                 }
             }
+            // v1 2026-10-19 (PR-2): a first withdrawal year that starts after January
+            // counts only the months from the start month on, as the withdrawal
+            // already does. Living, Medical and the year's tax are scaled to those
+            // months; each income source counts the months it pays from then on. The
+            // tax itself was computed on the whole year above, so MAGI and IRMAA are
+            // unchanged. The full-year benefits are kept for the SS Optimizer's
+            // benefit columns.
+            int manSSYear = (int) manSS, womanSSYear = (int) womanSS;
+            if (drawing && calYear == inp.withdrawStartYear && inp.withdrawStartMonth > 1) {
+                int sm = inp.withdrawStartMonth;
+                manSS   *= fromStartShare(ssFirstMonth(inp, calYear, true),  sm);
+                womanSS *= fromStartShare(ssFirstMonth(inp, calYear, false), sm);
+                annOnly *= fromStartShare(streamFirstMonth(inp.annuityStream,  calYear), sm);
+                penOnly *= fromStartShare(streamFirstMonth(inp.pensionStream,  calYear), sm);
+                milOnly *= fromStartShare(streamFirstMonth(inp.militaryStream, calYear), sm);
+                ann        = annOnly + penOnly + milOnly;
+                guaranteed = manSS + womanSS + ann;
+                living  *= startPror;
+                medical *= startPror;
+                tax     *= startPror;
+                irmaaInt    = (int) (irmaaInt    * startPror);
+                fedInt      = (int) (fedInt      * startPror);
+                stateInt    = (int) (stateInt    * startPror);
+                mmIntTaxInt = (int) (mmIntTaxInt * startPror);
+            }
             double totalSpend = drawing ? living + medical + tax : 0;
             double totalIncome= guaranteed + wdActual;
             double surplus    = totalIncome - totalSpend;
@@ -10471,6 +10658,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             row.totalSpend    = (int) totalSpend;
             row.totalIncome   = (int) totalIncome;
             row.surplus       = (int) surplus;
+            row.startShare    = startPror;        // v1 2026-10-19 (PR-2)
+            row.manSSYear     = manSSYear;
+            row.womanSSYear   = womanSSYear;
             row.inflFactor    = inflFactor;
             row.drawing       = drawing;
             row.goGoActive    = goGoRem > 0;
@@ -10650,8 +10840,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 inp.withdrawStartMonth, inp.withdrawStartYear,
                 inp.nomReturn * 100, inp.inflation * 100, scenLabel));
 
-        double dEnd = !res.medianRows.isEmpty()
-                ? res.medianRows.get(res.medianRows.size() - 1).inflFactor : 1.0;
+        // v1 2026-10-19 (FB1): the median final balance stands at the END of the
+        // horizon, so it is deflated by the median END-of-horizon price level. It
+        // used the last row's factor -- the START of the last year -- which
+        // overstated the real figure by one year of inflation.
+        double dEnd = 1.0;
+        if (res.fanInflFactors != null && res.fanInflFactors.length > 0) {
+            double[] endInfl = new double[res.fanInflFactors.length];
+            for (int p = 0; p < endInfl.length; p++)
+                endInfl[p] = res.fanInflFactors[p][res.fanInflFactors[p].length - 1];
+            Arrays.sort(endInfl);
+            dEnd = endInfl[endInfl.length / 2];
+        }
         int yr10wd  = res.medianRows.size() >= 10 ? res.medianRows.get(9).wdActual : 0;
         double d10  = res.medianRows.size() >= 10 ? res.medianRows.get(9).inflFactor : 1.0;
 
@@ -10668,7 +10868,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         refreshBaselineLine();
 
         lblActualPoS.setText(String.format("%.1f%%", res.actualPoS * 100));
-        lblActualPoSSub.setText(depletionNote(res.fanBalances, inp.baseYear));   // v1 2026-10-17 (PD1)
+        refreshActualPoSSub(res);   // v1 2026-10-17 (PD1); short years v1 2026-10-19 (SL1)
         lblMedianFinal.setText(showRealDollars
                 ? formatMoney(Math.round(res.medianFinalBalance / dEnd)) + " (real)"
                 : formatMoney(res.medianFinalBalance) + " (nom.)");
@@ -11232,6 +11432,43 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             amt *= s.survivorPct() / 100.0;
         }
         return amt;
+    }
+
+    // v1 2026-10-19 (PR-2): the first withdrawal year's row covers only the months
+    // from the withdrawal-start month on -- before it, spending, taxes and income
+    // belong outside the portfolio (Assumptions sec. 3). These give the share of a
+    // source's payments THIS calendar year that fall in those months; `firstMonth`
+    // is the first month the source pays this year (1 = all year).
+    static double fromStartShare(int firstMonth, int startMonth) {
+        int f = Math.max(1, firstMonth);
+        if (startMonth <= f) return 1.0;
+        if (startMonth > 12 || f > 12) return 0.0;
+        return (13.0 - startMonth) / (13.0 - f);
+    }
+    // First month a person's Social Security pays in `calYear`: the claim month in
+    // the claim year, else January (survivor years start in January).
+    static int ssFirstMonth(SimInputs inp, int calYear, boolean isMan) {
+        if (isSurvivorYear(inp, calYear)) return 1;
+        int cy = isMan ? inp.manSSStartYear  : inp.womanSSStartYear;
+        int cm = isMan ? inp.manSSStartMonth : inp.womanSSStartMonth;
+        return (cy == calYear) ? cm : 1;
+    }
+    static int streamFirstMonth(FixedStream s, int calYear) {
+        return (s != null && calYear == s.startYear()) ? s.startMonth() : 1;
+    }
+    // v1 2026-10-19 (PR-2): the note added to a first-withdrawal-year cell tooltip.
+    static String withFirstYearNote(String tip, int calYear, int startMonth, double share) {
+        String[] mon = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+        int months = (int) Math.round(share * 12);
+        String note = "<i>First withdrawal year: this row counts " + mon[startMonth - 1] + "-Dec "
+                + calYear + " only (" + months + " of 12 months). Living, Medical and<br>"
+                + "the year's tax are " + months + "/12 of the year; each income source counts the<br>"
+                + "months it pays from " + String.format("%02d/%d", startMonth, calYear)
+                + " on. See Assumptions &amp; Methods, section 1.</i>";
+        if (tip == null) return "<html>" + note + "</html>";
+        int k = tip.lastIndexOf("</html>");
+        return (k < 0) ? tip : tip.substring(0, k) + "<br><br>" + note + "</html>";
     }
 
     /**
@@ -11842,6 +12079,28 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
             double wdStartProration = firstDrawYear
                     ? (13.0 - inp.withdrawStartMonth) / 12.0 : 1.0;
+            // v1 2026-10-19 (PR-2): a first withdrawal year that starts after January
+            // counts only the months from the start month on, as the withdrawal
+            // already does and as the Pro PoS table now does.
+            if (firstDrawYear && inp.withdrawStartMonth > 1) {
+                int sm = inp.withdrawStartMonth;
+                double fA = inflAt(gkInflByYear, inp.baseYear, inp.annuityStream.startYear());
+                double fP = inflAt(gkInflByYear, inp.baseYear, inp.pensionStream.startYear());
+                double fM = inflAt(gkInflByYear, inp.baseYear, inp.militaryStream.startYear());
+                ann -= streamThisYear(inp.annuityStream, inp, calYear, inflFactor, fA)
+                        * (1.0 - fromStartShare(streamFirstMonth(inp.annuityStream, calYear), sm))
+                        + streamThisYear(inp.pensionStream, inp, calYear, inflFactor, fP)
+                        * (1.0 - fromStartShare(streamFirstMonth(inp.pensionStream, calYear), sm))
+                        + streamThisYear(inp.militaryStream, inp, calYear, inflFactor, fM)
+                        * (1.0 - fromStartShare(streamFirstMonth(inp.militaryStream, calYear), sm));
+                manSS   *= fromStartShare(ssFirstMonth(inp, calYear, true),  sm);
+                womanSS *= fromStartShare(ssFirstMonth(inp, calYear, false), sm);
+                guaranteed = manSS + womanSS + ann;
+                living  *= wdStartProration;
+                medical *= wdStartProration;
+                tax     *= wdStartProration;
+                totalSpend = living + medical + tax;
+            }
 
             String flags = "--";
             if (!drawing) {
@@ -11911,6 +12170,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             row.manRmd = (int) manRmd; row.womanRmd = (int) womanRmd;
             row.combRmd = (int) combRmd; row.rmdOverage = rmdOverage;
             row.drawing = drawing; row.goGoActive = goGoRemaining > 0;
+            row.startShare = wdStartProration;   // v1 2026-10-19 (PR-2)
             // v12 2026-10-07: slow-go window, keyed exactly as the Pro PoS row is.
             int yFromStartGk = y - startY;
             row.slowGoActive = (goGoRemaining <= 0)
@@ -11927,6 +12187,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             // price level, so the column agrees with the balance column in
             // real-dollar mode instead of contradicting it.
             double nextInflF = inflFactor * (1 + yearInfl);
+            gk.finalInflFactor = nextInflF;   // v1 2026-10-19 (FB1): the last one is end-of-horizon
             row.balDeltaReal = (int) ((nextInflF > 0 ? nextBal / nextInflF : 0)
                     - (inflFactor > 0 ? bal / inflFactor : 0));
             prevYearLoss   = (nextBal < bal);
@@ -11970,7 +12231,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         };
 
         tblGk = new JTable(tblGkModel) {
+            // v1 2026-10-19 (PR-2): first-withdrawal-year note, as on the Pro PoS table.
             @Override public String getToolTipText(MouseEvent e) {
+                String tip = cellTip(e);
+                int row = rowAtPoint(e.getPoint());
+                if (row < 0 || lastResults == null || lastResults.gkResults == null
+                        || row >= lastResults.gkResults.rows.size()) return tip;
+                GkRow gr = lastResults.gkResults.rows.get(row);
+                int col = convertColumnIndexToModel(columnAtPoint(e.getPoint()));
+                if (col < 8 || col > 17 || gr.startShare >= 1.0) return tip;
+                return withFirstYearNote(tip, gr.calYear, lastResults.inp.withdrawStartMonth, gr.startShare);
+            }
+            private String cellTip(MouseEvent e) {
                 int col = convertColumnIndexToModel(columnAtPoint(e.getPoint()));
                 int row = rowAtPoint(e.getPoint());
                 if (row < 0 || lastResults == null || lastResults.gkResults == null) return null;
@@ -12431,13 +12703,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             }
             // Update GK metrics header
             double gkRate   = gk.initialWdRate * 100.0;
-            double dEndGk   = !gk.rows.isEmpty() ? gk.rows.get(gk.rows.size()-1).inflFactor : 1.0;
+            // v1 2026-10-19 (FB1): finalBalance is the END of the horizon, so deflate by
+            // the end-of-horizon price level (it used the start of the last year,
+            // which overstated the real figure by one year of inflation).
+            double dEndGk   = (gk.finalInflFactor > 0) ? gk.finalInflFactor : 1.0;
             double wd1InflFactor = Math.pow(1 + inp.inflation, inp.withdrawStartYear - inp.baseYear);
             lblGkInitWd.setText(CURRENCY.format((long)((double)gk.yr1Withdrawal
                     / (showRealDollars ? wd1InflFactor : 1.0))) + " / yr");
             lblGkInitRate.setText(String.format("%.2f%%", gkRate));
             lblGkFinalBal.setText(showRealDollars
-                    ? formatMoney(Math.round(gk.finalBalance / dEndGk)) + " (2026$)"
+                    ? formatMoney(Math.round(gk.finalBalance / dEndGk)) + " (" + inp.baseYear + "$)"
                     : formatMoney(gk.finalBalance) + " (nom.)");
         }
     }
@@ -12517,6 +12792,38 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      * during calendar year baseYear + i - 1. With NB1 a path that reaches $0 stays
      * there, so this count is exactly the failures in Actual PoS.
      */
+    // v1 2026-10-19 (SL1): the line under Actual PoS -- paths that ran out, then
+    // paths with a short year. The grace spinner re-counts the shown run instantly.
+    private void refreshActualPoSSub(ProResults res) {
+        if (lblActualPoSSub == null || res == null) return;
+        int grace = (spShortfallGrace != null) ? iv(spShortfallGrace) : 3;
+        String sn = shortfallNote(res.fanShort, res.fanBalances, grace);
+        lblActualPoSSub.setText("<html>" + depletionNote(res.fanBalances, res.inp.baseYear)
+                + (sn.isEmpty() ? "" : "<br>" + sn) + "</html>");
+    }
+
+    /**
+     * v1 2026-10-19 (SL1): how many fan paths had at least one SHORT year -- a
+     * withdrawal year whose income fell short of its spending by any amount (to the
+     * dollar, as the table rounds). A shortfall in the final `grace` years is
+     * forgiven when that path's balance at the start of the year covers it -- the
+     * SS Optimizer's terminal-grace rule (applyFloors).
+     */
+    static String shortfallNote(double[][] fanShort, double[][] fanBalances, int grace) {
+        if (fanShort == null || fanShort.length == 0) return "";
+        int n = fanShort.length, shortPaths = 0;
+        for (int p = 0; p < n; p++) {
+            int h = fanShort[p].length;
+            for (int y = 0; y < h; y++) {
+                double sf = fanShort[p][y];
+                if (sf <= 0.5) continue;                       // rounds to $0
+                boolean graced = (y >= h - grace) && fanBalances[p][y] >= sf;
+                if (!graced) { shortPaths++; break; }
+            }
+        }
+        return (shortPaths == 0) ? "no short years" : shortPaths + " of " + n + " had a short year";
+    }
+
     static String depletionNote(double[][] fanBalances, int baseYear) {
         if (fanBalances == null || fanBalances.length == 0) return "from fan simulation";
         int n = fanBalances.length, out = 0;
@@ -12728,6 +13035,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int  balDeltaReal;          // v6: true real-dollar change (see EnhRow)
         boolean drawing, goGoActive, preAnchor;
         boolean slowGoActive;       // v12 2026-10-07: middle spending tier, after go-go
+        double startShare = 1.0;    // v1 2026-10-19 (PR-2): share of the year this row covers
     }
 
     static class GkResults {
@@ -12736,6 +13044,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int  yr1Withdrawal;
         double initialWdRate;
         int  finalBalance;
+        // v1 2026-10-19 (FB1): price level at the END of the horizon, when
+        // finalBalance stands -- not the start of the last year.
+        double finalInflFactor = 1.0;
     }
 
 
@@ -13641,14 +13952,17 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             double base   = (fs == FilingStatus.SINGLE) ? SS_PROV_BASE_SINGLE   : SS_PROV_BASE_MFJ;
             double second = (fs == FilingStatus.SINGLE) ? SS_PROV_SECOND_SINGLE : SS_PROV_SECOND_MFJ;
             if (provisional <= base) return 0;
-            double taxable;
-            if (provisional <= second) {
-                taxable = 0.5 * (provisional - base);
-            } else {
-                taxable = 0.5 * (second - base) + 0.85 * (provisional - second);
-            }
-            // Cap at 85% of gross SS.
-            return Math.min(taxable, 0.85 * grossSS);
+            // v1 2026-10-19 (TS1): IRS Pub 915 Worksheet 1, lines 10-19. The 50% tier
+            // is the smaller of half the benefit (line 2) and half the first band
+            // (line 14) -- line 15. It was half the band alone, which over-taxed a
+            // small benefit (under $12,000 joint / $9,000 single) whose provisional
+            // income sits near the thresholds.
+            double over   = provisional - base;                          // line 10
+            double band   = second - base;                               // line 11
+            double tier50 = Math.min(0.5 * grossSS, 0.5 * Math.min(over, band));   // lines 13-15
+            double tier85 = 0.85 * Math.max(0, over - band);             // lines 12, 16
+            // Line 19: never more than 85% of gross SS (line 18).
+            return Math.min(tier50 + tier85, 0.85 * grossSS);
         }
 
         /** Progressive federal tax on taxable income, brackets inflated to year. */
@@ -14224,6 +14538,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         double wdPct;
         int  manRmd, womanRmd, combRmd, rmdOverage;
         int  manSS, womanSS, annuity, guaranteed;
+        // v1 2026-10-19 (PR-2): share of the year this row covers (1.0, or the months
+        // from a mid-year withdrawal start / 12 in the first withdrawal year), and
+        // each person's full-calendar-year Social Security (manSS / womanSS count
+        // only the covered months).
+        double startShare = 1.0;
+        int  manSSYear, womanSSYear;
         // v11: the three streams behind the combined "Annuity/Pen/Mil" column.
         // `annuity` above is their SUM, so Fixed Inc and every downstream total
         // keep working unchanged.
@@ -14276,6 +14596,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int yr1Balance;
         List<EnhRow> medianRows;
         double[][] fanBalances, fanWithdrawals, fanInflFactors;
+        // v1 2026-10-19 (SL1): per path and year, how far the year's income fell short
+        // of its spending (nominal $, 0 = covered). Display only.
+        double[][] fanShort;
         double actualPoS;
         int medianFinalBalance, fanPathCount;
         GkResults gkResults;
@@ -14427,6 +14750,22 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         for (char c : title.toLowerCase().toCharArray())
             if (Character.isLetterOrDigit(c)) sb.append(c);
         return sb.toString();
+    }
+
+    // v1 2026-10-19 (L1): the first JLabel under `root` whose text is `text`, or null.
+    private static JLabel findLabel(Container root, String text) {
+        for (Component c : root.getComponents()) {
+            if (c instanceof JLabel l && text.equals(l.getText())) return l;
+            if (c instanceof Container k) { JLabel l = findLabel(k, text); if (l != null) return l; }
+        }
+        return null;
+    }
+
+    // v1 2026-10-19 (L1): Annual Spending card title = the simulation-start year,
+    // the base year of its dollar inputs (Living and Medical grow from it).
+    private void updateSpendingCardTitle() {
+        if (lblSpendingCardTitle == null || spSimStartYear == null) return;
+        lblSpendingCardTitle.setText(("Annual Spending (" + iv(spSimStartYear) + " Base $)").toUpperCase());
     }
 
     private JPanel wrapSpinner(JSpinner sp) {
