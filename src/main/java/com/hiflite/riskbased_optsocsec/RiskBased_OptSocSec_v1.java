@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Sunday, October 18, 2026 at 10:33 PM MST (UTC-7)
+// Last modified: Monday, October 19, 2026 at 02:03 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Sunday, October 18, 2026 at 10:33 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, October 19, 2026 at 02:03 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -5007,8 +5007,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *                  before withdrawals began while the table showed none. Rows
      *                  move only in that mode, when the first claim comes before
      *                  withdrawals start; every batch re-runs.
+     *  19  2026-10-19  Pro PoS Medical grows from the simulation-start year, like
+     *                  Living and the GK tab (M2); it grew from the withdrawal-start
+     *                  year. The optimizer's spendable figure subtracts Medical, so
+     *                  rows move when the simulation starts before withdrawals do;
+     *                  every batch re-runs.
      */
-    private static final int SCORER_VERSION = 18;
+    private static final int SCORER_VERSION = 19;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -10159,11 +10164,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             //              an intentional conservative choice (the base medical
             //              figure already absorbs premium creep + dental); we do NOT
             //              want medical to deflate in a low-inflation path. Indexed
-            //              from the withdrawal-start year, consistent with tax below.
+            //              from the SIMULATION-start year, like living: the input is
+            //              today's cost (v1 2026-10-19, M2 -- it was the withdrawal-
+            //              start year, which treated the input as the cost in that
+            //              future year; GK already used the simulation start).
             //   tax     -- deterministic from withdrawal-start year (taxThisYear).
-            int yearsDrawing  = Math.max(0, calYear - inp.withdrawStartYear);
             double living     = drawing ? inp.livingExp * inflFactor : 0;
-            double medical    = drawing ? inp.medical   * Math.pow(1 + inp.medInflation, yearsDrawing) : 0;
+            double medical    = drawing ? inp.medical   * Math.pow(1 + inp.medInflation, y) : 0;
             // v6: survivor spending drop. Living falls by the user's chosen
             // percentage; medical is halved automatically because it is
             // mechanically per-person. Both begin the year AFTER the death.
