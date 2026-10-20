@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Monday, October 19, 2026 at 06:14 PM MST (UTC-7)
+// Last modified: Tuesday, October 20, 2026 at 03:17 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -89,9 +89,9 @@ import java.util.List;
  *     (leaves the asset base), the net split into the two Roth IRAs. The gross
  *     conversion raises MAGI (IRMAA-relevant, fill-to-target sizing) but is NOT
  *     in the living-expenses Tax column. Toggle the engine off to revert to the
- *     legacy flat escalator. The OBBBA senior bonus deduction is deliberately
- *     NOT modeled (conservative). See the TaxEngine class and the Assumptions &
- *     Methods tab.
+ *     legacy flat escalator. The OBBBA senior deduction ($6,000 per person 65+,
+ *     2025-2028, phased out above $150k MAGI) is modeled since 2026-10-20. See
+ *     the TaxEngine class and the Assumptions & Methods tab.
  *
  *  Remaining gaps vs. full Income Lab spec (deliberate design choices):
  *    - No asset allocation glide path (single return/stdDev for full horizon)
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Monday, October 19, 2026 at 06:14 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, October 20, 2026 at 03:17 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1031,6 +1031,15 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         lblWomanAge      = new JLabel("Spouse age: --");
         lblWomanAge.setFont(new Font("SansSerif", Font.PLAIN, 12));
 
+        // v1 2026-10-20 (SD1): what the birth dates drive on the tax side.
+        String birthTaxTip = "<br><br><b>Tax:</b> the year this person turns 65 starts their age-65 standard<br>"
+                + "deduction add-on and, in 2025-2028, their $6,000 OBBBA senior deduction<br>"
+                + "(Tax Engine card). The IRS counts you 65 on the day before your 65th<br>"
+                + "birthday, so someone born on January 1 qualifies a year earlier; birth<br>"
+                + "day is not an input, so the tool uses the year of the 65th birthday.</html>";
+        spManBirthYear.setToolTipText("<html><b>User birth year</b>" + birthTaxTip);
+        spWomanBirthYear.setToolTipText("<html><b>Spouse birth year</b>" + birthTaxTip);
+
         ChangeListener peopleListener = e -> {
             updateAgeLabels();
             updateHorizonFromPlanAge();
@@ -1166,7 +1175,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<b>Grossed up for tax.</b> Social Security is at most 85% taxable; a<br>"
                 + "Traditional withdrawal is 100% ordinary income. Each spouse's<br>"
                 + "bridge covers its own extra tax so Surplus/gap lands where a<br>"
-                + "no-delay run would, and that extra tax becomes real drawdown.<br><br>"
+                + "no-delay run would, and that extra tax becomes real drawdown.<br>"
+                // v1 2026-10-20 (BR1)
+                + "The tax is figured on the year's ESTIMATED income -- spending need<br>"
+                + "less Social Security, as an IRA draw -- with the real deductions,<br>"
+                + "senior deduction and state rules (within about 3% in tests).<br><br>"
                 + "The draw is applied inside the PoS solver, so probability of<br>"
                 + "success reflects it -- a heavier early bridge lowers the solved<br>"
                 + "base withdrawal rather than the success probability.<br><br>"
@@ -1453,22 +1466,22 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "&nbsp;&nbsp;taxable Social Security (provisional-income formula)<br>"
                 + "&nbsp;&nbsp;+ ordinary income (max(RMD, Traditional draw) + annuity + conversion)<br>"
                 + "&nbsp;&nbsp;- standard deduction (MFJ + age-65 add-ons), indexed as the law does (chained CPI)<br>"
+                + "&nbsp;&nbsp;- the OBBBA senior deduction, 2025-2028 (below)<br>"
                 + "then run through the MFJ brackets + the selected state tax + IRMAA surcharge.<br><br>"
                 + "When OFF, reverts to the legacy flat 'Base tax' escalator<br>"
                 + "(baseTax * (1+taxInflation)^year). See the Assumptions &amp; Methods tab.<br>"
                 // v1 2026-10-19 (G1)
                 + "Applies to the Pro PoS and Guyton-Klinger tabs alike (GK since 2026-10-19).<br><br>"
-                + "<b>Deliberately NOT modeled &mdash; OBBBA 'senior bonus' deduction:</b><br>"
-                + "The up-to-$6,000/person 65+ bonus (tax years 2025-2028 only) is omitted<br>"
-                + "on purpose, for two reasons: (1) leaving it out slightly OVERSTATES tax,<br>"
-                + "which is the conservative and preferred direction; and (2) it avoids<br>"
-                + "encoding fragile temporary-statute logic -- a hard 2028 sunset plus an MFJ<br>"
-                + "MAGI phase-out from $150,000 (gone by $250,000). That phase-out matters<br>"
-                + "here because it keys off MAGI, the SAME quantity the fill-to-target Roth<br>"
-                + "conversion sizing drives -- so modeling the bonus would couple it to the<br>"
-                + "conversion engine rather than being a clean add-on. See section 4 of the<br>"
-                + "Assumptions &amp; Methods tab. Verify with a tax professional before relying<br>"
-                + "on this deduction.</html>");
+                // v1 2026-10-20 (SD1): modeled; it was deliberately omitted before.
+                + "<b>OBBBA senior deduction (modeled since 2026-10-20):</b><br>"
+                + "$6,000 for each spouse who is 65 by December 31 -- from each person's<br>"
+                + "birth year (People card) -- in tax years 2025-2028 only. Each person's<br>"
+                + "$6,000 shrinks by 6% of MAGI over $150,000 ($75,000 single), so a<br>"
+                + "couple's is gone at $250,000. It lowers taxable income, not MAGI, so<br>"
+                + "IRMAA and Social Security taxability are unchanged. The part a Roth<br>"
+                + "conversion phases out is charged to Conv Tax. Arizona, Colorado and<br>"
+                + "Idaho allow it too; Oklahoma does not. See section 4 of the<br>"
+                + "Assumptions &amp; Methods tab.</html>");
 
         // == v5 State tax selector + custom-state controls ================
         java.util.List<String> stateNames = new java.util.ArrayList<>();
@@ -1632,7 +1645,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "Used in <b>Fill to MAGI target</b> mode. The conversion is also held so<br>"
                 + "taxable income does not exceed the TOP of the selected ordinary bracket.<br>"
                 + "Unlike IRMAA this is NOT a cliff -- crossing it taxes only the marginal<br>"
-                + "dollars -- so no buffer is applied to it; the fill may land exactly on it.<br><br>"
+                + "dollars -- so no buffer is applied to it; the fill may land exactly on it.<br>"
+                // v1 2026-10-20 (SD1)
+                + "In 2025-2028 the MAGI at the bracket top also counts the OBBBA senior<br>"
+                + "deduction left at that MAGI (it shrinks as MAGI rises).<br><br>"
                 + "The engine converts up to the LOWER of this and the IRMAA ceiling. With<br>"
                 + "Bob's default (IRMAA Standard + top of 22%), the $218k IRMAA cliff binds<br>"
                 + "first at ~$205k MAGI, filling all of 12% and most of 22% at zero surcharge.</html>");
@@ -2615,6 +2631,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                         + "&nbsp;&nbsp;Taxable Social Security:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;Ordinary income (RMD/draw + annuity + MM interest):&nbsp;%s<br>"
                                         + "%s"   // v12: MM-interest sub-line, when there is any
+                                        + "%s"   // v1 2026-10-20 (SD1): senior-deduction line, 2025-2028
                                         + "&nbsp;&nbsp;Top marginal bracket:&nbsp;<b>%s</b><br><br>"
                                         + "&nbsp;&nbsp;Federal tax:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;%s:&nbsp;%s<br>"
@@ -2633,6 +2650,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                         ? "&nbsp;&nbsp;&nbsp;&nbsp;<i>incl. money-market interest:&nbsp;"
                                         + CURRENCY.format(Math.round(er.mmInterest / d)) + "</i><br>"
                                         : "",
+                                seniorDedLine(er.seniorDed, er.seniorCount, er.calYear, d),
                                 er.topBracket,
                                 CURRENCY.format(Math.round(er.fedTax / d)),
                                 stateTaxLabel(er.calYear),
@@ -2819,6 +2837,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                         + "deduction (already used by spending income), so it stacks at<br>"
                                         + "your top bracket (typically 22%%).<br><br>"
                                         + "%s"   // v12 2026-10-11: torpedo note, when any
+                                        + "%s"   // v1 2026-10-20 (SD1): senior-deduction phase-out note
                                         + "This tax is paid FROM the conversion and leaves your asset<br>"
                                         + "base -- the one real cost of converting. It is separate from<br>"
                                         + "the living-expenses Tax column. See Assumptions &amp; Methods.</html>",
@@ -2828,6 +2847,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                         + CURRENCY.format(Math.round(er.convSSInduced / d))
                                         + " more of your Social Security taxable, and the tax on<br>"
                                         + "that is counted here too.<br><br>"
+                                        : "",
+                                (er.convSeniorLost > 0)
+                                        ? "<b>Includes the senior-deduction phase-out:</b> this conversion<br>"
+                                        + "raised MAGI and cut the OBBBA senior deduction by "
+                                        + CURRENCY.format(Math.round(er.convSeniorLost / d)) + ",<br>"
+                                        + "and the tax on that is counted here too (2025-2028 only).<br><br>"
                                         : "");
                     }
                     default -> { return null; }
@@ -3001,7 +3026,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "When the computed tax engine is ON, this is derived each year from<br>"
                             + "taxable income: taxable Social Security (provisional-income formula)<br>"
                             + "+ ordinary income (max(RMD, Traditional draw) + annuity + conversion),<br>"
-                            + "minus the MFJ + age-65 standard deduction, run through chained-CPI-indexed<br>"
+                            + "minus the MFJ + age-65 standard deduction (and, in 2025-2028, the OBBBA<br>"
+                            + "senior deduction), run through chained-CPI-indexed<br>"   // v1 2026-10-20 (SD1)
                             + "2026 brackets, plus the selected STATE tax and the IRMAA surcharge.<br>"
                             + "(State defaults to Arizona; Colorado, Florida, Idaho, Nevada, Oklahoma<br>"
                             + "and Custom are on the Tax Engine card.) When OFF, reverts to the legacy flat escalator. Hover<br>"
@@ -3030,12 +3056,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "Taken in late December, AFTER the year's RMD and January withdrawal<br>"
                             + "(an RMD can never be converted), and capped at the Traditional balance<br>"
                             + "left after that withdrawal. Hover a cell.</html>";
+                    // v1 2026-10-20 (CT1): the selected state's label, not a hardcoded "AZ 2.5%"
+                    // (the state has been selectable since 2026-10-05). The state the displayed
+                    // run used, or the dropdown before any run.
                     case COL_CONV_TAX -> "<html><b>Conv Tax -- tax on this year's Roth conversion</b><br>"
-                            + "The stacked marginal tax (federal + AZ 2.5%) the conversion adds on<br>"
+                            + "The stacked marginal tax -- federal + "
+                            + stateTaxLabel(lastResults != null ? lastResults.inp.withdrawStartYear : BASE_YEAR_DEFAULT)
+                            + " -- the conversion adds on<br>"
                             + "top of your living-expenses taxable income. Paid FROM the conversion<br>"
                             + "(net = gross - this tax lands in Roth) and leaves your asset base --<br>"
                             + "the one real cost of converting. Separate from the living-expenses<br>"
-                            + "Tax column. Hover a cell for detail.</html>";
+                            + "Tax column. In 2025-2028 it also carries the tax on the OBBBA senior<br>"
+                            + "deduction the conversion phases out. Hover a cell for detail.</html>";   // v1 2026-10-20 (SD1)
                     case 27 -> "<html><b>Trad Bal (v6) -- combined Traditional balance, 50th pct</b><br>"
                             + "The median across fan paths of the combined Traditional bucket<br>"
                             + "(User + Spouse, IRA + 401k) at this year. Unlike v5, this balance<br>"
@@ -3060,7 +3092,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "from the first claim date -- or the withdrawal start, if later --<br>"
                             + "to the second claim date.<br><br>"
                             + "The amount is grossed up to cover the extra tax an IRA<br>"
-                            + "withdrawal carries versus Social Security.<br><br>"
+                            + "withdrawal carries versus Social Security, at the year's estimated<br>"
+                            + "income and tax rate (Assumptions &amp; Methods, SS bridge).<br><br>"   // v1 2026-10-20 (BR1)"
                             + "<b>Partial years are prorated by month.</b> A claim starting mid-year<br>"
                             + "bridges only the months before it, so the first and last bridge<br>"
                             + "years are often smaller than the full years between them. That is<br>"
@@ -3427,8 +3460,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "margin:6px 0 10px 0;'>"
                 + "<p style='margin:0; font-weight:bold; color:#1f4a29;'>This software is executed "
                 + "locally/offline: no per-seat licensing, no data leaving your machine.</p>"
-                + "<p style='margin:4px 0 0 0; color:#33562f;'>(no mortality credit, temporary "
-                + "one-big-beautiful-bill senior-bonus deduction omitted, fixed planning age) &mdash; errs "
+                // v1 2026-10-20 (SD1): the senior deduction is modeled now, so it left this list.
+                + "<p style='margin:4px 0 0 0; color:#33562f;'>(no mortality credit, "
+                + "fixed planning age) &mdash; errs "
                 + "toward under-spending, which is the safe direction for a plan you're actually going to "
                 + "live on.</p>"
                 + "</div>"
@@ -3915,21 +3949,23 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "spouses by the <i>User Traditional share %</i> on the Tax Engine card, the same split the RMDs "
                 + "use. Taxable Social Security is split in proportion to each spouse's benefit. In a survivor "
                 + "year only the survivor is on the return, at the single amounts.</li>"
-                + "<li><b>Senior deduction.</b> Arizona, Colorado and Idaho all follow the federal OBBBA senior "
-                + "deduction. Because that deduction is deliberately not modeled (section 4), it is not modeled "
-                + "for these states either &mdash; the model stays consistent and slightly conservative.</li>"
+                // v1 2026-10-20 (SD1)
+                + "<li><b>Senior deduction</b> (modeled since October 20, 2026; see section 4). Arizona "
+                + "subtracts the federal amount actually deducted (ARS 43-1022 para. 35); Colorado gets it "
+                + "automatically, because it starts from federal taxable income; Idaho allows it through its "
+                + "2026 conformity act (H 559). Each uses the federal figure, after the federal phase-out. "
+                + "Oklahoma does not allow it (its Form 511 has no line for it), and Florida and Nevada have "
+                + "no income tax. Custom starts from federal taxable income, so it includes it.</li>"
                 + "</ul>"
                 + "<p><b>How a Roth conversion is taxed by the state.</b> The state figure for the year is "
                 + "computed twice &mdash; with and without the conversion &mdash; and the conversion is "
                 + "charged the difference. That stacks a conversion on top of living income in a graduated "
                 + "state such as Oklahoma (rather than restarting it at the 0% bracket), and it lets living "
                 + "income and the conversion share one exclusion cap without spending it twice. For a flat-rate "
-                + "state the result is the same as before. The Social Security bridge sizer, which has no "
-                + "per-person detail, charges the state's top rate on the IRA draw that funds the bridge. "
-                + "When it works out the after-tax value of the delayed benefit it is replacing, it charges "
-                + "state tax on that benefit only where the state taxes Social Security (Colorado: under "
-                + "age 65, since the bridge cannot apply Colorado's income test). Before October 6, 2026 it "
-                + "charged state tax there in every state, which sized the bridge slightly too small.</p>"
+                + "state the result is the same as before. The Social Security bridge sizer runs the "
+                + "state's own rules too, on the year's estimated income, since October 20, 2026 (section "
+                + "9, SS bridge modes). Before that it charged the state's top rate on the IRA draw that funds the "
+                + "bridge and taxed the replaced benefit only where the state taxes Social Security.</p>"
                 + "<p><b>Hover the Tax (est) cell</b> of any year for the state line's components: starting "
                 + "income, Social Security and exempt streams, the retirement exclusion, deductions and "
                 + "exemptions, and the state taxable income.</p>"
@@ -3947,6 +3983,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<li>Additional age-65 standard deduction: $1,650 per qualifying spouse (2026, per IRS "
                 + "Rev. Proc. 2025-32), applied once each spouse reaches age 65 ($3,300 combined once both "
                 + "are 65+). Supersedes the 2025 figure of $1,600.</li>"
+                // v1 2026-10-20 (SD1)
+                + "<li><b>OBBBA senior deduction</b> (temporary; modeled since October 20, 2026) &mdash; "
+                + "see below.</li>"
                 + "</ul>"
                 + "<p><b>DELIBERATELY NOT modeled &mdash; LONG-TERM CARE:</b> A two- to three-year "
                 + "long-term-care event commonly runs $300,000&ndash;$500,000 and is typically the largest "
@@ -3958,19 +3997,43 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "Medical figure</b> and let it inflate at your medical rate. Either choice makes the cost "
                 + "visible in every projection. Ignoring it does not make it go away &mdash; it just moves "
                 + "the risk off the screen.</p>"
-                + "<p><b>DELIBERATELY NOT modeled &mdash; OBBBA 'senior bonus' deduction (a decision):</b> The One "
-                + "Big Beautiful Bill Act (2025) added a temporary senior bonus deduction of up to $6,000 per "
-                + "person age 65+, available for tax years <b>2025&ndash;2028 only</b>, with an MFJ phase-out "
-                + "beginning at $150,000 MAGI (reduced 6% of MAGI over the threshold, fully gone by $250,000 MAGI), "
-                + "and a hard sunset after 2028. It is <b>intentionally omitted</b> from this tool for three "
-                + "reasons: (a) omitting it slightly OVERSTATES tax, the conservative and preferred direction; "
-                + "(b) it avoids encoding fresh-statute phase-out and per-spouse eligibility-timing logic that is "
-                + "date-of-birth and MAGI sensitive; and (c) at the household's planned MAGI (~$205k with "
-                + "conversions) the bonus is already more than half phased out &mdash; roughly 55% gone, leaving "
-                + "about $5,400 of deduction worth an estimated ~$1,300 of tax in 2027 and ~$1,150 in 2028, and "
-                + "nothing after the 2028 sunset. (At lower MAGI it is worth more: about $2,400&ndash;$2,800 a "
-                + "year in a no-conversion plan near $155k&ndash;$168k MAGI.) <b>Verify with a tax professional before "
-                + "relying on this deduction.</b> It can be added later once eligibility timing is confirmed.</p>"
+                // v1 2026-10-20 (SD1): modeled; until this date it was deliberately omitted.
+                + "<p><b>MODELED &mdash; the OBBBA senior deduction (since October 20, 2026).</b> The One Big "
+                + "Beautiful Bill Act (2025) added a temporary deduction for seniors, IRC 151(d)(5)(C) "
+                + "(Schedule 1-A, Part V):</p>"
+                + "<ul>"
+                + "<li><b>Amount:</b> $6,000 for each qualified individual &mdash; the filer and, on a joint "
+                + "return, the spouse &mdash; in tax years <b>2025 through 2028 only</b> (&quot;a taxable year "
+                + "beginning before January 1, 2029&quot;). Not indexed for inflation.</li>"
+                + "<li><b>Who qualifies:</b> a person who has &quot;attained age 65 before the close of the "
+                + "taxable year&quot;. The tool takes each person's <b>birth year</b> from the People card, so "
+                + "each spouse's deduction starts in the year that spouse turns 65 &mdash; one spouse can have it "
+                + "a year or more before the other. The IRS counts you 65 on the day before your 65th birthday "
+                + "(the 2025 Schedule 1-A asks whether you were born before January 2, 1961), so someone born "
+                + "on <b>January 1</b> qualifies a year earlier than the tool shows; birth day is not an input. "
+                + "After a death the survivor files Single and counts alone; the death year itself is a full "
+                + "joint year in the tool, so both count.</li>"
+                + "<li><b>Phase-out:</b> each person's $6,000 is reduced, not below zero, by <b>6% of MAGI over "
+                + "$150,000</b> on a joint return ($75,000 single). Schedule 1-A applies the reduction to each "
+                + "person's line, so a couple loses up to 12 cents of deduction per extra dollar and has none "
+                + "left at $250,000 MAGI ($175,000 single). MAGI here is AGI: taxable Social Security plus "
+                + "ordinary income, conversions included (the law adds back foreign-income exclusions the tool "
+                + "does not have). Example: MFJ, both 65+, MAGI $205,000 &mdash; each gets $6,000 &minus; 6% "
+                + "&times; $55,000 = $2,700, so $5,400 in all.</li>"
+                + "<li><b>Where it applies:</b> it lowers <b>taxable income only</b>. It does not change AGI, "
+                + "MAGI, Social Security taxability or the IRMAA test. The living-expenses Tax (est) column "
+                + "takes the deduction at the year's MAGI before any Roth conversion; the part a conversion "
+                + "phases out is taxed in Conv Tax, like the tax torpedo (section 7). In Fill mode the "
+                + "tax-bracket ceiling counts the deduction left at that MAGI. Both the Pro PoS and GK tabs "
+                + "use it, as do Arizona, Colorado and Idaho (section 3b).</li>"
+                + "<li><b>Assumed:</b> both spouses have Social Security numbers and a married couple files "
+                + "jointly, as the deduction requires. The deduction is allowed whether or not you itemize; the "
+                + "tool always uses the standard deduction.</li>"
+                + "</ul>"
+                + "<p>Before October 20, 2026 the deduction was deliberately left out (it overstated tax, the "
+                + "conservative direction). Its value is small and short-lived: at about $205,000 MAGI it is "
+                + "worth roughly $1,300 a year in tax, and nothing after 2028. <b>Verify with a tax professional "
+                + "before relying on it.</b></p>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec5'></a>5. Social Security taxability &mdash; provisional-income formula</h3>"
@@ -4213,7 +4276,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "selected state's tax on the conversion. It does not get its own standard deduction "
                 + "(already consumed by spending income), so "
                 + "it stacks at the top bracket (typically 22%). It also includes the tax on any Social "
-                + "Security the conversion makes taxable (the tax torpedo, section 5).</li>"
+                + "Security the conversion makes taxable (the tax torpedo, section 5), and in 2025&ndash;2028 "
+                + "the tax on the OBBBA senior deduction the conversion phases out by raising MAGI "
+                + "(section 4).</li>"   // v1 2026-10-20 (SD1)"
                 + "<li>The conversion tax is paid FROM the conversion and <b>leaves the asset base</b> &mdash; "
                 + "the one real cost of converting. The net (gross &minus; tax) is split equally into the two "
                 + "Roth IRA accounts.</li>"
@@ -4241,7 +4306,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "the binding ceiling &mdash; the lower of (a) the IRMAA Tier-0 cliff minus your buffer and "
                 + "(b) the 22%&rarr;24% bracket edge &mdash; then capped by the cap input. The IRMAA cliff grows "
                 + "per your threshold-growth mode and the bracket edge with the chained CPI, as the law indexes "
-                + "each. <b>The buffer is inflation-indexed</b>: enter it in 2026 dollars and it grows with "
+                + "each. In 2025&ndash;2028 the bracket edge, stated in MAGI, also counts the OBBBA senior "
+                + "deduction left at that MAGI (section 4). "   // v1 2026-10-20 (SD1)
+                + "<b>The buffer is inflation-indexed</b>: enter it in 2026 dollars and it grows with "
                 + "inflation, as the threshold does under Full CPI (current law), so under that default the "
                 + "cushion and the MAGI target hold steady in today's dollars for the whole horizon. (Held in "
                 + "nominal dollars, as before v12, a $13,000 "
@@ -4375,7 +4442,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<p><b>GK taxes, SS bridge and inflation (since 2026-10-19).</b> The GK tab's Tax (est) comes "
                 + "from the same computed tax engine as the Pro PoS tab, run on this tab's own income: the "
                 + "Traditional part of Actual wd (the RMD is its floor; the rest is drawn from Roth, tax-free), "
-                + "taxable Social Security and the taxable part of the income streams. IRMAA looks back two "
+                + "taxable Social Security and the taxable part of the income streams, less the standard "
+                + "deduction and, in 2025&ndash;2028, the OBBBA senior deduction (section 4). IRMAA looks back two "
                 + "years to this tab's own MAGI; for the two years before the simulation it uses the actual MAGI "
                 + "you entered, or else an estimate, as on the Pro PoS tab. The GK tab makes no Roth conversions "
                 + "and keeps no Money Mkt reserve &mdash; an RMD larger than the withdrawal stays invested "
@@ -4536,6 +4604,26 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<li><b>None</b> &mdash; no bridge; the pre-claim years show whatever the portfolio can "
                 + "actually cover without a phantom SS income stream. Useful for stress cases.</li>"
                 + "</ul>"
+                // v1 2026-10-20 (BR1)
+                + "<p><b>How the bridge is sized (since October 20, 2026).</b> The bridge is an extra IRA "
+                + "withdrawal, and an IRA dollar is fully taxable while Social Security is at most 85% taxable, "
+                + "so the bridge is grossed up until it nets, after tax, what the delayed benefit would have "
+                + "netted: <i>bridge &minus; [tax with the bridge &minus; tax with the benefit] = benefit</i>. "
+                + "The tax is the real federal and state calculation &mdash; standard and age-65 deductions, "
+                + "the OBBBA senior deduction, Social Security taxability and the state's own rules &mdash; on "
+                + "the year's <b>estimated</b> income: the spending need (Living &times; the go-go / slow-go "
+                + "multiplier + Medical) less Social Security and the income streams, taken as an IRA draw. IRMAA "
+                + "is left out (it bills two years later). The schedule has to be built before the simulation "
+                + "runs, because the fan paths, the PoS solver and the table all share it, so it cannot know the "
+                + "draw the PoS solver will actually pick. That rarely matters: the bridge depends only on the "
+                + "marginal tax rate <i>t</i> &mdash; roughly benefit &times; (1 &minus; 0.85<i>t</i>) &divide; "
+                + "(1 &minus; <i>t</i>), 1.05&times; at 14.5% and 1.08&times; at 24.5% &mdash; so even a "
+                + "bracket's miss moves it only 1&ndash;3%. In tests against the bridge each year's actual "
+                + "income needs, the total came within 3% in every case (single years within 6%, the worst in a "
+                + "partial last bridge year). Before this date the sizer taxed the draw from $0 with no "
+                + "deductions and counted only the other spouse's Social Security as income, which made the "
+                + "replaced benefit nearly tax-free and the bridge 4&ndash;9% too large; that overstated the "
+                + "cost of delaying a claim.</p>"
 
                 + "<p><b>Terminal-year artifact.</b> The Pro engine sizes withdrawals to hold your PoS "
                 + "target, re-solved each year &mdash; it is <b>not</b> a &quot;spend the balance to zero&quot; "
@@ -4568,7 +4656,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<h3 style='color:#2a5d34;'><a name='sec10'></a>10. Caveats</h3>"
                 + "<p>This tool is a self-directed planning aid, not tax or financial advice. Tax figures are "
                 + "estimates from statutory tables current as of tax year 2026 and inflation-projected forward; "
-                + "real future law will differ. The OBBBA senior bonus (section 4), the annuity decision point, "
+                + "real future law will differ. The OBBBA senior deduction (section 4, modeled on the "
+                + "assumptions stated there), the annuity decision point, "
                 + "and any threshold-sensitive conversion should be verified with a fee-only fiduciary and/or a "
                 + "tax professional.</p>"
 
@@ -5130,8 +5219,20 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *                  counts only the months from the start month (PR-2). Rows move
      *                  only for a small benefit near the thresholds or a mid-year
      *                  start; every batch re-runs.
+     *  21  2026-10-20  the OBBBA senior deduction (IRC 151(d)(5)(C)): $6,000 per
+     *                  person 65+ in 2025-2028, phased out 6% over $150,000 MAGI
+     *                  ($75,000 single), in the living tax, the conversion tax
+     *                  and the fill ceiling, and in Arizona, Colorado and Idaho tax
+     *                  (SD1). Rows move in 2025-2028 drawing years and after; every
+     *                  batch re-runs.
+     *  22  2026-10-20  the SS bridge is grossed up on the year's estimated tax
+     *                  position -- spending need less Social Security as an IRA
+     *                  draw, with the real deductions and state rules (BR1). It
+     *                  taxed the draw from $0 with no deductions and the replaced
+     *                  benefit as nearly tax-free, sizing bridges 4-9% too large.
+     *                  Rows with a bridge move; every batch re-runs.
      */
-    private static final int SCORER_VERSION = 20;
+    private static final int SCORER_VERSION = 22;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -8290,9 +8391,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 sb.append("<br><b>Unverified:</b> ").append(wrapHtml(sty.rules.unverified, 60)).append("<br>");
             sb.append("<br>Fixed-dollar amounts in state law (deductions, exemptions, caps,<br>"
                     + "Oklahoma's brackets) are held at their legal values, not inflated.<br>");
+            // v1 2026-10-20 (SD1)
+            if (sty.rules.start != TaxEngine.StateStart.NONE)
+                sb.append(sty.rules.seniorPassThrough
+                        ? "<br>Allows the federal OBBBA senior deduction (2025-2028), at the<br>"
+                        + "federal amount after its phase-out.<br>"
+                        : "<br>Does not allow the federal OBBBA senior deduction.<br>");
         } else {
             sb.append("<br>Enter the flat rate and the two flags below. This profile starts<br>"
-                    + "from federal taxable income and is UNVERIFIED for any real state.<br>");
+                    + "from federal taxable income and is UNVERIFIED for any real state.<br>"
+                    + "Starting there, it includes the OBBBA senior deduction (2025-2028).<br>");   // v1 2026-10-20 (SD1)
         }
         sb.append("<br>Arizona is the default. See section 3b of the Assumptions &amp; Methods tab.</html>");
         return sb.toString();
@@ -8302,12 +8410,36 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *  indented italic sub-line; "" for Custom and for no-income-tax states. */
     private String stateBreakdown(EnhRow er, double d) {
         if (!er.stParts || er.stStart == 0) return "";
+        // v1 2026-10-20 (SD1): say where a state that follows it took the senior deduction.
+        String senior = "";
+        if (er.seniorDed > 0 && lastResults != null && lastResults.stateYears != null
+                && !lastResults.stateYears.isEmpty()) {
+            java.util.Map.Entry<Integer, TaxEngine.StateTaxYear> e = lastResults.stateYears.floorEntry(er.calYear);
+            TaxEngine.StateRules R = (e != null ? e.getValue() : lastResults.stateYears.firstEntry().getValue()).rules;
+            if (R != null && R.seniorPassThrough)
+                senior = (R.start == TaxEngine.StateStart.FED_TAXABLE)
+                        ? "<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(start = federal taxable income, after the senior deduction)"
+                        : "<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(deductions include the senior deduction)";
+        }
         return "&nbsp;&nbsp;&nbsp;&nbsp;<i>state: start " + CURRENCY.format(Math.round(er.stStart / d))
                 + " &minus; SS/exempt " + CURRENCY.format(Math.round(er.stSub / d))
                 + " &minus; retirement excl. " + CURRENCY.format(Math.round(er.stExcl / d))
                 + "<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&minus; deductions/exemptions "
                 + CURRENCY.format(Math.round(er.stDed / d))
-                + " = state taxable " + CURRENCY.format(Math.round(er.stTaxable / d)) + "</i><br>";
+                + " = state taxable " + CURRENCY.format(Math.round(er.stTaxable / d)) + senior + "</i><br>";
+    }
+
+    /** v1 2026-10-20 (SD1): the OBBBA senior-deduction line for the Pro PoS and GK
+     *  Tax (est) tooltips; "" outside 2025-2028 or when no one on the return is 65+. */
+    private static String seniorDedLine(int ded, int count, int calYear, double d) {
+        if (count <= 0 || calYear < TaxEngine.SENIOR_DED_FIRST_YEAR
+                || calYear > TaxEngine.SENIOR_DED_LAST_YEAR) return "";
+        String who = count == 1 ? "1 person 65+" : count + " people 65+";
+        if (ded <= 0)
+            return "&nbsp;&nbsp;OBBBA senior deduction (" + who + "):&nbsp;$0 <i>(phased out by MAGI)</i><br>";
+        return "&nbsp;&nbsp;OBBBA senior deduction (" + who + "):&nbsp;" + CURRENCY.format(Math.round(ded / d))
+                + (ded < TaxEngine.SENIOR_DED_EACH * count - 0.5 ? " <i>(partly phased out)</i>" : "")
+                + " off taxable income<br>";
     }
 
     /** v12: break plain text into <br>-separated lines of about `width` chars. */
@@ -10404,6 +10536,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             int    convSSIndInt = 0;  // v12 2026-10-11: torpedo -- extra taxable SS from the conversion
             int    stStartInt = 0, stSubInt = 0, stExclInt = 0, stDedInt = 0, stTaxableInt = 0;
             boolean stParts = false;  // v12 2026-10-05: framework-state breakdown present
+            int    seniorDedInt = 0, seniorCountInt = 0, convSeniorLostInt = 0;   // v1 2026-10-20 (SD1)
             String bracketStr = "--";
             boolean convByIrmaa = false;
             if (drawing && inp.computedTax) {
@@ -10450,7 +10583,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             inp.convCap, inflFactor, fedF,
                             TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, y),
                             fsYear,
-                            inp.fillIrmaaTierIdx, inp.fillBracketIdx);
+                            inp.fillIrmaaTierIdx, inp.fillBracketIdx,
+                            calYear);   // v1 2026-10-20 (SD1): senior deduction years
                     conv        = fill[0];
                     convCeilInt = (int) fill[1];
                     convByIrmaa = fill[2] == 1;
@@ -10538,6 +10672,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 }
                 taxableSSInt = (int) tr.taxableSS;
                 ordTaxInt    = (int) tr.ordinaryOther;      // living ordinary only
+                seniorDedInt   = (int) tr.seniorDed;        // v1 2026-10-20 (SD1)
+                seniorCountInt = tr.seniorCount;
                 irmaaInt     = (int) tr.irmaaCost;
                 irmaaTierInt   = tr.irmaaTier;                      // v1 2026-10-14
                 irmaaPeopleInt = tr.irmaaEnrollees;
@@ -10561,6 +10697,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         stProfile, calYear, tradDraw);
                 convTaxThisYear = (int) ctax[0];
                 convNetToRoth   = (int) (conv - ctax[0]);
+                // v1 2026-10-20 (SD1): the senior deduction this conversion phased out
+                // (its tax is inside Conv Tax), for the tooltip.
+                convSeniorLostInt = (int) TaxEngine.seniorLost(tr, conv, convSSInd, fsYear, calYear);
 
                 // MAGI reported/stored INCLUDES the conversion (IRMAA-relevant).
                 // v12 2026-10-11: + the extra taxable SS the conversion causes.
@@ -10675,6 +10814,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             row.convTax       = convTaxThisYear;
             row.convNetToRoth = convNetToRoth;
             row.convSSInduced = convSSIndInt;   // v12 2026-10-11
+            row.seniorDed     = seniorDedInt;      // v1 2026-10-20 (SD1)
+            row.seniorCount   = seniorCountInt;
+            row.convSeniorLost = convSeniorLostInt;
             row.ssBridge      = bridgeThisYear;  // v6
             row.baseRate      = rowBaseRate;     // v6
             row.yr1Rate       = rowYr1Rate;      // v6
@@ -11220,7 +11362,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // In every mode the raw benefit is GROSSED UP, because replacing Social
     // Security with a Traditional withdrawal is not tax-neutral: SS is at most
     // 85% taxable via the provisional-income formula, an IRA distribution is 100%
-    // ordinary income. Three fixed-point passes converge well inside a dollar.
+    // ordinary income. v1 2026-10-20 (BR1): sized on the year's ESTIMATED tax
+    // position (spending need less Social Security as an IRA draw, real
+    // deductions and state rules) -- see addBridgeForPerson.
     //
     // The gross-up uses a deterministic tax estimate rather than each fan path's
     // own tax position, so one schedule serves the display, the fan paths and the
@@ -11307,6 +11451,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         if (cfAnnual <= 0) return;
 
         TaxEngine.StateTaxProfile stProfile = TaxEngine.stateProfile(inp.stateCode);
+        // v1 2026-10-20 (BR1): the schedule's deterministic price level by year, for
+        // each income stream's start-year factor.
+        double[] detInfl = new double[inp.horizon + 1];
+        for (int k = 0; k <= inp.horizon; k++) detInfl[k] = Math.pow(1 + inp.inflation, k);
 
         for (int y = 0; y < inp.horizon; y++) {
             int calYear = inp.baseYear + y;
@@ -11332,38 +11480,84 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     * ssHaircutFactor(inp, calYear)
                     * yearFrac;
 
-            // Tax stack: the OTHER spouse's real SS plus whatever bridge this
-            // schedule has already accrued this year (so a two-spouse SIM_START
-            // bridge stacks consistently rather than each pretending it is alone).
-            double otherSS = isMan ? womanSSThisYear(inp, y) : manSSThisYear(inp, y);
-            double stackBase = otherSS + bridge[y];
-            double taxSSwith    = TaxEngine.taxableSocialSecurity(stackBase + grown, 0, inflFactor, fs);
-            double taxSSwithout = TaxEngine.taxableSocialSecurity(stackBase,         0, inflFactor, fs);
-            double ssTaxableDelta = Math.max(0, taxSSwith - taxSSwithout);
-            double fedF = TaxEngine.fedIndexFactor(inflFactor, y);   // v12 2026-10-07
-            double[] ssTax = TaxEngine.conversionTax(taxSSwithout, ssTaxableDelta,
-                    inflFactor, fedF, fs, stProfile, calYear, 0);
-            // v12 2026-10-06: the STATE part of the tax the benefit would have caused
-            // counts only where the state taxes this person's Social Security. Before,
-            // it was charged everywhere -- 2.5% of the taxable-SS increase in Arizona,
-            // which exempts SS -- so the after-tax target, and the bridge, came out
-            // slightly too small. The IRA draw that funds the bridge (below) is still
-            // fully taxed, state included.
-            int personAge = calYear - (isMan ? inp.manBirthYear : inp.womanBirthYear);
-            double ssTaxCost = TaxEngine.stateTaxesSS(stProfile.forYear(calYear), personAge)
-                    ? ssTax[0] : ssTax[0] - ssTax[2];
-            double netTarget = grown - ssTaxCost;
-
+            // v1 2026-10-20 (BR1): the gross-up uses the household's ESTIMATED tax
+            // position for the year. It used a bare stack -- the other spouse's Social
+            // Security taxed from $0 with no deductions and no other income -- which
+            // made the replaced benefit nearly tax-free and the bridge 4-9% too large
+            // in tests. Now the year's other ordinary income is estimated before the
+            // run, the only time the schedule can be built: the spending need (Living
+            // x the go-go / slow-go multiplier + Medical, survivor-adjusted, prorated
+            // in a first withdrawal year that starts after January) less Social
+            // Security and the income streams, as an IRA draw, plus the streams'
+            // taxable part. A bridge already sized this year (the other spouse's, in
+            // "From simulation start") is part of that draw. The bridge b is the extra
+            // IRA draw whose after-tax amount equals the benefit's:
+            //     b - [T(SS, draw + b) - T(SS + benefit, draw)] = benefit,
+            // with T the real federal + state tax -- deductions, the senior deduction
+            // and the state's own Social Security rules included. IRMAA is left out:
+            // it bills two years later. The RMD is not estimated (the schedule is
+            // built before any balance exists); in bridge years the spending draw
+            // normally exceeds it. The real draw is set by the PoS solver, so the
+            // estimate can miss it, but the bridge depends only on the marginal rate
+            // (about benefit x (1 - 0.85t)/(1 - t)), so a miss of a bracket moves it
+            // 1-3%; it was within 3% in total in every test.
+            int manAge   = calYear - inp.manBirthYear;
+            int womanAge = calYear - inp.womanBirthYear;
+            double mSS = manSSThisYear(inp, y), wSS = womanSSThisYear(inp, y);
+            double fA = inflAt(detInfl, inp.baseYear, inp.annuityStream.startYear());
+            double fP = inflAt(detInfl, inp.baseYear, inp.pensionStream.startYear());
+            double fM = inflAt(detInfl, inp.baseYear, inp.militaryStream.startYear());
+            double streamsCash = streamsThisYear(inp, calYear, inflFactor, fA, fP, fM);
+            double streamsTax  = streamsTaxable(inp, calYear, inflFactor, fA, fP, fM);
+            double streamsEx   = streamsStateExempt(inp, calYear, inflFactor, fA, fP, fM);
+            double penTax      = nonExemptTaxable(inp.pensionStream, inp, calYear, inflFactor, fP);
+            double annTax      = nonExemptTaxable(inp.annuityStream, inp, calYear, inflFactor, fA);
+            double living  = inp.livingExp * inflFactor
+                    * spendMultFor(inp, y, inp.withdrawStartYear - inp.baseYear);
+            double medical = inp.medical * Math.pow(1 + inp.medInflation, y);
+            if (isSurvivorYear(inp, calYear)) {
+                living  *= (1.0 - inp.survivorSpendCut);
+                medical *= SimInputs.SURVIVOR_MEDICAL_FACTOR;
+            }
+            double need = living + medical;
+            if (calYear == inp.withdrawStartYear) need *= (13.0 - inp.withdrawStartMonth) / 12.0;
+            double draw = Math.max(0, need - mSS - wSS - streamsCash) + bridge[y];
+            double benefitTax = bridgeTax(inp, y, calYear, manAge, womanAge,
+                    isMan ? mSS + grown : mSS, isMan ? wSS : wSS + grown,
+                    draw, streamsTax, streamsEx, penTax, annTax, inflFactor, fs, stProfile);
+            // b = benefit + the extra tax the draw carries; the extra tax grows with b
+            // at the marginal rate (< 1), so this converges geometrically.
             double b = grown;
-            for (int pass = 0; pass < 3; pass++) {
-                double[] bt = TaxEngine.conversionTax(taxSSwithout, b,
-                        inflFactor, fedF, fs, stProfile, calYear, 0);
-                double net = b - bt[0];
-                if (net <= 1) break;
-                b = b * (netTarget / net);
+            for (int pass = 0; pass < 60; pass++) {
+                double nb = grown + bridgeTax(inp, y, calYear, manAge, womanAge, mSS, wSS,
+                        draw + b, streamsTax, streamsEx, penTax, annTax, inflFactor, fs, stProfile)
+                        - benefitTax;
+                boolean done = Math.abs(nb - b) < 0.01;
+                b = nb;
+                if (done) break;
             }
             bridge[y] += Math.max(0, b);   // ACCUMULATE
         }
+    }
+
+    /** v1 2026-10-20 (BR1): federal + state income tax for the SS-bridge sizer on
+     *  an estimated year: Social Security per person, the IRA draw and the streams,
+     *  with the real deductions (senior deduction included) and the state's own
+     *  rules. No IRMAA (no enrollees passed): it bills two years later. */
+    private static double bridgeTax(SimInputs inp, int y, int calYear, int manAge, int womanAge,
+                                    double manSS, double womanSS, double iraDraw,
+                                    double streamsTax, double streamsEx,
+                                    double pensionTaxable, double annuityTaxable,
+                                    double inflFactor, TaxEngine.FilingStatus fs,
+                                    TaxEngine.StateTaxProfile st) {
+        TaxEngine.TaxResult tr = TaxEngine.compute(manSS + womanSS, iraDraw + streamsTax, 0,
+                primary65(inp, calYear, manAge, womanAge), womanAge >= 65, inflFactor,
+                TaxEngine.fedIndexFactor(inflFactor, y),
+                TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, y),
+                filingFor(inp, calYear - 2), 0, fs, st, calYear, iraDraw, streamsEx,
+                stateCtx(inp, calYear, manAge, womanAge, manSS, womanSS, iraDraw,
+                        pensionTaxable, annuityTaxable));
+        return tr.fedTax + tr.stateTax;
     }
 
     // v6: across-the-board benefit reduction from a given year onward. Applied at
@@ -11939,7 +12133,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     primary65(inp, calYear, manAge, womanAge), womanAge >= 65, inp.convCap,
                     inflFactor, TaxEngine.fedIndexFactor(inflFactor, y),            // v12 2026-10-07
                     TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, y), fs,
-                    inp.fillIrmaaTierIdx, inp.fillBracketIdx);
+                    inp.fillIrmaaTierIdx, inp.fillBracketIdx,
+                    calYear);   // v1 2026-10-20 (SD1)
             // v12 2026-10-11: torpedo-aware, as in the display loop.
             return TaxEngine.torpedoFill(fill[0], grossSS, ordinaryBeforeConv,
                     magiBeforeConv, fill[1], inp.convCap, inflFactor, fs);
@@ -12215,6 +12410,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             double tax = 0;
             int taxableSSInt = 0, ordInt = 0, fedInt = 0, stateInt = 0, irmaaInt = 0;
             int irmaaTierInt = 0, irmaaPeopleInt = 0, irmaaSrcInt = 0, magiInt = 0;
+            int seniorDedInt = 0, seniorCountInt = 0;   // v1 2026-10-20 (SD1)
             String bracketStr = "--";
             if (drawing && inp.computedTax) {
                 double grossSS  = manSS + womanSS;   // full year (PR-2 scales below)
@@ -12245,6 +12441,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 irmaaTierInt   = tr.irmaaTier;
                 irmaaPeopleInt = tr.irmaaEnrollees;
                 bracketStr     = tr.topBracket;
+                seniorDedInt   = (int) tr.seniorDed;   // v1 2026-10-20 (SD1)
+                seniorCountInt = tr.seniorCount;
             } else if (inp.computedTax) {
                 // A year before withdrawals: no tax shown (paid from outside the
                 // portfolio), but its MAGI feeds the IRMAA lookback, as on Pro PoS (P2).
@@ -12321,6 +12519,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             row.irmaa       = irmaaInt;     row.irmaaTier   = irmaaTierInt;
             row.irmaaPeople = irmaaPeopleInt; row.irmaaSrc  = irmaaSrcInt;
             row.irmaaJoint  = filingFor(inp, calYear - 2) == TaxEngine.FilingStatus.MFJ;
+            row.seniorDed   = seniorDedInt;   row.seniorCount = seniorCountInt;   // v1 2026-10-20 (SD1)
             row.inflRaise   = inflRaise;
             row.cprActive   = cprActive;
 
@@ -12471,6 +12670,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + CURRENCY.format(Math.round(gr.ordinaryTax / d)) + "<br>"
                             + "&nbsp;&nbsp;&nbsp;&nbsp;<i>Traditional draw (RMD is the floor):&nbsp;"
                             + CURRENCY.format(Math.round(gr.tradDraw / d)) + "</i><br>"
+                            + seniorDedLine(gr.seniorDed, gr.seniorCount, gr.calYear, d)   // v1 2026-10-20 (SD1)
                             + "&nbsp;&nbsp;Top marginal bracket:&nbsp;<b>" + gr.topBracket + "</b><br><br>"
                             + "&nbsp;&nbsp;Federal tax:&nbsp;" + CURRENCY.format(Math.round(gr.fedTax / d)) + "<br>"
                             + "&nbsp;&nbsp;" + stateTaxLabel(gr.calYear) + ":&nbsp;" + CURRENCY.format(Math.round(gr.stateTax / d)) + "<br>"
@@ -12710,8 +12910,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                     + "income: taxable Social Security (provisional-income formula), the<br>"
                                     + "Traditional part of Actual wd (the RMD is its floor; the rest comes<br>"
                                     + "from Roth, tax-free) and the taxable part of the income streams.<br>"
-                                    + "Federal brackets, the selected state, the Single-filer switch after a<br>"
-                                    + "death, and IRMAA on this tab's own MAGI from two years earlier.<br><br>"
+                                    + "Federal brackets, the OBBBA senior deduction (2025-2028), the selected<br>"
+                                    + "state, the Single-filer switch after a death, and IRMAA on this tab's<br>"
+                                    + "own MAGI from two years earlier.<br><br>"
                                     + "This tab makes no Roth conversions and keeps no Money Mkt reserve,<br>"
                                     + "so there is no conversion tax and no reserve interest, and the whole<br>"
                                     + "RMD is taxed. With <i>Computed tax (vs flat)</i> off (Tax Engine card)<br>"
@@ -13274,6 +13475,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int    magi, taxableSS, ordinaryTax, fedTax, stateTax, irmaa;   // G1
         int    irmaaTier, irmaaPeople, irmaaSrc;   // G1; irmaaSrc as EnhRow
         boolean irmaaJoint;         // G1: lookback return filed jointly
+        int    seniorDed, seniorCount;   // v1 2026-10-20 (SD1): OBBBA senior deduction, people covered
         String topBracket = "--";   // G1
         double inflRaise = -1;      // inflation raise applied this year, -1 = none (G4)
         boolean cprActive;          // Capital Preservation Rule can fire this year (G9)
@@ -13453,12 +13655,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     //    - Arizona flat state income tax 2.5% (default state profile; other
     //      states via the Custom profile or added to the StateTaxProfile registry)
     //
-    //  DELIBERATELY NOT MODELED: the OBBBA "senior bonus" deduction (up to
-    //  $6,000/person, 2025-2028, MFJ phase-out from $150k MAGI, sunsets after
-    //  2028). Omitting it slightly OVERSTATES tax (conservative, preferred
-    //  direction) and avoids encoding fresh-statute phase-out/eligibility logic.
-    //  Documented on the Assumptions & Methods tab. Verify with a tax
-    //  professional before relying on it.
+    //  v1 2026-10-20 (SD1): the OBBBA senior deduction (IRC 151(d)(5)(C): $6,000
+    //  per person 65+, 2025-2028, each reduced 6% of MAGI over $150k joint / $75k
+    //  single) is MODELED -- seniorDeduction() and its callers. It was
+    //  deliberately omitted before. Documented on the Assumptions & Methods tab
+    //  (section 4). Verify with a tax professional before relying on it.
     // ========================================================================
     static class TaxEngine {
 
@@ -13612,8 +13813,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             double  flatRate;                     // used when bracketsMfj == null
             double[][] bracketsMfj, bracketsSingle; // {lo, hi, rate}; hi may be +INF
             boolean bracketsIndexed;              // ID zero bracket: CPI-indexed; OK: fixed
-            boolean seniorPassThrough;            // follows the federal senior deduction; inert
-            // while that deduction is unmodeled (sec. 4)
+            boolean seniorPassThrough;            // follows the federal senior deduction (AZ, CO,
+            // ID); live since v1 2026-10-20 (SD1), see stateTaxRules()
             String  verified = "";                // "Verified Oct 2026 ..." line for tooltips
             String  unverified = "";              // what has no official source, or ""
 
@@ -13747,7 +13948,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             //     amount ($32,200 MFJ / $16,100 single in 2026), never the 65+ add-on.
             //   ARS 43-1023: $2,100 per taxpayer 65+ by year end; not indexed.
             //   ARS 43-1022 para. 35: subtracts the federal senior deduction actually
-            //     taken (TY2025+) -- inert here because that deduction is unmodeled.
+            //     taken (TY2025+) -- modeled since v1 2026-10-20 (SD1).
             //   Form 140 line 30: Social Security exempt. IRA/401(k) taxed.
             // v12 2026-10-05: replaces the old approximation (federal taxable income
             // less taxable SS), which borrowed the federal $1,650/spouse add-on instead
@@ -13961,15 +14162,22 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                     double streamExempt, double conversion, StateCtx c,
                                     boolean man65, boolean woman65,
                                     double inflFactor, double fedFactor,
-                                    FilingStatus fs, StateParts out) {
+                                    FilingStatus fs, int simYear, StateParts out) {
             if (R.start == StateStart.NONE) {
                 if (out != null) { out.start = out.ssSub = out.excl = out.ded = out.taxable = out.tax = 0; }
                 return 0;
             }
             boolean mfj = fs == FilingStatus.MFJ;
             double agi = agiLiving + conversion;
+            // v1 2026-10-20 (SD1): a state that follows the federal senior deduction
+            // (seniorPassThrough) takes the federal amount, figured on federal MAGI --
+            // this AGI, conversion included, as on the federal return. Colorado gets
+            // it inside federal taxable income; Arizona (ARS 43-1022 para. 35) and
+            // Idaho (H 559 conformity) subtract it with their deductions below.
+            double senior = R.seniorPassThrough
+                    ? seniorDeduction(agi, seniorCount(man65, woman65, fs), fs, simYear) : 0;
             double start = (R.start == StateStart.FED_AGI) ? agi
-                    : Math.max(0, agi - totalDeduction(man65, woman65, fedFactor, fs));
+                    : Math.max(0, agi - totalDeduction(man65, woman65, fedFactor, fs) - senior);
 
             // Taxable SS split between the spouses in proportion to gross benefits.
             double gm = c.manPresent ? c.manSS : 0, gw = c.womanPresent ? c.womanSS : 0;
@@ -14020,6 +14228,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             int over65  = ((c.manPresent && c.manAge >= 65) ? 1 : 0)
                     + ((c.womanPresent && c.womanAge >= 65) ? 1 : 0);
             ded += R.age65ExemptEach * over65 + R.personalExemptEach * present;
+            if (R.start == StateStart.FED_AGI) ded += senior;   // v1 2026-10-20 (SD1): AZ, ID
 
             double taxable = Math.max(0, start - ssM - ssW - streamExempt - excl - ded);
             double tax;
@@ -14055,21 +14264,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             return Math.max(0, cap);
         }
 
-        /** v12 2026-10-06: does this state tax a person's Social Security at this age?
-         *  Used by the SS-bridge sizer, which has no AGI to apply Colorado's 55-64
-         *  income test -- so under 65 Colorado is treated as taxing it (conservative). */
-        static boolean stateTaxesSS(StateTaxYear sty, int age) {
-            if (sty.rules == null) return sty.taxesSocialSecurity;      // Custom: its checkbox
-            if (sty.rules.start == StateStart.NONE) return false;      // no income tax
-            return switch (sty.rules.ss) {
-                case TAXED -> true;
-                case EXEMPT -> false;
-                case EXEMPT_BY_AGE -> age < 65;
-            };
-        }
-
         /** v12: the highest rate a stacked dollar can meet under these rules --
-         *  used only by the SS-bridge sizer, which has no per-person context. */
+         *  for a conversion taxed without per-person context (stateTaxConversion). */
         static double topMarginalRate(StateRules R, FilingStatus fs) {
             if (R.start == StateStart.NONE) return 0;
             if (R.bracketsMfj == null) return R.flatRate;
@@ -14114,6 +14310,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             int    irmaaEnrollees; // v1 2026-10-14: people paying it (0-2)
             String topBracket;
             double totalTax;       // fedTax + stateTax + irmaaCost
+            double seniorDed;      // v1 2026-10-20 (SD1): OBBBA senior deduction taken (2025-2028)
+            int    seniorCount;    // v1 2026-10-20 (SD1): qualified individuals (65+) on the return
             // v12 2026-10-05: what conversionTax() needs to stack a conversion on
             // the SAME state calculation, plus the components for the tooltip.
             boolean man65, woman65;
@@ -14242,8 +14440,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
          *  MFJ: add-on per qualifying spouse (man65, woman65). SINGLE: one
          *  add-on, driven by the FILER's age in man65 -- callers pass primary65(),
          *  which is the survivor's age in a survivor year; the second flag is
-         *  ignored because a single filer has one taxpayer. OBBBA senior bonus
-         *  deliberately omitted (see Assumptions tab). */
+         *  ignored because a single filer has one taxpayer. The OBBBA senior
+         *  deduction is separate (seniorDeduction, v1 2026-10-20). */
         static double totalDeduction(boolean man65, boolean woman65,
                                      double inflFactor, FilingStatus fs) {
             if (fs == FilingStatus.SINGLE) {
@@ -14255,6 +14453,65 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             if (man65)   d += infl(ADD_STD_DED_65_EACH_2026, inflFactor);
             if (woman65) d += infl(ADD_STD_DED_65_EACH_2026, inflFactor);
             return d;
+        }
+
+        // v1 2026-10-20 (SD1): the OBBBA enhanced deduction for seniors, IRC
+        // 151(d)(5)(C) (Pub. L. 119-21; Schedule 1-A Part V). $6,000 for each
+        // qualified individual -- the filer, and on a joint return the spouse, who is
+        // 65 by the end of the year -- in taxable years beginning before 2029 (2025
+        // through 2028). Each person's $6,000 is reduced, not below zero, by 6% of
+        // MAGI over $75,000 ($150,000 joint) -- Schedule 1-A lines 31-37 apply the
+        // reduction to each person's line -- so a couple's deduction is gone at
+        // $250,000. MAGI is AGI plus foreign exclusions the model does not have, so
+        // AGI. No amount is indexed. It is taken below AGI: it lowers taxable income
+        // only, never AGI, MAGI, provisional income or the IRMAA test. The model
+        // assumes both spouses have Social Security numbers and that a married
+        // couple files jointly, as the deduction requires.
+        static final double SENIOR_DED_EACH          = 6_000;
+        static final double SENIOR_DED_PHASE_RATE    = 0.06;
+        static final double SENIOR_DED_THRESH_MFJ    = 150_000;
+        static final double SENIOR_DED_THRESH_SINGLE = 75_000;
+        static final int    SENIOR_DED_FIRST_YEAR    = 2025;
+        static final int    SENIOR_DED_LAST_YEAR     = 2028;
+
+        /** Qualified individuals on the return, from the same age-65 flags (and the
+         *  same Single-filer convention) as totalDeduction: each flag is that
+         *  person's birth year against the calendar year, i.e. 65 by December 31. */
+        static int seniorCount(boolean man65, boolean woman65, FilingStatus fs) {
+            if (fs == FilingStatus.SINGLE) return man65 ? 1 : 0;
+            return (man65 ? 1 : 0) + (woman65 ? 1 : 0);
+        }
+
+        /** The senior deduction for `count` qualified individuals at this MAGI. */
+        static double seniorDeduction(double magi, int count, FilingStatus fs, int simYear) {
+            if (count <= 0 || simYear < SENIOR_DED_FIRST_YEAR || simYear > SENIOR_DED_LAST_YEAR) return 0;
+            double thr  = (fs == FilingStatus.SINGLE) ? SENIOR_DED_THRESH_SINGLE : SENIOR_DED_THRESH_MFJ;
+            double each = Math.max(0, SENIOR_DED_EACH - SENIOR_DED_PHASE_RATE * Math.max(0, magi - thr));
+            return each * count;
+        }
+
+        /** The MAGI M at which taxable income reaches a bracket top, given
+         *  edgeMagi = bracket top + the other deductions: M = edgeMagi +
+         *  seniorDeduction(M). The right side falls as M rises, so the root is
+         *  unique; it is piecewise linear, so solved exactly. */
+        static double seniorCeiling(double edgeMagi, int count, FilingStatus fs, int simYear) {
+            double full = seniorDeduction(0, count, fs, simYear);
+            if (full <= 0) return edgeMagi;
+            double thr = (fs == FilingStatus.SINGLE) ? SENIOR_DED_THRESH_SINGLE : SENIOR_DED_THRESH_MFJ;
+            if (edgeMagi + full <= thr) return edgeMagi + full;                     // below the phase-out
+            if (edgeMagi >= thr + SENIOR_DED_EACH / SENIOR_DED_PHASE_RATE) return edgeMagi;   // all gone
+            double k = SENIOR_DED_PHASE_RATE * count;
+            return (edgeMagi + full + k * thr) / (1 + k);                          // inside it
+        }
+
+        /** The senior deduction a conversion -- and the Social Security it makes
+         *  taxable -- phases out on top of living income. Its tax belongs to the
+         *  conversion (Conv Tax), as the torpedo's does. */
+        static double seniorLost(TaxResult living, double conversion, double inducedSS,
+                                 FilingStatus fs, int simYear) {
+            if (living.seniorDed <= 0 || conversion <= 0) return 0;
+            return Math.max(0, living.seniorDed - seniorDeduction(
+                    living.magi + conversion + Math.max(0, inducedSS), living.seniorCount, fs, simYear));
         }
 
         // IRMAA threshold indexing modes.
@@ -14346,17 +14603,24 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
             // v12 2026-10-07: federal deduction and brackets on the CHAINED factor.
             double ded      = totalDeduction(man65, woman65, fedFactor, fs);
-            r.taxableIncome = Math.max(0, r.magi - ded);
+            // v1 2026-10-20 (SD1): the OBBBA senior deduction, 2025-2028, on this
+            // income's MAGI. A conversion stacked on top phases out more of it; that
+            // part is charged in conversionTax() (seniorLost).
+            r.seniorCount   = seniorCount(man65, woman65, fs);
+            r.seniorDed     = seniorDeduction(r.magi, r.seniorCount, fs, simYear);
+            r.taxableIncome = Math.max(0, r.magi - ded - r.seniorDed);
             r.fedTax        = fedTax(r.taxableIncome, fedFactor, fs);
             // State tax via the selected profile's rules for this year. v12: a
             // framework state (rules != null) runs its own law through
             // stateTaxRules(); Custom keeps the legacy calculation unchanged.
+            // (Custom starts from federal taxable income, so it includes the senior
+            // deduction; v1 2026-10-20.)
             StateTaxYear sty = stateProfile.forYear(simYear);
             if (sty.rules != null && stateCtx != null) {
                 r.stateCtx   = stateCtx;
                 r.stateParts = new StateParts();
                 r.stateTax   = stateTaxRules(sty.rules, r.magi, r.taxableSS, streamStateExempt,
-                        0, stateCtx, man65, woman65, inflFactor, fedFactor, fs, r.stateParts);
+                        0, stateCtx, man65, woman65, inflFactor, fedFactor, fs, simYear, r.stateParts);
             } else {
                 r.stateTax   = stateTaxLiving(sty, r.taxableIncome, r.taxableSS,
                         retirementOrdinary, streamStateExempt, inflFactor);
@@ -14406,7 +14670,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                        double userCap, double inflFactor,
                                        double fedFactor, double irmaaFillFactor,
                                        FilingStatus fs,
-                                       int irmaaTierIdx, int bracketCeilIdx) {
+                                       int irmaaTierIdx, int bracketCeilIdx,
+                                       int simYear) {
             double[] thr = irmaaThresh(fs);
             int ti = Math.max(0, Math.min(irmaaTierIdx, thr.length - 1));
             // v12 2026-10-03: the buffer is entered in 2026 dollars and is now
@@ -14428,6 +14693,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             // brackets(fs)[bi][1] is the UPPER edge (taxable) of bracket bi.
             double bracketCeilTaxable = brk[bi][1];
             double bracketCeil = infl(bracketCeilTaxable, fedFactor) + ded;      // v12: chained
+            // v1 2026-10-20 (SD1): in 2025-2028 the senior deduction also sits between
+            // MAGI and taxable income, and it shrinks as MAGI rises: the ceiling is the
+            // MAGI at which taxable income reaches the bracket top.
+            bracketCeil = seniorCeiling(bracketCeil, seniorCount(man65, woman65, fs), fs, simYear);
             double bindingCeil = Math.min(irmaaCeil, bracketCeil);
             boolean irmaaBinds = irmaaCeil <= bracketCeil;
             double conv = Math.max(0, bindingCeil - magiBeforeConv);
@@ -14521,9 +14790,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             double fedBase = fedTax(base, fedFactor, fs);
             double fedConv = Math.max(0, fedWith - fedBase);
             // State tax on the conversion via the selected profile (Custom: legacy
-            // flags). v12: this overload is now reached only by the SS-bridge sizer
-            // and the Custom path; a framework state has no per-person context here,
-            // so it charges the state's top marginal rate on the stacked dollars.
+            // flags). v1 2026-10-20: reached only from the TaxResult overload's
+            // legacy branch (Custom, or no state context); a framework state has no
+            // per-person context here, so it charges the state's top marginal rate.
             StateTaxYear sty = stateProfile.forYear(simYear);
             double stConv  = (sty.rules != null)
                     ? conversion * topMarginalRate(sty.rules, fs)
@@ -14558,13 +14827,17 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         simYear, retirementOrdinary);
             StateTaxYear sty = stateProfile.forYear(simYear);
             double base = Math.max(0, living.taxableIncome);
-            double fedConv = Math.max(0, fedTax(base + conversion + inducedSS, living.fedFactor, fs)
+            // v1 2026-10-20 (SD1): + the senior deduction the conversion phases out.
+            double lost = seniorLost(living, conversion, inducedSS, fs, simYear);
+            double fedConv = Math.max(0, fedTax(base + conversion + inducedSS + lost, living.fedFactor, fs)
                     - fedTax(base, living.fedFactor, fs));
             double stConv;
             if (sty.rules == null || living.stateCtx == null) {
                 double legacy = stateTaxConversion(sty, conversion, retirementOrdinary, inflFactor);
+                // Custom starts from federal taxable income, so the lost senior
+                // deduction raises its base too (v1 2026-10-20, SD1).
                 double ssPart = Math.max(0,
-                        stateTaxLiving(sty, base + inducedSS, living.taxableSS + inducedSS,
+                        stateTaxLiving(sty, base + inducedSS + lost, living.taxableSS + inducedSS,
                                 retirementOrdinary, living.streamStateExempt, inflFactor)
                                 - stateTaxLiving(sty, base, living.taxableSS,
                                 retirementOrdinary, living.streamStateExempt, inflFactor));
@@ -14573,7 +14846,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 double stWith = stateTaxRules(sty.rules, living.magi + inducedSS,
                         living.taxableSS + inducedSS, living.streamStateExempt, conversion,
                         living.stateCtx, living.man65, living.woman65, inflFactor,
-                        living.fedFactor, fs, null);
+                        living.fedFactor, fs, simYear, null);
                 stConv = Math.max(0, stWith - living.stateTax);
             }
             return new double[]{ fedConv + stConv, fedConv, stConv };
@@ -14585,15 +14858,29 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                       double retirementOrdinary) {
             if (conversion <= 0) return new double[]{0, 0, 0};
             StateTaxYear sty = stateProfile.forYear(simYear);
-            if (sty.rules == null || living.stateCtx == null)
-                return conversionTax(living.taxableIncome, conversion, inflFactor,
+            // v1 2026-10-20 (SD1): + the senior deduction the conversion phases out.
+            double lost = seniorLost(living, conversion, 0, fs, simYear);
+            if (sty.rules == null || living.stateCtx == null) {
+                double[] plain = conversionTax(living.taxableIncome, conversion, inflFactor,
                         living.fedFactor, fs, stateProfile, simYear, retirementOrdinary);
+                if (lost <= 0) return plain;
+                double b0 = Math.max(0, living.taxableIncome);
+                double fed = Math.max(0, fedTax(b0 + conversion + lost, living.fedFactor, fs)
+                        - fedTax(b0, living.fedFactor, fs));
+                // Custom starts from federal taxable income: the lost deduction raises it.
+                double st = plain[2] + Math.max(0,
+                        stateTaxLiving(sty, b0 + lost, living.taxableSS, retirementOrdinary,
+                                living.streamStateExempt, inflFactor)
+                                - stateTaxLiving(sty, b0, living.taxableSS, retirementOrdinary,
+                                living.streamStateExempt, inflFactor));
+                return new double[]{ fed + st, fed, st };
+            }
             double base = Math.max(0, living.taxableIncome);
-            double fedConv = Math.max(0, fedTax(base + conversion, living.fedFactor, fs)
+            double fedConv = Math.max(0, fedTax(base + conversion + lost, living.fedFactor, fs)
                     - fedTax(base, living.fedFactor, fs));
             double stWith = stateTaxRules(sty.rules, living.magi, living.taxableSS,
                     living.streamStateExempt, conversion, living.stateCtx,
-                    living.man65, living.woman65, inflFactor, living.fedFactor, fs, null);
+                    living.man65, living.woman65, inflFactor, living.fedFactor, fs, simYear, null);
             double stConv = Math.max(0, stWith - living.stateTax);
             return new double[]{ fedConv + stConv, fedConv, stConv };
         }
@@ -14806,6 +15093,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int  mmInterest, mmInterestTax;
         int  convTax, convNetToRoth;   // v3: conversion tax + net landing in Roth
         int  convSSInduced;            // v12 2026-10-11: extra taxable SS the conversion caused
+        // v1 2026-10-20 (SD1): OBBBA senior deduction in the living tax, the people
+        // it covers, and the part of it the conversion phased out (taxed in Conv Tax).
+        int  seniorDed, seniorCount, convSeniorLost;
         // v6: the actual figures behind the Wd % guardrail colour, so the cell
         // tooltip can show WHY a row is green or red rather than just that it is.
         int  ssBridge;   // v6: extra draw replacing a delayed benefit
