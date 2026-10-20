@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Monday, October 19, 2026 at 04:26 PM MST (UTC-7)
+// Last modified: Monday, October 19, 2026 at 04:48 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -111,7 +111,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Monday, October 19, 2026 at 04:26 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, October 19, 2026 at 04:48 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -2254,7 +2254,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 "Living Exp", "Medical", "Tax (est)",                    // 11 12 13
                 "Total spend", "Total income", "Surplus/gap",            // 14 15 16
                 "Infl factor",                                           // 17
-                "User RMD", "Spouse RMD", "Combined RMD", "-> Roth/MM (year)",  // 18 19 20 21
+                "User RMD", "Spouse RMD", "Combined RMD", "-> Money Mkt (year)",  // 18 19 20 21 (v1 2026-10-19 RN1: was "-> Roth/MM (year)")
                 "Portfolio Chg",                                            // 22
                 "IRMAA", "MAGI", "Roth Conv", "Conv Tax",                  // 23 24 25 26 (24 MAGI v7)
                 "Trad Bal", "Roth Bal", "Money Mkt (total)",               // 27 28 29 (v6)
@@ -2566,7 +2566,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     }
                     case COL_ROTH_MM -> {
                         if (er.rmdOverage <= 0) return null;
-                        return "<html><b>-&gt; Roth/MM (year) -- this year's RMD overage</b><br>"
+                        return "<html><b>-&gt; Money Mkt (year) -- this year's RMD overage</b><br>"
                                 + "Combined RMD (" + CURRENCY.format(er.combRmd) + ")<br>"
                                 + "exceeds this year's planned spending withdrawal.<br>"
                                 + "Overage (" + CURRENCY.format(er.rmdOverage) + ") is a <b>yearly amount</b>, not a running total.<br><br>"
@@ -2973,7 +2973,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     case 20 -> "<html><b>Combined RMD</b><br>"
                             + "Sum of User + Spouse RMDs.<br>"
                             + "Orange = RMD exceeds planned withdrawal; overage retained in Money Mkt (v8).</html>";
-                    case 21 -> "<html><b>-> Roth/MM (year) -- RMD overage, per year</b><br>"
+                    case 21 -> "<html><b>-&gt; Money Mkt (year) -- RMD overage, per year</b><br>"
                             + "= max(0, Combined RMD - Actual wd). A <b>yearly flow</b>, not a total.<br>"
                             + "When RMD exceeds the planned spending withdrawal, the excess must<br>"
                             + "still be taken but is not spent on living expenses.<br><br>"
@@ -3076,7 +3076,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     case 29 -> "<html><b>Money Mkt (total) -- already-taxed reserve</b><br>"
                             + "Running <b>account balance</b> (a total, not a yearly flow) of already-<br>"
                             + "taxed cash. Each year it (1) grows at that year's inflation rate,<br>"
-                            + "then (2) adds that year's RMD overage (the -&gt; Roth/MM (year) value):<br>"
+                            + "then (2) adds that year's RMD overage (the -&gt; Money Mkt (year) value):<br>"
                             + "&nbsp;&nbsp;row 1 = <b>Money Mkt (prior, $)</b> input (carry-in from a past run)<br>"
                             + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ row 1's overage<br>"
                             + "&nbsp;&nbsp;each year: balance x (1 + inflation) + overage<br>"
@@ -4376,7 +4376,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "withdrawal is set by the RULE (a percentage of balance, guardrail-adjusted), not by the "
                 + "spending need &mdash; and that rule-driven withdrawal, after the go-go/slow-go multiplier is "
                 + "applied (the Actual wd column), is what decrements the portfolio. The "
-                + "shortfall is displayed but not funded, and the RMD overage is redirected to Roth/MM rather "
+                + "shortfall is displayed but not funded, and the RMD overage stays invested rather "
                 + "than covering it. So the GK tab reports 'portfolio survived' while the red gaps show the "
                 + "paycheck under-funded the budget for years. The survival is real; the ADEQUACY is not.</p>"
                 + "<p><b>Why the PoS method is better &mdash; here and in general.</b> Probability of Success "
@@ -4574,7 +4574,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "slightly negative <i>even though the portfolio still holds plenty to cover it</i>. The <i>Term "
                 + "grace</i> setting tells the optimizer to forgive a below-buffer surplus in the final N years "
                 + "<b>only when the portfolio balance can cover the shortfall</b>. This prevents harmless end-of-"
-                + "horizon dips from marking otherwise-sound strategies infeasible.</p>"
+                + "horizon dips from marking otherwise-sound strategies infeasible. The default is 3 years "
+                + "(since 2026-10-19; it was 1), the same as the Shortfall grace behind the short-year count "
+                + "under Actual PoS; a saved scenario keeps its own value.</p>"
 
                 // v1 2026-10-13: Real / Nominal and Randomization rewritten -- both
                 // described behavior the optimizer dropped in v11 / v12.
@@ -5255,7 +5257,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "below it is forgiven when that year's portfolio can cover the gap.<br>"
                 + "SS Optimizer only.</html>");
 
-        spOptTermGrace = spinI(1, 0, 5, 1, "#");
+        spOptTermGrace = spinI(3, 0, 5, 1, "#");   // v1 2026-10-19 (TG1): default 3 (was 1), matching Shortfall grace
         spOptTermGrace.setToolTipText("<html><b>Terminal grace (years)</b><br>"
                 + "The Pro engine's withdrawal is sized to hold your probability-of-<br>"
                 + "success target, re-solved each year -- it is not a 'spend the<br>"
@@ -5271,7 +5273,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "marked 'infeasible' purely because of that terminal dip (which is<br>"
                 + "why moving the horizon from 95 to 94 used to flip rows to<br>"
                 + "feasible). Set it to 0 to require every single year to stay green<br>"
-                + "with no exceptions. SS Optimizer only.</html>");
+                + "with no exceptions. SS Optimizer only.<br><br>"
+                + "<b>Default: 3</b> (since 2026-10-19; it was 1), the same as the Shortfall<br>"
+                + "grace behind the short-year count under Actual PoS. A saved scenario<br>"
+                + "keeps its own value.</html>");
 
         // v1 2026-10-15 (FR): the four floors only test rows already simulated, so a
         // change re-scores the results on screen at once -- no re-run -- and says so
@@ -10344,7 +10349,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             // ---- v3 TAX ENGINE (Pro PoS median path) --------------------
             // Taxable ordinary income (non-SS): the forced RMD if any, else the
             // discretionary Traditional draw. Pre-75 the draw is 100% Traditional
-            // (Roth/MM surplus is funnelled AFTER spend, not drawn for spend);
+            // (the Money Mkt overage is funnelled AFTER spend, not drawn for spend);
             // post-75 the RMD dominates and floors ordinary income. Annuity is
             // ordinary (held inside an IRA). See the Assumptions & Methods tab.
             double tax; int convThisYear = 0;
@@ -12213,7 +12218,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // 8=ManSS 9=WomanSS 10=Annuity 11=Guaranteed
         // 12=Living 13=Medical 14=Tax
         // 15=TotalSpend 16=TotalIncome 17=SurplusGap
-        // 18=InflFactor 19=ManRMD 20=WomanRMD 21=CombRMD 22=->Roth/MM 23=Bal?
+        // 18=InflFactor 19=ManRMD 20=WomanRMD 21=CombRMD 22=RMD overage 23=Bal?
         String[] gkCols = {
                 "User Age", "Cal yr", "Portfolio bal",                      // 0 1 2
                 "GK withdrawal", "Actual wd", "Wd %",                       // 3 4 5
@@ -12223,7 +12228,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 "Living Exp", "Medical", "Tax (est) *",                      // 12 13 14 (v6: * legacy)
                 "Total spend", "Total income", "Surplus/gap",                // 15 16 17
                 "Infl factor",                                                // 18
-                "User RMD", "Spouse RMD", "Combined RMD", "-> Roth/MM",         // 19 20 21 22 (v1 2026-10-18: no longer legacy)
+                "User RMD", "Spouse RMD", "Combined RMD", "RMD overage",        // 19 20 21 22 (v1 2026-10-19 RN1: was "-> Roth/MM")
                 "Portfolio Chg"                                                  // 23
         };
         tblGkModel = new DefaultTableModel(gkCols, 0) {
@@ -12347,9 +12352,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             (gr.surplus >= 0 ? "+" : "-")
                                     + CURRENCY.format(Math.round(Math.abs(gr.surplus) / d)));
                 }
-                if (col == 22 && gr.rmdOverage > 0) { // Roth/MM
+                if (col == 22 && gr.rmdOverage > 0) { // RMD overage
                     // v1 2026-10-18 (D-1): says what the GK engine actually does with it.
-                    return "<html><b>RMD overage -> Roth/MM</b><br>"
+                    return "<html><b>RMD overage</b><br>"
                             + "Combined RMD (" + CURRENCY.format(gr.combRmd) + ")<br>"
                             + "exceeds planned GK withdrawal (" + CURRENCY.format(gr.wdActual) + ").<br>"
                             + "Overage (" + CURRENCY.format(gr.rmdOverage) + ") is not spent.<br>"
@@ -12461,7 +12466,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                     + "conversions</b>, so Traditional lasts longer. Display only -- the<br>"
                                     + "GK withdrawal and balance do not use these figures.</html>");
                     case 22 -> gkHeader.setToolTipText(
-                            "<html><b>-&gt; Roth/MM (GK tab)</b><br>"
+                            "<html><b>RMD overage (GK tab)</b><br>"
                                     + "The part of the forced distribution larger than that year's GK<br>"
                                     + "spending, from the RMD columns (same rule as Pro PoS since<br>"
                                     + "2026-10-18).<br><br>"
@@ -12579,7 +12584,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         legend.add(gkLegendChip(new Color(255, 235, 185), new Color(120, 70, 0),   "PMR0 -- inflation frozen"));
         legend.add(gkLegendChip(new Color(255, 210, 210), new Color(150, 30, 30),  "CPR[v] -- cut 10%"));
         legend.add(gkLegendChip(new Color(210, 240, 210), new Color(30, 110, 30),  "PR[^]  -- raised 10%"));
-        legend.add(gkLegendChip(new Color(255, 200, 120), new Color(140, 60, 0),   "RMD overage -> Roth/MM"));
+        legend.add(gkLegendChip(new Color(255, 200, 120), new Color(140, 60, 0),   "RMD overage"));
         // v6: flag the columns that are still computed on the pre-v6 basis
         // (v1 2026-10-18: only Tax (est) now; the RMD columns left it).
         legend.add(gkLegendChip(new Color(232, 232, 232), new Color(90, 90, 90),
