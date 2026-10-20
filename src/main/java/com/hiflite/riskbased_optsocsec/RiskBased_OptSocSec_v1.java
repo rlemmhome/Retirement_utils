@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Monday, October 19, 2026 at 04:48 PM MST (UTC-7)
+// Last modified: Monday, October 19, 2026 at 06:14 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -96,7 +96,8 @@ import java.util.List;
  *  Remaining gaps vs. full Income Lab spec (deliberate design choices):
  *    - No asset allocation glide path (single return/stdDev for full horizon)
  *    - No mortality weighting (fixed planning age, conservative)
- *    - Guyton-Klinger tab retains the legacy flat tax escalator
+ *    - Guyton-Klinger tab makes no Roth conversions and keeps no Money Mkt
+ *      reserve (its tax uses the computed engine since 2026-10-19)
  *
  * =============================================================================
  * Compile:  javac RiskBased_OptSocSec_v1.java
@@ -111,7 +112,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Monday, October 19, 2026 at 04:48 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, October 19, 2026 at 06:14 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -998,7 +999,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "Has no effect on the Income PoS tab.<br><br>"
                 + "In the first withdrawal year, this % of the current portfolio<br>"
                 + "balance sets the GK withdrawal (prorated by start month).<br>"
-                + "From year 2 onward, CPR\u25bc / PR\u25b2 / PMR\u2070 guardrail rules engage,<br>"
+                + "From year 2 onward, CPR\u25bc / PR\u25b2 / WR\u2070 guardrail rules engage,<br>"
                 + "using this rate as the permanent benchmark for all comparisons.<br><br>"
                 + "<b>Default: 5.4%</b></html>");
 
@@ -1454,7 +1455,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "&nbsp;&nbsp;- standard deduction (MFJ + age-65 add-ons), indexed as the law does (chained CPI)<br>"
                 + "then run through the MFJ brackets + the selected state tax + IRMAA surcharge.<br><br>"
                 + "When OFF, reverts to the legacy flat 'Base tax' escalator<br>"
-                + "(baseTax * (1+taxInflation)^year). See the Assumptions &amp; Methods tab.<br><br>"
+                + "(baseTax * (1+taxInflation)^year). See the Assumptions &amp; Methods tab.<br>"
+                // v1 2026-10-19 (G1)
+                + "Applies to the Pro PoS and Guyton-Klinger tabs alike (GK since 2026-10-19).<br><br>"
                 + "<b>Deliberately NOT modeled &mdash; OBBBA 'senior bonus' deduction:</b><br>"
                 + "The up-to-$6,000/person 65+ bonus (tax years 2025-2028 only) is omitted<br>"
                 + "on purpose, for two reasons: (1) leaving it out slightly OVERSTATES tax,<br>"
@@ -2014,6 +2017,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "If the current GK withdrawal RATE rises more than this % <b>above</b> the<br>"
                 + "initial rate -- meaning the portfolio has shrunk and the fixed draw is now<br>"
                 + "too large a slice of it -- the withdrawal is <b>cut 10%</b> to preserve capital.<br>"
+                // v1 2026-10-19 (G9)
+                + "As in Guyton and Klinger (2006), the cut rule expires 15 years before<br>"
+                + "the end of the plan: it never fires in the last 15 simulated years.<br>"
                 + "<b>Default: 20%</b></html>");
         spGkLowerGuardrail = spinD(20.0, 5.0, 60.0, 1.0, "0.0#");
         spGkLowerGuardrail.setToolTipText("<html><b>Guyton-Klinger -- Lower guardrail (Prosperity Rule, PR[^])</b><br>"
@@ -4319,26 +4325,35 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<h3 style='color:#2a5d34;'><a name='sec8'></a>8. Why PoS is the primary method &mdash; the withdrawal-rate flaw</h3>"
                 + "<p><b>Guyton-Klinger faithfulness.</b> The GK tab implements the 2006 Guyton-Klinger decision "
                 + "rules (Journal of Financial Planning, \"Decision Rules and Maximum Initial Withdrawal Rates\"). "
-                + "The core rules match the specification:</p>"
+                + "Since 2026-10-19 the rules match the paper:</p>"
                 + "<ul>"
                 + "<li><b>Capital Preservation Rule (CPR, cut):</b> when the current withdrawal rate rises more "
                 + "than the upper guardrail (default 20%) above the initial rate &mdash; because the portfolio "
-                + "shrank &mdash; the withdrawal is cut 10%.</li>"
+                + "shrank &mdash; the withdrawal is cut 10%. Per the paper, &quot;The capital preservation rule "
+                + "expires 15 years before the maximum age to which the retiree wishes to plan&quot;, so it never "
+                + "fires in the last 15 simulated years (a 30-year plan starting in 2027 can cut through 2041). "
+                + "Before 2026-10-19 it applied every year.</li>"
                 + "<li><b>Prosperity Rule (PR, raise):</b> when the current rate falls more than the lower "
                 + "guardrail (default 20%) below the initial rate &mdash; because the portfolio grew &mdash; the "
-                + "withdrawal is raised 10%.</li>"
-                + "<li><b>Inflation-skip (PMR0):</b> after a down-return year, the annual inflation raise is "
-                + "skipped if the withdrawal rate is above the initial rate.</li>"
+                + "withdrawal is raised 10%. The paper gives it no expiry, so it applies every year.</li>"
+                + "<li><b>Withdrawal Rule (WR0, inflation raise skipped):</b> &quot;Withdrawals rose annually by "
+                + "the prior year's inflation rate&quot;, except that &quot;there is no increase following a year "
+                + "where the portfolio's total return is negative&quot; when the withdrawal rate is above the "
+                + "initial rate. The test is last year's RETURN, not the balance: a balance can fall in a year of "
+                + "positive return purely because of the withdrawal. Before 2026-10-19 the raise was skipped "
+                + "whenever the balance fell, used the CURRENT year's inflation, and was labelled the "
+                + "&quot;Portfolio Management Rule&quot; (PMR0) &mdash; in the paper that rule decides which "
+                + "assets fund each withdrawal, which this single-pool model does not track.</li>"
                 + "</ul>"
-                + "<p><b>Three deliberate deviations from the textbook GK spec.</b> This tool "
-                + "(a) does NOT suspend the guardrails in the final 15 years of the horizon (the original authors "
-                + "say the CPR/PR need not apply in the last 15 years; keeping them applied cuts spending later, "
-                + "which is more cautious &mdash; conservative), (b) skips the inflation adjustment entirely in a "
-                + "down-plus-high-rate year rather than capping it at 6% (conservative), and (c) applies this "
+                + "<p><b>Two deliberate deviations from the paper.</b> This tool "
+                + "(a) does <b>not</b> cap the yearly inflation raise. The paper's Inflation Rule does: &quot;The "
+                + "maximum annual inflationary increase is 6 percent.&quot; So after a year of inflation above 6% "
+                + "the GK withdrawal here rises by the full rate &mdash; less conservative, and it matters only in "
+                + "high-inflation historical sequences such as the 1970s. (b) It applies this "
                 + "application's <b>go-go/slow-go spending multiplier on top of the GK-rule withdrawal</b> "
                 + "(Actual wd = GK withdrawal &times; the go-go or slow-go multiplier for that year), which the "
                 + "2006 spec has no concept of. "
-                + "Deviation (c) is a front-loading overlay, NOT conservative: it deliberately raises early "
+                + "Deviation (b) is a front-loading overlay, NOT conservative: it deliberately raises early "
                 + "withdrawals so the GK tab's spending shape is comparable to the Pro PoS tab. <b>To run a GK "
                 + "simulation true to the textbook spec, set the go-go and slow-go durations (go-go years and "
                 + "slow-go years) to 0 in the input panel</b> &mdash; then the multiplier resolves to 1.0 and the "
@@ -4356,6 +4371,30 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "start of the year and use the Joint Life table when it applies. The GK tab is provided as a comparison "
                 + "overlay and as the engine behind the Stress Test tab &mdash; it is NOT the recommended "
                 + "planning method.</p>"
+                // v1 2026-10-19 (G1, G2, G4)
+                + "<p><b>GK taxes, SS bridge and inflation (since 2026-10-19).</b> The GK tab's Tax (est) comes "
+                + "from the same computed tax engine as the Pro PoS tab, run on this tab's own income: the "
+                + "Traditional part of Actual wd (the RMD is its floor; the rest is drawn from Roth, tax-free), "
+                + "taxable Social Security and the taxable part of the income streams. IRMAA looks back two "
+                + "years to this tab's own MAGI; for the two years before the simulation it uses the actual MAGI "
+                + "you entered, or else an estimate, as on the Pro PoS tab. The GK tab makes no Roth conversions "
+                + "and keeps no Money Mkt reserve &mdash; an RMD larger than the withdrawal stays invested "
+                + "&mdash; so there is no conversion tax or reserve interest, and the whole RMD is taxed. Before "
+                + "withdrawals start no tax is shown, as on the Pro PoS tab. With <i>Computed tax (vs flat)</i> "
+                + "off (Tax Engine card), both tabs use the flat Base tax escalator; before this date the GK tab "
+                + "used it whatever that setting said. Tax affects only the Total spend and Surplus/gap columns: "
+                + "the GK withdrawal and balance follow the rules above.</p>"
+                + "<p>The <b>SS bridge</b> (SS bridge mode, Social Security card) is drawn on top of the GK "
+                + "withdrawal in Actual wd, from the same schedule as the Pro PoS tab, so the portfolio carries "
+                + "the cost of delaying a claim. It is left out of the guardrail tests, which judge the GK "
+                + "withdrawal alone, though the lower balance it leaves feeds later years' tests. Before this "
+                + "date the GK tab had no bridge.</p>"
+                + "<p>The <b>Infl factor</b> column is the price level at the start of each year &mdash; the "
+                + "product of the earlier years' inflation, as on the Pro PoS tab &mdash; so Living Exp, an "
+                + "inflation-tracking SS COLA and the withdrawal's yearly raise all use the previous year's "
+                + "inflation. Before this date the GK tab folded in the current year's inflation, one year early. "
+                + "In the default mean-return run every year has the same inflation, so only historical "
+                + "sequences (the Stress Test, or a Sequence choice) see a difference.</p>"
                 + "<p><b>The core problem with ALL withdrawal-rate methods.</b> The 4% rule and its dynamic "
                 + "descendants (including Guyton-Klinger) share a fundamental flaw in how they define success. "
                 + "A withdrawal-rate method takes a percentage of the CURRENT balance, and 'success' is "
@@ -4519,9 +4558,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "planning ages; the horizon itself is deterministic. The direction is conservative &mdash; "
                 + "planning for certainty at your planning age means the tool never assumes you die before "
                 + "then and stops worrying about you.</li>"
-                + "<li>The Guyton-Klinger tab retains the legacy flat tax escalator (the computed engine "
-                + "applies to the Pro PoS median path). GK is a separate dynamic-spending overlay; keeping "
-                + "its tax simple preserves it as a clean comparison baseline.</li>"
+                + "<li>Roth conversions and the Money Mkt reserve on the Guyton-Klinger tab &mdash; since "
+                + "2026-10-19 it computes its tax with the same engine as the Pro PoS tab (it used the flat "
+                + "escalator), but it makes no conversions and keeps no reserve, so it stays a simple "
+                + "comparison overlay. See section 8.</li>"
                 + "</ul>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
@@ -11993,10 +12033,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
     // ========================================================================
     //  GUYTON-KLINGER 2006 RULES ENGINE
-    //  Deterministic (mean-return path). Three phases:
+    //  Deterministic (the mean-return path, or one historical sequence). Phases:
     //  Phase 0  -- pre-withdrawal: portfolio grows, no draws.
-    //  Phase 1  -- first draw year: wdGK = balance ? gkPreRate ? proration.
-    //  Phase 2  -- subsequent years: WRR / PMR / CPR / PR rules engage.
+    //  Phase 1  -- first draw year: wdGK = balance x gkPreRate x proration.
+    //  Phase 2  -- later years: the Withdrawal Rule (WR, the inflation raise),
+    //              then the Capital Preservation (CPR) and Prosperity (PR) rules.
     // ========================================================================
     private GkResults simulateGK(SimInputs inp) {
         GkResults gk  = new GkResults();
@@ -12010,8 +12051,25 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
         double bal            = inp.portfolio;
         double wdGK           = 0;
-        boolean prevYearLoss  = false;
-        double inflFactor     = 1.0; // updated each year from actual yearInfl
+        // v1 2026-10-19 (G8): the Withdrawal Rule tests last year's portfolio RETURN.
+        // It tested whether the BALANCE fell, which a withdrawal alone can cause in
+        // a year of positive return.
+        double prevYearReturn = 0;
+        // v1 2026-10-19 (G4): the yearly raise is last year's inflation.
+        double prevYearInfl   = 0;
+        // v1 2026-10-19 (G4): price level at the START of each year -- the product
+        // of the earlier years' inflation, as in the Pro PoS engine. It folded in
+        // the current year's inflation, one year early.
+        double inflFactor     = 1.0;
+        // v1 2026-10-19 (G9): the Capital Preservation Rule "expires 15 years before
+        // the maximum age to which the retiree wishes to plan" (Guyton and Klinger
+        // 2006): it can fire through this calendar year and not in the last 15.
+        int cprLastYear       = inp.baseYear + inp.horizon - 1 - 15;
+        // v1 2026-10-19 (G2): the Pro PoS engine's SS bridge schedule, drawn on top
+        // of the GK withdrawal in drawing years.
+        double[] ssBridge     = buildSsBridgeSchedule(inp);
+        // v1 2026-10-19 (G1): this tab's MAGI by year, for its IRMAA lookback.
+        double[] gkMagi       = new double[inp.horizon];
         // v6: GK inflation factor at each SS start year, captured as the loop
         // passes it (see the Pro PoS fan loop for the same pattern).
         double gkManStartInfl = 0, gkWomanStartInfl = 0;
@@ -12056,10 +12114,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             double yearReturn = inSeq ? histSeq[histIdx][1] : inp.nomReturn;
             double yearInfl   = inSeq ? histSeq[histIdx][2] : inp.inflation;
 
-            // Cumulative inflation factor from actual per-year inflation
-            if (y == 0) inflFactor = 1.0;
-            else        inflFactor *= (1 + yearInfl);
             // v12 2026-10-10: basis at the start year, not the claim year (see ssGrowth).
+            // v1 2026-10-19 (G4): inflFactor is this year's START price level here;
+            // this year's own inflation is folded in at the end of the iteration.
             if (y == 0) { gkManStartInfl = inflFactor; gkWomanStartInfl = inflFactor; }
             if (y < gkInflByYear.length) gkInflByYear[y] = inflFactor;   // v11
 
@@ -12067,10 +12124,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             double womanSS    = womanSSSurv(inp, y, inflFactor, gkManStartInfl, gkWomanStartInfl);
             // v11: three streams, start factors looked up from this loop's own
             // recorded inflation series.
-            double ann        = streamsThisYear(inp, calYear, inflFactor,
-                    inflAt(gkInflByYear, inp.baseYear, inp.annuityStream.startYear()),
-                    inflAt(gkInflByYear, inp.baseYear, inp.pensionStream.startYear()),
-                    inflAt(gkInflByYear, inp.baseYear, inp.militaryStream.startYear()));
+            double fA = inflAt(gkInflByYear, inp.baseYear, inp.annuityStream.startYear());
+            double fP = inflAt(gkInflByYear, inp.baseYear, inp.pensionStream.startYear());
+            double fM = inflAt(gkInflByYear, inp.baseYear, inp.militaryStream.startYear());
+            double ann        = streamsThisYear(inp, calYear, inflFactor, fA, fP, fM);
             double guaranteed = manSS + womanSS + ann;
             double living     = drawing ? inp.livingExp   * inflFactor : 0;
             double medical    = drawing ? inp.medical     * Math.pow(1 + inp.medInflation, y) : 0;
@@ -12079,35 +12136,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 living  *= (1.0 - inp.survivorSpendCut);
                 medical *= SimInputs.SURVIVOR_MEDICAL_FACTOR;
             }
-            double tax        = taxThisYear(inp, y);
-            double totalSpend = drawing ? living + medical + tax : 0;
 
             double wdStartProration = firstDrawYear
                     ? (13.0 - inp.withdrawStartMonth) / 12.0 : 1.0;
-            // v1 2026-10-19 (PR-2): a first withdrawal year that starts after January
-            // counts only the months from the start month on, as the withdrawal
-            // already does and as the Pro PoS table now does.
-            if (firstDrawYear && inp.withdrawStartMonth > 1) {
-                int sm = inp.withdrawStartMonth;
-                double fA = inflAt(gkInflByYear, inp.baseYear, inp.annuityStream.startYear());
-                double fP = inflAt(gkInflByYear, inp.baseYear, inp.pensionStream.startYear());
-                double fM = inflAt(gkInflByYear, inp.baseYear, inp.militaryStream.startYear());
-                ann -= streamThisYear(inp.annuityStream, inp, calYear, inflFactor, fA)
-                        * (1.0 - fromStartShare(streamFirstMonth(inp.annuityStream, calYear), sm))
-                        + streamThisYear(inp.pensionStream, inp, calYear, inflFactor, fP)
-                        * (1.0 - fromStartShare(streamFirstMonth(inp.pensionStream, calYear), sm))
-                        + streamThisYear(inp.militaryStream, inp, calYear, inflFactor, fM)
-                        * (1.0 - fromStartShare(streamFirstMonth(inp.militaryStream, calYear), sm));
-                manSS   *= fromStartShare(ssFirstMonth(inp, calYear, true),  sm);
-                womanSS *= fromStartShare(ssFirstMonth(inp, calYear, false), sm);
-                guaranteed = manSS + womanSS + ann;
-                living  *= wdStartProration;
-                medical *= wdStartProration;
-                tax     *= wdStartProration;
-                totalSpend = living + medical + tax;
-            }
 
             String flags = "--";
+            double inflRaise = -1;   // v1 2026-10-19 (G4): the raise applied, -1 = none
+            boolean cprActive = calYear <= cprLastYear;   // v1 2026-10-19 (G9)
             if (!drawing) {
                 wdGK = 0;
             } else if (firstDrawYear) {
@@ -12115,23 +12150,31 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 flags = String.format("%.1f%%", inp.gkPreRate * 100);
                 gk.yr1Withdrawal = (int) wdGK;
             } else {
-                boolean applyInflation = true;
+                // v1 2026-10-19 (G8): the paper's Withdrawal Rule -- "there is no
+                // increase following a year where the portfolio's total return is
+                // negative", when the withdrawal rate is above the initial rate.
+                // The flag was PMR0 ("Portfolio Management Rule", which in the paper
+                // is the rule for which assets fund the withdrawal).
                 double currentWdPct = bal > 0 ? wdGK / bal : 0;
-                if (prevYearLoss && currentWdPct > initialWdRate) {
-                    applyInflation = false;
-                    flags = "PMR\u2070";
+                if (prevYearReturn < 0 && currentWdPct > initialWdRate) {
+                    flags = "WR\u2070";
+                } else {
+                    // v1 2026-10-19 (G4): "Withdrawals rose annually by the prior
+                    // year's inflation rate" -- it was this year's.
+                    wdGK *= (1 + prevYearInfl);
+                    inflRaise = prevYearInfl;
                 }
-                if (applyInflation) wdGK *= (1 + yearInfl);
 
                 // Conventional Guyton-Klinger mapping:
                 //   UPPER guardrail -> Capital Preservation Rule (CUT): if the current
                 //     withdrawal RATE has risen more than upper% ABOVE the initial rate
-                //     (portfolio shrank), cut the withdrawal 10%.
+                //     (portfolio shrank), cut the withdrawal 10%. Not in the last 15
+                //     years of the plan (G9).
                 //   LOWER guardrail -> Prosperity Rule (RAISE): if the current
                 //     withdrawal RATE has fallen more than lower% BELOW the initial rate
-                //     (portfolio grew), raise the withdrawal 10%.
+                //     (portfolio grew), raise the withdrawal 10%. No expiry.
                 double wdPctCheck = bal > 0 ? wdGK / bal : 0;
-                if (wdPctCheck > initialWdRate * (1 + inp.gkUpperGuardrail)) {
+                if (cprActive && wdPctCheck > initialWdRate * (1 + inp.gkUpperGuardrail)) {
                     wdGK *= 0.90;
                     flags = flags.equals("--") ? "CPR\u25bc" : flags + " + CPR\u25bc";
                 }
@@ -12152,8 +12195,91 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             double combRmd  = manRmd + womanRmd;
 
             int wdActual   = drawing ? (int)(wdGK * goGoMult) : 0;
+            // v1 2026-10-19 (G2): the SS bridge rides on top of the GK withdrawal, as on
+            // the Pro PoS tab, so the portfolio carries the cost of delaying a claim.
+            // It stays out of the guardrail tests above, which judge wdGK alone.
+            int bridgeThisYear = drawing ? (int) ssBridge[y] : 0;
+            wdActual      += bridgeThisYear;
             int rmdOverage = Math.max(0, (int) combRmd - wdActual);   // v1 2026-10-18 (P1): pre-withdrawal RMDs too
             double wdPct   = (drawing && bal > 0) ? wdActual / (double) bal * 100.0 : 0.0;
+            // v1 2026-10-18 (G7): the year's draw leaves Traditional FIRST, with the RMD
+            // as its floor; the rest comes from Roth. (Applied to gkTrad at the end.)
+            double gkTradDraw = Math.max(combRmd, Math.min(wdActual, gkTrad));
+
+            // v1 2026-10-19 (G1): Tax (est) from the Pro PoS tax engine, on this tab's
+            // own income -- the Traditional draw above, taxable Social Security and
+            // the taxable part of the streams -- with IRMAA on this tab's MAGI two
+            // years back. This tab has no Roth conversions and no Money Mkt reserve,
+            // so there is no conversion tax and no reserve interest. It used the flat
+            // escalator whatever the Computed tax setting. Flat mode is unchanged.
+            double tax = 0;
+            int taxableSSInt = 0, ordInt = 0, fedInt = 0, stateInt = 0, irmaaInt = 0;
+            int irmaaTierInt = 0, irmaaPeopleInt = 0, irmaaSrcInt = 0, magiInt = 0;
+            String bracketStr = "--";
+            if (drawing && inp.computedTax) {
+                double grossSS  = manSS + womanSS;   // full year (PR-2 scales below)
+                double ordinary = gkTradDraw + streamsTaxable(inp, calYear, inflFactor, fA, fP, fM);
+                TaxEngine.FilingStatus fsYear = filingFor(inp, calYear);
+                double magiNow  = TaxEngine.taxableSocialSecurity(grossSS, ordinary, inflFactor, fsYear) + ordinary;
+                int priorEntered = (y == 0) ? inp.priorMagi2 : (y == 1) ? inp.priorMagi1 : 0;
+                double magi2    = (y >= 2) ? gkMagi[y - 2] : (priorEntered > 0) ? priorEntered : magiNow;
+                irmaaSrcInt     = (y >= 2) ? 0 : (priorEntered > 0) ? 1 : 2;
+                TaxEngine.TaxResult tr = TaxEngine.compute(grossSS, ordinary, magi2,
+                        primary65(inp, calYear, manAge, womanAge), womanAge >= 65, inflFactor,
+                        TaxEngine.fedIndexFactor(inflFactor, y),
+                        TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, y),
+                        filingFor(inp, calYear - 2), irmaaEnrollees(inp, calYear, manAge, womanAge),
+                        fsYear, TaxEngine.stateProfile(inp.stateCode), calYear, gkTradDraw,
+                        streamsStateExempt(inp, calYear, inflFactor, fA, fP, fM),
+                        stateCtx(inp, calYear, manAge, womanAge, manSS, womanSS, gkTradDraw,
+                                nonExemptTaxable(inp.pensionStream, inp, calYear, inflFactor, fP),
+                                nonExemptTaxable(inp.annuityStream, inp, calYear, inflFactor, fA)));
+                tax            = tr.totalTax;
+                gkMagi[y]      = tr.magi;
+                magiInt        = (int) tr.magi;
+                taxableSSInt   = (int) tr.taxableSS;
+                ordInt         = (int) tr.ordinaryOther;
+                fedInt         = (int) tr.fedTax;
+                stateInt       = (int) tr.stateTax;
+                irmaaInt       = (int) tr.irmaaCost;
+                irmaaTierInt   = tr.irmaaTier;
+                irmaaPeopleInt = tr.irmaaEnrollees;
+                bracketStr     = tr.topBracket;
+            } else if (inp.computedTax) {
+                // A year before withdrawals: no tax shown (paid from outside the
+                // portfolio), but its MAGI feeds the IRMAA lookback, as on Pro PoS (P2).
+                double grossSS = manSS + womanSS;
+                double ordPre  = gkTradDraw + streamsTaxable(inp, calYear, inflFactor, fA, fP, fM);
+                gkMagi[y] = TaxEngine.taxableSocialSecurity(grossSS, ordPre, inflFactor,
+                        filingFor(inp, calYear)) + ordPre;
+            } else {
+                tax = taxThisYear(inp, y);   // flat escalator; 0 before withdrawals
+            }
+            double totalSpend = drawing ? living + medical + tax : 0;
+
+            // v1 2026-10-19 (PR-2): a first withdrawal year that starts after January
+            // counts only the months from the start month on, as the withdrawal
+            // already does and as the Pro PoS table now does. The tax was computed on
+            // the whole year above, so MAGI and IRMAA are unchanged (as on Pro PoS).
+            if (firstDrawYear && inp.withdrawStartMonth > 1) {
+                int sm = inp.withdrawStartMonth;
+                ann -= streamThisYear(inp.annuityStream, inp, calYear, inflFactor, fA)
+                        * (1.0 - fromStartShare(streamFirstMonth(inp.annuityStream, calYear), sm))
+                        + streamThisYear(inp.pensionStream, inp, calYear, inflFactor, fP)
+                        * (1.0 - fromStartShare(streamFirstMonth(inp.pensionStream, calYear), sm))
+                        + streamThisYear(inp.militaryStream, inp, calYear, inflFactor, fM)
+                        * (1.0 - fromStartShare(streamFirstMonth(inp.militaryStream, calYear), sm));
+                manSS   *= fromStartShare(ssFirstMonth(inp, calYear, true),  sm);
+                womanSS *= fromStartShare(ssFirstMonth(inp, calYear, false), sm);
+                guaranteed = manSS + womanSS + ann;
+                living  *= wdStartProration;
+                medical *= wdStartProration;
+                tax     *= wdStartProration;
+                fedInt   = (int) (fedInt   * wdStartProration);
+                stateInt = (int) (stateInt * wdStartProration);
+                irmaaInt = (int) (irmaaInt * wdStartProration);
+                totalSpend = living + medical + tax;
+            }
 
             double totalIncome = guaranteed + wdActual;
             double surplus     = totalIncome - totalSpend;
@@ -12182,7 +12308,21 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     && inp.slowGoDuration > 0
                     && yFromStartGk >= inp.goGoDuration
                     && yFromStartGk < inp.goGoDuration + inp.slowGoDuration;
-            row.preAnchor = false;
+            // v1 2026-10-19: what the tooltips show -- the multiplier and SS bridge
+            // behind Actual wd (G2), the tax breakdown (G1), the inflation raise (G4)
+            // and whether the cut rule still applies (G9).
+            row.spendMult   = goGoMult;
+            row.ssBridge    = bridgeThisYear;
+            row.tradDraw    = (int) gkTradDraw;
+            row.taxComputed = drawing && inp.computedTax;
+            row.magi        = magiInt;      row.taxableSS   = taxableSSInt;
+            row.ordinaryTax = ordInt;       row.topBracket  = bracketStr;
+            row.fedTax      = fedInt;       row.stateTax    = stateInt;
+            row.irmaa       = irmaaInt;     row.irmaaTier   = irmaaTierInt;
+            row.irmaaPeople = irmaaPeopleInt; row.irmaaSrc  = irmaaSrcInt;
+            row.irmaaJoint  = filingFor(inp, calYear - 2) == TaxEngine.FilingStatus.MFJ;
+            row.inflRaise   = inflRaise;
+            row.cprActive   = cprActive;
 
             // v1 2026-10-12: the withdrawal leaves at the START of the year, as in
             // the Pro PoS engine; only the remainder earns the year's return.
@@ -12191,18 +12331,19 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             // v6: true real change -- each balance deflated by ITS OWN year's
             // price level, so the column agrees with the balance column in
             // real-dollar mode instead of contradicting it.
+            // v1 2026-10-19 (G4): nextInflF is next year's start price level exactly.
             double nextInflF = inflFactor * (1 + yearInfl);
             gk.finalInflFactor = nextInflF;   // v1 2026-10-19 (FB1): the last one is end-of-horizon
             row.balDeltaReal = (int) ((nextInflF > 0 ? nextBal / nextInflF : 0)
                     - (inflFactor > 0 ? bal / inflFactor : 0));
-            prevYearLoss   = (nextBal < bal);
+            prevYearReturn = yearReturn;   // G8
+            prevYearInfl   = yearInfl;     // G4
             bal            = nextBal;
+            inflFactor     = nextInflF;    // G4
             gk.rows.add(row);
 
-            // v1 2026-10-18 (G7): the year's GK withdrawal leaves Traditional FIRST,
-            // with the RMD as its floor, at the start of the year (the Pro PoS
-            // order); the rest grows at the year's return.
-            double gkTradDraw = Math.max(combRmd, Math.min(wdActual, gkTrad));
+            // v1 2026-10-18 (G7): the draw left Traditional at the start of the year
+            // (the Pro PoS order); the rest grows at the year's return.
             gkTrad = Math.max(0, gkTrad - gkTradDraw) * (1 + yearReturn);
         }
 
@@ -12225,7 +12366,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 "Rules (raw)",                                                // 6 hidden
                 "Rule flags",                                                 // 7 visible
                 "User SS", "Spouse SS", "Annuity/Pen/Mil", "Fixed Inc",      // 8 9 10 11 (v11)
-                "Living Exp", "Medical", "Tax (est) *",                      // 12 13 14 (v6: * legacy)
+                "Living Exp", "Medical", "Tax (est)",                        // 12 13 14 (v1 2026-10-19 G1: computed, no "*")
                 "Total spend", "Total income", "Surplus/gap",                // 15 16 17
                 "Infl factor",                                                // 18
                 "User RMD", "Spouse RMD", "Combined RMD", "RMD overage",        // 19 20 21 22 (v1 2026-10-19 RN1: was "-> Roth/MM")
@@ -12256,39 +12397,92 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 GkRow gr = rows.get(row);
 
                 if (col == 7) { // Rule flags
+                    // v1 2026-10-19 (G6/G8/G9): the pre-anchor and "GK start" texts are
+                    // gone (neither state exists any more), the inflation-skip rule is
+                    // the paper's Withdrawal Rule, the Prosperity Rule text now matches
+                    // its flag, and "--" years explain the raise.
                     String raw = gr.ruleFlags;
-                    if (raw == null || raw.equals("--")) return null;
+                    if (raw == null || !gr.drawing) return null;
                     StringBuilder sb = new StringBuilder("<html>");
-                    // Pre-anchor: flags look like "4.0%" -- contains '%' but not a GK rule keyword
-                    if (raw.endsWith("%") && !raw.contains("CPR") && !raw.contains("PR[^]") && !raw.contains("PMR")) {
-                        sb.append("<b>Pre-anchor phase (").append(raw).append(" of current balance)</b><br>")
-                                .append("All income sources are not yet fully active (SS or annuity<br>")
-                                .append("start-month proration still in effect).<br>")
-                                .append("Using the user-defined initial rate against the current portfolio<br>")
-                                .append("balance as a bridge. Set via 'GK only -- pre-anchor initial wd rate'.<br>")
-                                .append("GK guardrail rules engage at the anchor year when all income<br>")
-                                .append("streams are paying a full 12-month amount.");
-                    } else if (raw.equals("GK start")) {
-                        sb.append("<b>GK rules start -- anchor year</b><br>")
-                                .append("This is the first year all income sources are paying a full<br>")
-                                .append("12-month amount (no start-month proration on any stream).<br>")
-                                .append("The net spending need this year sets the GK initial rate<br>")
-                                .append("used as the guardrail benchmark for all future years.");
+                    if (raw.endsWith("%")) {
+                        sb.append("<b>First withdrawal year: ").append(raw).append(" of the portfolio balance</b><br>")
+                                .append("The GK withdrawal starts at <i>GK only -- initial wd rate</i><br>")
+                                .append("(Guyton-Klinger inputs card) times this year's starting balance,<br>")
+                                .append("prorated by the Withdrawal start month. That rate is the benchmark<br>")
+                                .append("the guardrails compare against in every later year.");
                     } else {
-                        sb.append("<b>Guyton-Klinger rules applied this year:</b><br>");
-                        if (raw.contains("PMR")) sb.append("<br><b>PMR0 -- Portfolio Management Rule:</b><br>")
-                                .append("Inflation adjustment was <i>skipped</i> because the portfolio<br>")
-                                .append("lost money last year AND the withdrawal rate exceeds the initial rate.<br>")
-                                .append("Result: withdrawal held flat (no inflation raise).<br>");
+                        sb.append(raw.equals("--") ? "<b>No guardrail rule fired this year.</b><br>"
+                                : "<b>Guyton-Klinger rules applied this year:</b><br>");
+                        if (gr.inflRaise >= 0) sb.append("The withdrawal rose by LAST year's inflation (")
+                                .append(String.format("%.2f%%", gr.inflRaise * 100)).append(").<br>");
+                        if (raw.contains("WR")) sb.append("<br><b>WR0 -- Withdrawal Rule:</b><br>")
+                                .append("The inflation raise was <i>skipped</i>: last year's portfolio<br>")
+                                .append("total return was negative AND the withdrawal rate is above the<br>")
+                                .append("initial rate. The withdrawal is held flat.<br>");
                         if (raw.contains("CPR")) sb.append("<br><b>CPR[v] -- Capital Preservation Rule:</b><br>")
                                 .append("Withdrawal rate exceeded the upper guardrail threshold.<br>")
                                 .append("Withdrawal was reduced by 10% to protect capital.<br>");
-                        if (raw.contains("PR[^]")) sb.append("<br><b>PR[^] -- Prosperity Rule:</b><br>")
+                        if (raw.contains("PR\u25b2")) sb.append("<br><b>PR[^] -- Prosperity Rule:</b><br>")
                                 .append("Withdrawal rate fell below the lower guardrail threshold.<br>")
                                 .append("Withdrawal was increased by 10% to share in portfolio growth.<br>");
+                        if (!gr.cprActive) sb.append("<br>The Capital Preservation Rule (cut) no longer applies:<br>")
+                                .append("it expires 15 years before the end of the plan, as in<br>")
+                                .append("Guyton and Klinger (2006).<br>");
                     }
                     sb.append("</html>");
                     return sb.toString();
+                }
+                if (col == 4 && gr.drawing) { // Actual wd -- v1 2026-10-19 (G2)
+                    double d = showRealDollars ? gr.inflFactor : 1.0;
+                    String tier = gr.goGoActive ? "go-go" : gr.slowGoActive ? "slow-go" : "no-go";
+                    StringBuilder sb = new StringBuilder("<html><b>Actual wd -- what leaves the portfolio</b><br>")
+                            .append("&nbsp;&nbsp;GK withdrawal:&nbsp;").append(CURRENCY.format(Math.round(gr.wdGK / d))).append("<br>")
+                            .append("&nbsp;&nbsp;x ").append(tier).append(" multiplier:&nbsp;")
+                            .append(String.format("%.3f", gr.spendMult)).append("<br>");
+                    if (gr.ssBridge > 0) sb.append("&nbsp;&nbsp;+ SS bridge:&nbsp;")
+                            .append(CURRENCY.format(Math.round(gr.ssBridge / d))).append("<br>");
+                    sb.append("&nbsp;&nbsp;= Actual wd:&nbsp;<b>").append(CURRENCY.format(Math.round(gr.wdActual / d)))
+                            .append("</b>");
+                    if (gr.ssBridge > 0) sb.append("<br><br>The SS bridge replaces Social Security that has not started<br>")
+                            .append("yet (SS bridge mode, Social Security card), as on the Pro PoS<br>")
+                            .append("tab. It is left out of the guardrail tests, which judge the GK<br>")
+                            .append("withdrawal alone; the portfolio still pays for it.");
+                    return sb.append("</html>").toString();
+                }
+                if (col == 14) { // Tax (est) -- v1 2026-10-19 (G1)
+                    if (!gr.drawing)
+                        return "<html><b>Tax (est): not modeled before withdrawals start</b><br>"
+                                + "Until the Withdrawal start year (Portfolio &amp; Simulation card),<br>"
+                                + "spending, income taxes and the IRMAA surcharge are assumed to be<br>"
+                                + "paid from outside the portfolio. \"--\" means not modeled, not $0<br>"
+                                + "owed. See Assumptions &amp; Methods, section 3.</html>";
+                    double d = showRealDollars ? gr.inflFactor : 1.0;
+                    if (!gr.taxComputed)
+                        return "<html><b>Tax (est) -- flat escalator</b><br>"
+                                + "Computed tax (vs flat) is off (Tax Engine card), so this is the<br>"
+                                + "Base tax grown at Tax inflation, as on the Pro PoS tab:<br>"
+                                + "baseTax * (1+taxInfl)^year.</html>";
+                    String src = gr.irmaaSrc == 1 ? " (lookback: the MAGI you entered)"
+                            : gr.irmaaSrc == 2 ? " (lookback: estimated from this year)" : "";
+                    return "<html><b>Tax (est) -- federal + state + IRMAA (GK tab)</b><br>"
+                            + "The Pro PoS tax engine on this tab's own income:<br><br>"
+                            + "&nbsp;&nbsp;Taxable Social Security:&nbsp;" + CURRENCY.format(Math.round(gr.taxableSS / d)) + "<br>"
+                            + "&nbsp;&nbsp;Ordinary income (Traditional draw + streams):&nbsp;"
+                            + CURRENCY.format(Math.round(gr.ordinaryTax / d)) + "<br>"
+                            + "&nbsp;&nbsp;&nbsp;&nbsp;<i>Traditional draw (RMD is the floor):&nbsp;"
+                            + CURRENCY.format(Math.round(gr.tradDraw / d)) + "</i><br>"
+                            + "&nbsp;&nbsp;Top marginal bracket:&nbsp;<b>" + gr.topBracket + "</b><br><br>"
+                            + "&nbsp;&nbsp;Federal tax:&nbsp;" + CURRENCY.format(Math.round(gr.fedTax / d)) + "<br>"
+                            + "&nbsp;&nbsp;" + stateTaxLabel(gr.calYear) + ":&nbsp;" + CURRENCY.format(Math.round(gr.stateTax / d)) + "<br>"
+                            + "&nbsp;&nbsp;IRMAA surcharge:&nbsp;" + CURRENCY.format(Math.round(gr.irmaa / d))
+                            + " (Tier " + gr.irmaaTier + ", " + gr.irmaaPeople + " on Medicare, "
+                            + (gr.irmaaJoint ? "joint" : "single") + " return)" + src + "<br>"
+                            + "&nbsp;&nbsp;= Total:&nbsp;<b>" + CURRENCY.format(Math.round(gr.tax / d)) + "</b><br>"
+                            + "&nbsp;&nbsp;MAGI this year:&nbsp;" + CURRENCY.format(Math.round(gr.magi / d))
+                            + " (sets the IRMAA tier two years later)<br><br>"
+                            + "The part of Actual wd above the Traditional draw comes from Roth,<br>"
+                            + "tax-free. This tab makes no Roth conversions and keeps no Money<br>"
+                            + "Mkt reserve, so its tax differs from the Pro PoS figure.</html>";
                 }
                 if (col == 11) { // Fixed Inc
                     double d = showRealDollars ? gr.inflFactor : 1.0;
@@ -12309,8 +12503,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             "<html><b>Living Exp = base input inflated to this year</b><br>"
                                     + "&nbsp;&nbsp;This year's value:&nbsp;<b>%s</b><br>"
                                     + "&nbsp;&nbsp;Inflation factor applied:&nbsp;%.3f<br><br>"
-                                    + "Source: your Living Expense input, scaled by the median<br>"
-                                    + "cumulative inflation factor for this year.</html>",
+                                    + "Source: your Living Expense input, scaled by this tab's<br>"
+                                    + "inflation factor for this year (the Infl factor column: the<br>"
+                                    + "earlier years' inflation compounded).</html>",   // v1 2026-10-19 (G4): was "median"
                             CURRENCY.format(Math.round(gr.living / d)),
                             gr.inflFactor);
                 }
@@ -12332,6 +12527,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     return String.format(
                             "<html><b>Total income = Actual wd + Fixed Inc</b><br>"
                                     + "&nbsp;&nbsp;Actual wd (portfolio draw):&nbsp;%s<br>"
+                                    + (gr.ssBridge > 0   // v1 2026-10-19 (G2)
+                                    ? "&nbsp;&nbsp;&nbsp;&nbsp;<i>incl. SS bridge:&nbsp;"
+                                    + CURRENCY.format(Math.round(gr.ssBridge / d)) + "</i><br>"
+                                    : "")
                                     + "&nbsp;&nbsp;Fixed Inc (guaranteed):&nbsp;&nbsp;&nbsp;&nbsp;%s<br>"
                                     + "&nbsp;&nbsp;= Total income:&nbsp;<b>%s</b></html>",
                             CURRENCY.format(Math.round(gr.wdActual / d)),
@@ -12360,7 +12559,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "Overage (" + CURRENCY.format(gr.rmdOverage) + ") is not spent.<br>"
                             + "The GK portfolio balance is not reduced by RMDs: the overage stays<br>"
                             + "invested in the portfolio and earns the portfolio's return. This tab<br>"
-                            + "has no separate Money Mkt reserve (Pro PoS does).</html>";
+                            + "has no separate Money Mkt reserve (Pro PoS does).<br>"
+                            // v1 2026-10-19 (G1)
+                            + "The whole RMD, overage included, is taxable income in Tax (est).</html>";
                 }
                 if (col == 23) { // Bal Chg tooltip
                     double d = showRealDollars ? gr.inflFactor : 1.0;
@@ -12409,23 +12610,50 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             @Override public void mouseMoved(MouseEvent e) {
                 int col = tblGk.convertColumnIndexToModel(gkHeader.columnAtPoint(e.getPoint()));
                 switch (col) {
+                    // v1 2026-10-19 (G6/G8/G9/G4): no pre-anchor or anchor phase; the
+                    // paper's Withdrawal Rule; the cut rule's 15-year expiry.
                     case 3 -> gkHeader.setToolTipText(
                             "<html><b>GK withdrawal</b><br>"
-                                    + "Pre-anchor years: user-entered rate x current balance.<br>"
-                                    + "Anchor year: net spending need (spending minus guaranteed income).<br>"
-                                    + "Subsequent years: prior withdrawal, inflation-adjusted, then<br>"
-                                    + "modified by CPR, PR, and PMR rules as needed.<br><br>"
-                                    + "Guardrail comparisons (CPR[v] / PR[^]) use the user-entered<br>"
-                                    + "pre-anchor rate as the initial-rate benchmark -- not the<br>"
-                                    + "computed net-need / portfolio ratio.</html>");
+                                    + "First withdrawal year: the initial rate x the starting balance,<br>"
+                                    + "prorated by the Withdrawal start month.<br>"
+                                    + "Later years: last year's GK withdrawal, raised by LAST year's<br>"
+                                    + "inflation (skipped under the Withdrawal Rule, WR0), then cut 10%<br>"
+                                    + "(CPR[v]) or raised 10% (PR[^]) when the withdrawal rate crosses<br>"
+                                    + "a guardrail.<br><br>"
+                                    + "The guardrails compare against the initial rate (<i>GK only --<br>"
+                                    + "initial wd rate</i>, Guyton-Klinger inputs card). This column is<br>"
+                                    + "before the go-go / slow-go multiplier and the SS bridge (see<br>"
+                                    + "Actual wd).</html>");
+                    case 4 -> gkHeader.setToolTipText(   // v1 2026-10-19 (G2)
+                            "<html><b>Actual wd -- what leaves the portfolio</b><br>"
+                                    + "= GK withdrawal x the go-go / slow-go / no-go multiplier<br>"
+                                    + "&nbsp;&nbsp;+ the SS bridge, when one applies (SS bridge mode, Social<br>"
+                                    + "&nbsp;&nbsp;Security card), as on the Pro PoS tab.<br><br>"
+                                    + "The guardrails judge the GK withdrawal alone, so neither the<br>"
+                                    + "multiplier nor the bridge triggers a cut or raise; the bridge<br>"
+                                    + "still lowers the balance. Hover a cell for the breakdown.</html>");
                     case 7 -> gkHeader.setToolTipText(
                             "<html><b>Rule flags</b><br>"
-                                    + "<b>X.X%</b> = Year 1 of drawing: gkPreRate x current balance used.<br>"
-                                    + "&nbsp;&nbsp;Set via 'GK only -- pre-anchor initial wd rate' in the input panel.<br>"
-                                    + "<b>--</b> = GK rules phase, no rule triggered; normal inflation adjustment.<br>"
-                                    + "<b>PMR0</b> = Portfolio Management Rule: inflation raise <i>skipped</i>.<br>"
-                                    + "<b>CPR[v]</b> = Capital Preservation Rule: withdrawal cut 10%.<br>"
-                                    + "<b>PR[^]</b> = Prosperity Rule: withdrawal raised 10%.</html>");
+                                    + "<b>X.X%</b> = first withdrawal year: the initial rate x the balance.<br>"
+                                    + "&nbsp;&nbsp;Set by <i>GK only -- initial wd rate</i> on the Guyton-Klinger inputs card.<br>"
+                                    + "<b>--</b> = no rule fired; the withdrawal rose by last year's inflation.<br>"
+                                    + "<b>WR0</b> = Withdrawal Rule: the inflation raise was <i>skipped</i> -- last<br>"
+                                    + "&nbsp;&nbsp;year's portfolio return was negative and the withdrawal rate is<br>"
+                                    + "&nbsp;&nbsp;above the initial rate.<br>"
+                                    + "<b>CPR[v]</b> = Capital Preservation Rule: withdrawal cut 10%. It expires<br>"
+                                    + "&nbsp;&nbsp;15 years before the end of the plan.<br>"
+                                    + "<b>PR[^]</b> = Prosperity Rule: withdrawal raised 10%. No expiry.<br><br>"
+                                    + "Rules from Guyton and Klinger (2006), Journal of Financial Planning.<br>"
+                                    + "See Assumptions &amp; Methods, section 8.</html>");
+                    case 18 -> gkHeader.setToolTipText(   // v1 2026-10-19 (G4)
+                            "<html><b>Infl factor -- price level at the START of the year</b><br>"
+                                    + "1.000 in the simulation start year; each later year multiplies in<br>"
+                                    + "the PREVIOUS year's inflation, as on the Pro PoS tab. (Before<br>"
+                                    + "2026-10-19 it included the current year's inflation, one year early.)<br>"
+                                    + "With a historical sequence (Stress Test), that is the sequence's<br>"
+                                    + "inflation; otherwise the mean inflation input every year.<br><br>"
+                                    + "Living Exp, an inflation-tracking SS COLA and the GK withdrawal's<br>"
+                                    + "yearly raise all follow it. Real-dollar mode divides by it.</html>");
                     case 11 -> gkHeader.setToolTipText(
                             "<html><b>Fixed Inc -- guaranteed income (fed by User SS + Spouse SS + Annuity/Pen/Mil)</b><br>"
                                     + "= User SS + Spouse SS + Annuity for the year.<br>"
@@ -12433,9 +12661,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                     + "three source values that add up to that year's figure.</html>");
                     case 12 -> gkHeader.setToolTipText(
                             "<html><b>Living Exp -- core living budget (fed by your Living Exp input)</b><br>"
-                                    + "= your base Living Expense input, inflated by the median cumulative<br>"
-                                    + "inflation factor for that year. Hover a cell to see the base<br>"
-                                    + "input and the inflation factor applied.</html>");
+                                    + "= your base Living Expense input, inflated by this tab's inflation<br>"
+                                    + "factor for that year (the Infl factor column). Hover a cell to see<br>"
+                                    + "the base input and the inflation factor applied.</html>");   // v1 2026-10-19 (G4): was "median"
                     case 15 -> gkHeader.setToolTipText(
                             "<html><b>Total spend -- committed budget (fed by Living Exp + Medical + Tax)</b><br>"
                                     + "= Living Exp + Medical + Tax (est).<br>"
@@ -12443,7 +12671,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                     + "to that year's total.</html>");
                     case 16 -> gkHeader.setToolTipText(
                             "<html><b>Total income -- money available (fed by Actual wd + Fixed Inc)</b><br>"
-                                    + "= Actual wd (GK portfolio draw) + Fixed Inc (guaranteed income).<br>"
+                                    + "= Actual wd (GK portfolio draw, SS bridge included) + Fixed Inc<br>"
+                                    + "(guaranteed income).<br>"
                                     + "Hover a cell to see the two source values that add up<br>"
                                     + "to that year's total.</html>");
                     case 17 -> gkHeader.setToolTipText(
@@ -12453,7 +12682,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                     + "expenses that is available for spending.</html>");
                     case 23 -> gkHeader.setToolTipText(
                             "<html><b>Portfolio Chg -- portfolio balance change</b><br>"
-                                    + "= market growth - GK spending withdrawal.<br>"
+                                    + "= market growth - Actual wd (SS bridge included).<br>"
                                     + "Green = grew. Red = shrank.</html>");
                     case 19, 20, 21 -> gkHeader.setToolTipText(
                             "<html><b>RMD (GK tab)</b><br>"
@@ -12463,28 +12692,31 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                     + "over) and it follows the survivor's age. Each year's GK withdrawal<br>"
                                     + "comes out of Traditional first, with the RMD as its floor.<br><br>"
                                     + "Still higher than the Pro PoS RMDs: this tab makes <b>no Roth<br>"
-                                    + "conversions</b>, so Traditional lasts longer. Display only -- the<br>"
-                                    + "GK withdrawal and balance do not use these figures.</html>");
+                                    + "conversions</b>, so Traditional lasts longer. The GK withdrawal and<br>"
+                                    + "balance do not use these figures; the RMD is the floor of the<br>"
+                                    + "taxable Traditional draw in Tax (est) (since 2026-10-19).</html>");
                     case 22 -> gkHeader.setToolTipText(
                             "<html><b>RMD overage (GK tab)</b><br>"
                                     + "The part of the forced distribution larger than that year's GK<br>"
                                     + "spending, from the RMD columns (same rule as Pro PoS since<br>"
                                     + "2026-10-18).<br><br>"
-                                    + "Display only -- it does not move money in this tab.<br>"
+                                    + "It does not move money in this tab: the overage stays invested.<br>"
+                                    + "It is still taxed -- the whole RMD is income in Tax (est).<br>"
                                     + "<b>Use the Pro PoS Money Mkt column for planning.</b></html>");
                     case 14 -> gkHeader.setToolTipText(
-                            "<html><b>Tax (est) -- legacy flat basis (GK tab)</b><br>"
-                                    + "This tab always uses the <b>flat</b> tax model (Base tax yr 1, grown at<br>"
-                                    + "Tax inflation), regardless of whether <i>Use computed tax engine</i> is<br>"
-                                    + "checked. It does not compute federal brackets, Arizona tax, Social<br>"
-                                    + "Security taxability, IRMAA, or the Single-filer switch after a death<br>"
-                                    + "event.<br><br>"
-                                    + "Consequence: this column stays roughly <b>constant in real terms for<br>"
-                                    + "the whole horizon</b> -- it will not fall when Traditional is exhausted,<br>"
-                                    + "and will not rise at the widow's-tax transition.<br><br>"
-                                    + "<b>Use the Pro PoS Tax column for planning.</b> Retained so the<br>"
-                                    + "Guyton-Klinger methodology stays self-contained and comparable to<br>"
-                                    + "its published form.</html>");
+                            // v1 2026-10-19 (G1): computed, as on Pro PoS; it was always flat.
+                            "<html><b>Tax (est) -- computed federal + state + IRMAA (GK tab)</b><br>"
+                                    + "Since 2026-10-19 this tab uses the Pro PoS tax engine, on its own<br>"
+                                    + "income: taxable Social Security (provisional-income formula), the<br>"
+                                    + "Traditional part of Actual wd (the RMD is its floor; the rest comes<br>"
+                                    + "from Roth, tax-free) and the taxable part of the income streams.<br>"
+                                    + "Federal brackets, the selected state, the Single-filer switch after a<br>"
+                                    + "death, and IRMAA on this tab's own MAGI from two years earlier.<br><br>"
+                                    + "This tab makes no Roth conversions and keeps no Money Mkt reserve,<br>"
+                                    + "so there is no conversion tax and no reserve interest, and the whole<br>"
+                                    + "RMD is taxed. With <i>Computed tax (vs flat)</i> off (Tax Engine card)<br>"
+                                    + "it uses the flat Base tax escalator, as Pro PoS does. No tax is shown<br>"
+                                    + "before withdrawals start. Hover a cell for the breakdown.</html>");
                     default -> gkHeader.setToolTipText(null);
                 }
             }
@@ -12499,15 +12731,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             // v12 2026-10-07: slow-go tier, the same paler greens as the Pro PoS table.
             private final Color SLOWGO_BG    = new Color(243, 250, 246);
             private final Color SLOWGO_WD_BG = new Color(214, 240, 226);
-            private final Color PMR_BG     = new Color(255, 235, 185);  // gold -- freeze
-            private final Color PMR_FG     = new Color(120, 70, 0);
+            private final Color WR_BG      = new Color(255, 235, 185);  // gold -- freeze
+            private final Color WR_FG      = new Color(120, 70, 0);
             private final Color CPR_BG     = new Color(255, 210, 210);  // red -- cut
             private final Color CPR_FG     = new Color(150, 30, 30);
             private final Color PR_BG      = new Color(210, 240, 210);  // green -- raise
             private final Color PR_FG      = new Color(30, 110, 30);
-            private final Color BENGEN_BG  = new Color(230, 222, 255);  // lavender -- Bengen phase
-            private final Color BENGEN_FG  = new Color(70, 40, 140);
 
+            // v1 2026-10-19 (G6): the pre-anchor (lavender) and "GK start" (blue)
+            // branches are gone -- neither state is ever produced. (G8): the Prosperity
+            // Rule test matches its flag; it looked for "PR[^]" and never colored.
             @Override public Component getTableCellRendererComponent(
                     JTable t, Object v, boolean sel, boolean foc, int row, int col) {
                 Component c = super.getTableCellRendererComponent(t, v, sel, foc, row, col);
@@ -12515,30 +12748,24 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     List<GkRow> rows = lastResults.gkResults.rows;
                     boolean goGo      = row < rows.size() && rows.get(row).goGoActive;
                     GkRow gr          = row < rows.size() ? rows.get(row) : null;
-                    boolean preAnchor = gr != null && gr.preAnchor;
                     boolean slowGo    = gr != null && gr.slowGoActive;   // v12 2026-10-07
 
-                    Color defaultBg = preAnchor ? BENGEN_BG
-                            : goGo ? GOGO_BG
+                    Color defaultBg = goGo ? GOGO_BG
                             : slowGo ? SLOWGO_BG
                             : (row % 2 == 0 ? Color.WHITE : new Color(248, 248, 245));
                     c.setBackground(defaultBg);
-                    c.setForeground(preAnchor ? BENGEN_FG : Color.BLACK);
+                    c.setForeground(Color.BLACK);
 
                     String flags = gr != null ? (gr.ruleFlags != null ? gr.ruleFlags : "--") : "--";
 
-                    if ((col == 3 || col == 4) && goGo && !preAnchor) {
+                    if ((col == 3 || col == 4) && goGo) {
                         c.setBackground(GOGO_WD_BG); c.setForeground(new Color(0, 90, 50));
-                    } else if ((col == 3 || col == 4) && goGo && preAnchor) {
-                        c.setBackground(new Color(200, 190, 240)); c.setForeground(new Color(60, 30, 120));
-                    } else if ((col == 3 || col == 4) && slowGo && !preAnchor) {   // v12 2026-10-07
+                    } else if ((col == 3 || col == 4) && slowGo) {   // v12 2026-10-07
                         c.setBackground(SLOWGO_WD_BG); c.setForeground(new Color(0, 80, 60));
                     } else if (col == 7) {
-                        if      (preAnchor)               { c.setBackground(BENGEN_BG); c.setForeground(BENGEN_FG); }
-                        else if (flags.contains("CPR"))   { c.setBackground(CPR_BG);    c.setForeground(CPR_FG); }
-                        else if (flags.contains("PR[^]"))   { c.setBackground(PR_BG);     c.setForeground(PR_FG); }
-                        else if (flags.contains("PMR"))   { c.setBackground(PMR_BG);    c.setForeground(PMR_FG); }
-                        else if (flags.equals("GK start")){ c.setBackground(new Color(220,235,255)); c.setForeground(new Color(24,95,165)); }
+                        if      (flags.contains("CPR"))      { c.setBackground(CPR_BG); c.setForeground(CPR_FG); }
+                        else if (flags.contains("PR\u25b2")) { c.setBackground(PR_BG);  c.setForeground(PR_FG); }
+                        else if (flags.contains("WR"))       { c.setBackground(WR_BG);  c.setForeground(WR_FG); }
                     } else if ((col == 21 || col == 22) && gr != null && gr.rmdOverage > 0) {
                         c.setBackground(new Color(255, 200, 120));
                         c.setForeground(new Color(140, 60, 0));
@@ -12554,10 +12781,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         }
                     } else if (col == 17) {
                         String s = v == null ? "" : v.toString();
-                        if (!preAnchor) c.setForeground(s.startsWith("-") ? new Color(180,30,30) : new Color(59,109,17));
+                        c.setForeground(s.startsWith("-") ? new Color(180,30,30) : new Color(59,109,17));
                     } else if (col == 23) {
                         String s = v == null ? "" : v.toString();
-                        if (!preAnchor) c.setForeground(s.startsWith("-") ? new Color(180,30,30) : new Color(59,109,17));
+                        c.setForeground(s.startsWith("-") ? new Color(180,30,30) : new Color(59,109,17));
                     }
                 }
                 ((JLabel) c).setHorizontalAlignment(col <= 1 ? LEFT : RIGHT);
@@ -12571,24 +12798,22 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         lblGkFinalBal = mkMetricLabel();
         JPanel gkMetrics = new JPanel(new GridLayout(1, 3, 8, 0));
         gkMetrics.setBackground(new Color(245, 245, 242));
-        gkMetrics.add(wrapMetric(lblGkInitWd,   "GK anchor withdrawal",  "carried forward from pre-anchor at GK rules start"));
+        // v1 2026-10-19 (G6): no pre-anchor phase or anchor year any more.
+        gkMetrics.add(wrapMetric(lblGkInitWd,   "GK first-year withdrawal", "initial rate x balance, first withdrawal year"));
         gkMetrics.add(wrapMetric(lblGkInitRate,  "GK guardrail anchor",   "user-entered initial rate (CPR/PR benchmark)"));
         gkMetrics.add(wrapMetric(lblGkFinalBal,  "Final portfolio bal",   "end of horizon (mean return)"));
 
         // Legend bar
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 3));
         legend.setBackground(new Color(245, 245, 242));
-        legend.add(gkLegendChip(new Color(230, 222, 255), new Color(70, 40, 140),  "Year 1 initial rate (gkPreRate x bal)"));
-        legend.add(gkLegendChip(new Color(220, 235, 255), new Color(24, 95, 165),  "GK rules start"));
+        // v1 2026-10-19: the lavender "Year 1 initial rate" and blue "GK rules start"
+        // chips named colors no cell ever gets (G6); "* legacy basis" went with the
+        // flat-only Tax (est) (G1); PMR0 is now the paper's Withdrawal Rule (G8).
         legend.add(gkLegendChip(new Color(180, 230, 205), new Color(0, 90, 50),    "Go-go years"));
-        legend.add(gkLegendChip(new Color(255, 235, 185), new Color(120, 70, 0),   "PMR0 -- inflation frozen"));
+        legend.add(gkLegendChip(new Color(255, 235, 185), new Color(120, 70, 0),   "WR0 -- inflation raise skipped"));
         legend.add(gkLegendChip(new Color(255, 210, 210), new Color(150, 30, 30),  "CPR[v] -- cut 10%"));
         legend.add(gkLegendChip(new Color(210, 240, 210), new Color(30, 110, 30),  "PR[^]  -- raised 10%"));
         legend.add(gkLegendChip(new Color(255, 200, 120), new Color(140, 60, 0),   "RMD overage"));
-        // v6: flag the columns that are still computed on the pre-v6 basis
-        // (v1 2026-10-18: only Tax (est) now; the RMD columns left it).
-        legend.add(gkLegendChip(new Color(232, 232, 232), new Color(90, 90, 90),
-                "* legacy basis -- see tooltips"));
 
         JPanel topGk = new JPanel(new BorderLayout(0, 4));
         topGk.setBackground(new Color(245, 245, 242));
@@ -13029,18 +13254,29 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         int  calYear, manAge, womanAge;
         int  balance;
         int  wdGK;            // GK-computed withdrawal (pre-go-go)
-        int  wdActual;        // wdGK ? go-go multiplier
+        int  wdActual;        // wdGK x spending multiplier + SS bridge (v1 2026-10-19, G2)
         double wdPct;
-        String ruleFlags;     // "X.X%", "--", "PMR0", "CPR[v]", "PR[^]", combinations
+        String ruleFlags;     // "X.X%", "--", "WR0", "CPR[v]", "PR[^]", combinations
         int  manSS, womanSS, annuity, guaranteed;
         int  living, medical, tax, totalSpend, totalIncome, surplus;
         double inflFactor;
         int  manRmd, womanRmd, combRmd, rmdOverage;
         int  investmentGrowth, balDelta;
         int  balDeltaReal;          // v6: true real-dollar change (see EnhRow)
-        boolean drawing, goGoActive, preAnchor;
+        boolean drawing, goGoActive;
         boolean slowGoActive;       // v12 2026-10-07: middle spending tier, after go-go
         double startShare = 1.0;    // v1 2026-10-19 (PR-2): share of the year this row covers
+        // v1 2026-10-19: tooltip detail.
+        double spendMult = 1.0;     // go-go / slow-go / no-go multiplier (G2)
+        int    ssBridge;            // SS bridge inside wdActual (G2)
+        int    tradDraw;            // Traditional part of wdActual, RMD floor (G1)
+        boolean taxComputed;        // tax from the computed engine (G1)
+        int    magi, taxableSS, ordinaryTax, fedTax, stateTax, irmaa;   // G1
+        int    irmaaTier, irmaaPeople, irmaaSrc;   // G1; irmaaSrc as EnhRow
+        boolean irmaaJoint;         // G1: lookback return filed jointly
+        String topBracket = "--";   // G1
+        double inflRaise = -1;      // inflation raise applied this year, -1 = none (G4)
+        boolean cprActive;          // Capital Preservation Rule can fire this year (G9)
     }
 
     static class GkResults {
