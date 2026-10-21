@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Tuesday, October 20, 2026 at 03:17 PM MST (UTC-7)
+// Last modified: Tuesday, October 20, 2026 at 07:51 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Tuesday, October 20, 2026 at 03:17 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, October 20, 2026 at 07:51 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -567,6 +567,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private int lastOptManBY, lastOptManBM, lastOptWomanBY, lastOptWomanBM;
     private int lastOptManPIA, lastOptWomanPIA;
     private boolean optResultsStale = false;  // true if inputs changed after optimizer ran
+    // v1 2026-10-20 (F1-F4): what the SS Optimizer table is showing, and for which plan.
+    private int     optScenarioGen = 0;        // bumped by every scenario load (EDT only)
+    private String  lastOptFp      = null;     // fingerprint of the results on screen
+    private String  lastOptSummary = "";       // their summary line, restored if inputs return
+    private volatile boolean optProgressDone = false;   // set when a batch ends: ignore late progress
     private final java.util.concurrent.atomic.AtomicLong simCount = new java.util.concurrent.atomic.AtomicLong(0);
     // v12 2026-10-11: the readout's work counters. simCount (above) is the number of
     // Monte Carlo trial paths actually run; simPathYears is the upper bound on the
@@ -666,6 +671,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // width goes to the results side, not the inputs.
         JPanel inputPanel  = buildInputPanel();
         JPanel outputPanel = buildOutputPanel();
+        installOptStaleWatch(inputPanel);   // v1 2026-10-20 (F4)
         inputPanel.setMinimumSize(new Dimension(260, 0));   // allow narrowing
         JSplitPane mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
                 inputPanel, outputPanel);
@@ -970,16 +976,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "not change any simulated number.</html>");
         spShortfallGrace.addChangeListener(e -> refreshActualPoSSub(lastResults));
 
-        // Mark optimizer results stale whenever any input changes
-        ChangeListener markStale = e -> {
-            if (lastOptResults != null) {
-                optResultsStale = true;
-                if (lblOptStatus != null)
-                    lblOptStatus.setText("[Results may be stale -- inputs changed. Re-run SS Optimizer.]");
-            }
-        };
-
-        ChangeListener refreshRunTooltip = e -> { updateRunTooltip(); markStale.stateChanged(null); };
+        // v1 2026-10-20 (F4): optimizer staleness moved to checkOptStale(), which every
+        // input control calls (installOptStaleWatch) -- it was wired to three spinners here.
+        ChangeListener refreshRunTooltip = e -> updateRunTooltip();
         spMcSolvePaths.addChangeListener(refreshRunTooltip);
         spBinaryIters.addChangeListener(refreshRunTooltip);
         spMcFanPaths.addChangeListener(refreshRunTooltip);
@@ -4830,6 +4829,25 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "on screen the same way. The verdict columns in the file still show the floors each row "
                 + "was scored against when it was written. The <b>PoS target</b> is different: the withdrawal "
                 + "solver uses it, so it stays in the fingerprint and a change still needs a re-run.</p>"
+                // v1 2026-10-20 (F1-F5)
+                + "<p><b>What the table shows (since October 20, 2026).</b> Pressing Run clears the table "
+                + "and the results behind it; the new batch fills it when it finishes. Changing <i>Rank "
+                + "passing rows by</i> during a batch marks the ranking column at once, and the batch is "
+                + "sorted that way when it finishes. Loading a scenario during a batch does not stop it: "
+                + "every finished row is still saved under the batch's fingerprint, but the table stays "
+                + "empty, because those rows belong to the plan in place at Run &mdash; the status line "
+                + "says so, and Run then shows the loaded plan (rows it shares with the batch load from "
+                + "disk). Loading a scenario also resets the Fingerprint field to &ldquo;--&rdquo;. "
+                + "After a batch, any input change that alters the fingerprint marks the results "
+                + "<i>[may be stale]</i> on the status line; changing it back clears the mark. Display "
+                + "settings, the four floors (re-scored at once) and the SS start year and month on the "
+                + "<i>Social Security</i> card (left out of the fingerprint) do not count. A person already "
+                + "past age 70 has no claim date left to choose, so the batch uses that person's SS start "
+                + "year and month from the <i>Social Security</i> card; when nobody in the plan has a date "
+                + "left, it scores that one combination. A start date later than age 70 is noted on the "
+                + "status line and scored as entered. A batch that stops on an error says so on the status line; its "
+                + "finished rows are saved and Run resumes. The completion summary stays on screen &mdash; "
+                + "a progress update arriving after the batch ends no longer replaces it.</p>"
                 // v12 2026-10-04: measured batch timings, the E-core pinning recipe, and
                 // the author's note -- all from Bob's runs on his 24-CPU laptop.
                 + "<p><b>Measured batch times</b> (author's 24-CPU laptop, October 2026 grid; "
@@ -5447,6 +5465,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "Each person's exact age-70 date is always included whatever the step.<br>"
                 + "The status line shows the real count before the scan starts, and Cancel<br>"
                 + "stops it at any time.</html>");
+        cmbOptGrid.addActionListener(e -> checkOptStale());   // v1 2026-10-20 (F4): hashed
 
         // v11 2026-09-27: the scan-fidelity, re-verify, MC-runs and penalty controls are GONE.
         // Every combination is now scored once at the full Pro-tab fidelity set on
@@ -5478,6 +5497,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<b>Go-go + slow-go spendable</b>: summed over the go-go and slow-go years.<br>"
                 + "<b>Final 5-year portfolio draws</b>: the pre-2026-10-11 measure, for comparison.<br><br>"
                 + "Every row stores all five, so changing this re-sorts at once -- no re-run.<br>"
+                + "During a batch, the new order applies when the batch finishes.<br>"
                 + "The ranking column's header is marked with *.</html>");
         cmbOptRankBy.addActionListener(e -> reRankOptTable());
         objRow.add(new JLabel("   Rank passing rows by:")); objRow.add(cmbOptRankBy);
@@ -6143,24 +6163,59 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         optCancelRequested = false;
         optResultsStale = false;
         tblOptModel.setRowCount(0);
+        // v1 2026-10-20 (F1): the previous batch's results leave memory with the table.
+        // They stayed, so changing the ranking mid-run redrew them -- an earlier plan's
+        // rows, or rows from a results file since deleted, under the running batch.
+        lastOptResults = null;
+        lastOptFp      = null;
+        optRowDates.clear();
+        optRowResults.clear();
+        optProgressDone = false;   // v1 2026-10-20 (F3)
         lblOptStatus.setText("Building candidate grid...");
 
         final BatchCfg cfg = readBatchCfg();
+        // v1 2026-10-20 (F2): a person past 70 is scored at the claim date entered; one
+        // later than age 70 is noted on the status line (no dialog, no block).
+        java.time.LocalDate today = java.time.LocalDate.now();
+        optRunNotes += lateClaimNote("User", cfg.manBY, cfg.manBM, cfg.base.manSSStartYear,
+                cfg.base.manSSStartMonth, today.getYear(), today.getMonthValue());
+        if (!cfg.single)
+            optRunNotes += lateClaimNote("Spouse", cfg.womanBY, cfg.womanBM, cfg.base.womanSSStartYear,
+                    cfg.base.womanSSStartMonth, today.getYear(), today.getMonthValue());
         SwingWorker<Void, String> worker = new SwingWorker<>() {
             @Override protected Void doInBackground() {
                 runSsOptimizerCore(cfg, this::publish);
                 return null;
             }
             @Override protected void process(java.util.List<String> msgs) {
-                if (!msgs.isEmpty()) lblOptStatus.setText(msgs.get(msgs.size()-1));
+                // v1 2026-10-20 (F3): a progress line delivered after the batch ended
+                // overwrote the completion summary, so a finished run looked frozen.
+                if (optProgressDone || msgs.isEmpty()) return;
+                lblOptStatus.setText(msgs.get(msgs.size()-1));
             }
             @Override protected void done() {
+                optProgressDone = true;    // v1 2026-10-20 (F3)
                 optBatchRunning = false;   // v1 2026-10-15 (FR)
                 btnRunOpt.setEnabled(true);
                 btnCancelOpt.setEnabled(false);
+                // v1 2026-10-20 (F2): a batch that failed says so. The worker's error was
+                // never read, so a failure left "Building candidate grid..." on screen
+                // and no table. Status line only.
+                try {
+                    get();
+                } catch (java.util.concurrent.ExecutionException ex) {
+                    Throwable t = (ex.getCause() != null) ? ex.getCause() : ex;
+                    lblOptStatus.setText("SS Optimizer stopped with an error: " + t
+                            + ". Finished combinations are saved -- press Run to resume.");
+                    return;
+                } catch (InterruptedException | java.util.concurrent.CancellationException ignored) {
+                    // not produced: the batch is never cancelled through the worker
+                }
                 if (optCancelRequested)
                     lblOptStatus.setText("Cancelled [elapsed " + minSec(optRunElapsedMs)
                             + "]. Finished combinations are saved -- press Run to resume.");
+                else
+                    checkOptStale();   // v1 2026-10-20 (F4): inputs edited while it ran
             }
         };
         worker.execute();
@@ -6184,6 +6239,20 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // v11 2026-09-27: `real` is gone. The scorer always works in today's dollars.
         // v12 2026-10-05: name of the stress scenario the batch overrode, or null.
         String stressIgnored;
+        int scenGen;   // v1 2026-10-20 (F1): optScenarioGen when Run was pressed
+    }
+
+    /** v1 2026-10-20 (F2): status-line note for a person already past 70 -- scored at
+     *  the claim date entered, since no date is left to scan -- whose entered date is
+     *  later than the 70th-birthday month. "" otherwise. */
+    private static String lateClaimNote(String who, int birthY, int birthM, int claimY, int claimM,
+                                        int todayY, int todayM) {
+        int[] from = firstScanMonth(birthY, birthM, todayY, todayM);
+        int age70 = (birthY + 70) * 12 + birthM;
+        if (from[0] * 12 + from[1] <= age70) return "";          // still has dates to scan
+        if (claimY * 12 + claimM <= age70) return "";            // fixed date is valid
+        return String.format("   NOTE: %s's claim date %02d/%d is after age 70 (%02d/%d); scored as entered.",
+                who, claimM, claimY, birthM, birthY + 70);
     }
 
     private BatchCfg readBatchCfg() {
@@ -6235,6 +6304,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // Fixing the seed also means the batch no longer writes runSeedOffset --
         // one less piece of state shared with the Pro tab.
         c.seed        = 0L;
+        c.scenGen     = optScenarioGen;   // v1 2026-10-20 (F1): a load during the run is detected
         return c;
     }
 
@@ -6272,11 +6342,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // under 62 was scored on claim dates SSA would not allow.
         int[] manFrom = firstScanMonth(c.manBY, c.manBM, sy, sm);
         java.util.List<int[]> bobMonths = buildSsRangeStep(c.manBY, c.manBM, manFrom[0], manFrom[1], c.gridStepMo);
+        // v1 2026-10-20 (F2): someone already past 70 has no claim date left to choose
+        // -- score them at the date entered on the Social Security card. If nobody has
+        // a date left, the batch is the one combination.
+        if (bobMonths.isEmpty()) bobMonths.add(new int[]{c.base.manSSStartYear, c.base.manSSStartMonth});
         java.util.List<int[]> joMonths;
         if (c.single) { joMonths = new java.util.ArrayList<>(); joMonths.add(new int[]{0,0}); }
         else {
             int[] womFrom = firstScanMonth(c.womanBY, c.womanBM, sy, sm);
             joMonths = buildSsRangeStep(c.womanBY, c.womanBM, womFrom[0], womFrom[1], c.gridStepMo);
+            if (joMonths.isEmpty()) joMonths.add(new int[]{c.base.womanSSStartYear, c.base.womanSSStartMonth});
         }
 
         int total = bobMonths.size() * joMonths.size();
@@ -6297,8 +6372,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // v11 2026-09-27: the fingerprint goes to its own persistent field, not into the status
         // line the progress messages overwrite.
         final String fpShown = fp;
-        if (tfOptFingerprint != null)
-            SwingUtilities.invokeLater(() -> tfOptFingerprint.setText(fpShown));
+        final int fpGen = c.scenGen;
+        if (tfOptFingerprint != null)   // v1 2026-10-20 (F5): not over a plan loaded since Run
+            SwingUtilities.invokeLater(() -> { if (fpGen == optScenarioGen) tfOptFingerprint.setText(fpShown); });
         // Still published as text as well, so the headless run prints it to stdout.
         publish.accept("Results file: " + resultsFile.getAbsolutePath()
                 + "   |   fingerprint: " + fp
@@ -6431,6 +6507,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             try { th.join(); } catch (InterruptedException ignored) { }
         }
         optRunElapsedMs = System.currentTimeMillis() - optRunStartMs;   // v12: final, frozen
+        optProgressDone = true;   // v1 2026-10-20 (F3): the summary below is the last word
 
         java.util.List<SsOptResult> results = new java.util.ArrayList<>();
         for (SsOptResult r : slot) if (r != null) results.add(r);
@@ -6478,15 +6555,28 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             final java.util.List<SsOptResult> fin = results;
             final BatchCfg cc = c;
             final long elapsedMs = optRunElapsedMs;   // v12
+            final String fpDone = fp;
             SwingUtilities.invokeLater(() -> {
+                // v1 2026-10-20 (F1): a scenario was loaded while the batch ran. Its rows
+                // belong to the inputs in place at Run, not the plan on screen now -- they
+                // filled the table anyway. They are saved; they are not shown.
+                if (cc.scenGen != optScenarioGen) {
+                    lblOptStatus.setText(String.format("Batch finished: %,d combinations saved under "
+                                    + "fingerprint %s. A scenario was loaded while it ran, so they are not shown "
+                                    + "-- press Run for the loaded plan (rows it shares load from disk).",
+                            fin.size(), fpDone));
+                    return;
+                }
                 // v1 2026-10-15 (FR): a floor moved while the batch ran -- score the
                 // finished rows against the floors on screen now, not the ones read at Run.
                 int g = iv(spOptGreenBuffer), go = iv(spOptGoGoFloor), sl = iv(spOptSlowGoFloor),
                         tg = iv(spOptTermGrace);
-                if (g != cc.greenBuf || go != cc.goGoFloor || sl != cc.slowGoFloor || tg != cc.termGrace) {
+                if (g != cc.greenBuf || go != cc.goGoFloor || sl != cc.slowGoFloor || tg != cc.termGrace)
                     for (SsOptResult r : fin) applyFloors(r, g, go, sl, tg, r.floorPoS);
-                    rankOptResults(fin, optRankMode());
-                }
+                // v1 2026-10-20 (F1): the ranking chosen now -- a change made mid-run waits
+                // for the batch instead of redrawing old rows.
+                rankOptResults(fin, optRankMode());
+                lastOptFp = fpDone;
                 populateOptTable(fin, cc.manBY, cc.manBM, cc.womanBY, cc.womanBM,
                         cc.manPIA, cc.womanPIA, elapsedMs);
             });
@@ -6895,6 +6985,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             int nt = y * 12 + m + stepMo;
             y = (nt - 1) / 12; m = ((nt - 1) % 12) + 1;
         }
+        // v1 2026-10-20 (F2): past 70 at the start -- nothing to scan. It threw here
+        // (get(-1)), and the batch died silently on "Building candidate grid...".
+        if (result.isEmpty()) return result;
         // Ensure the exact age-70 endpoint is present.
         int[] last = result.get(result.size()-1);
         if (last[0]*12+last[1] < endTot) result.add(new int[]{endY, endM});
@@ -7829,7 +7922,41 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 show, passCount, failCount, OPT_RANK_LABELS[optRankMode()]);   // v12 2026-10-11
         // v12 2026-10-04: the run's final wall-clock time stays on screen.
         if (elapsedMs > 0) head += "   [elapsed " + minSec(elapsedMs) + "]";
-        lblOptStatus.setText(head + optRunNotes);   // v1 2026-10-16 (V): the batch's input warnings
+        lastOptSummary = head + optRunNotes;   // v1 2026-10-20 (F4)
+        lblOptStatus.setText(lastOptSummary);   // v1 2026-10-16 (V): the batch's input warnings
+    }
+
+    /**
+     * v1 2026-10-20 (F4): flag the results on screen as stale when the inputs no longer
+     * match the batch that produced them. Compared by fingerprint, so only a change that
+     * would alter a simulation counts -- not font size, Real/Nominal, a floor (re-scored
+     * on the spot) or the claim-date spinners the batch overrides -- and putting a value
+     * back clears the flag. It was wired to the three Monte Carlo spinners only.
+     */
+    private void checkOptStale() {
+        if (optBatchRunning || lastOptResults == null || lastOptFp == null || lblOptStatus == null) return;
+        boolean stale = !batchFingerprint(readBatchCfg()).equals(lastOptFp);
+        if (stale)
+            lblOptStatus.setText("[Results may be stale -- inputs changed since this batch; "
+                    + "re-run SS Optimizer.]   " + lastOptSummary);
+        else if (optResultsStale)
+            lblOptStatus.setText(lastOptSummary);
+        optResultsStale = stale;
+    }
+
+    /** v1 2026-10-20 (F4): every input control re-checks staleness when it changes. */
+    private void installOptStaleWatch(java.awt.Container root) {
+        for (java.awt.Component k : root.getComponents()) {
+            if (k instanceof JSpinner s) {
+                s.addChangeListener(e -> checkOptStale());
+            } else if (k instanceof JComboBox<?> cb) {
+                cb.addActionListener(e -> checkOptStale());
+            } else {
+                if (k instanceof AbstractButton b && !(k instanceof JButton))
+                    b.addItemListener(e -> checkOptStale());
+                if (k instanceof java.awt.Container cc) installOptStaleWatch(cc);
+            }
+        }
     }
 
     private static String ssAgeStr(int totalMonths) {
@@ -7906,7 +8033,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // v11: the floor levels this row was ACTUALLY scored against, captured at
         // scan time. The display layer must never re-derive the verdict from the
         // live spinners -- those can move between pressing Run and hovering a row
-        // (markStale only warns), which would explain a row against a floor it was
+        // (the stale check only warns), which would explain a row against a floor it was
         // never tested on.
         int    floorGreen, floorGoGo, floorSlowGo, floorPoS;
         // v11: signed margins. Negative = miss, positive = headroom.
@@ -8262,6 +8389,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         rankOptResults(lastOptResults, optRankMode());
         populateOptTable(lastOptResults, lastOptManBY, lastOptManBM, lastOptWomanBY,
                 lastOptWomanBM, lastOptManPIA, lastOptWomanPIA, optRunElapsedMs);
+        checkOptStale();   // v1 2026-10-20 (F4): keep the stale marker through a redraw
         if (lblOptStatus != null)
             lblOptStatus.setText(String.format(
                     "Re-scored %,d rows against the new floors (no re-run). ", n)
@@ -8280,10 +8408,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             }
             tblOpt.getTableHeader().repaint();
         }
-        if (lastOptResults == null || lastOptResults.isEmpty()) return;
+        // v1 2026-10-20 (F1): during a batch there is nothing to re-sort -- Run cleared the
+        // previous results, and the batch ranks by this dropdown when it finishes.
+        if (optBatchRunning || lastOptResults == null || lastOptResults.isEmpty()) return;
         rankOptResults(lastOptResults, optRankMode());
         populateOptTable(lastOptResults, lastOptManBY, lastOptManBM, lastOptWomanBY,
                 lastOptWomanBM, lastOptManPIA, lastOptWomanPIA, optRunElapsedMs);
+        checkOptStale();   // v1 2026-10-20 (F4): keep the stale marker through a redraw
     }
 
     /** v12 2026-10-11: header tooltips for the ranking measures and the two SS columns. */
@@ -9102,6 +9233,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     "Load Error", javax.swing.JOptionPane.ERROR_MESSAGE);
             return;
         }
+        // v1 2026-10-20 (F1, F4): a batch running now belongs to the previous plan, and the
+        // results on screen are dropped first so the stale check stays quiet while the
+        // controls are set below.
+        optScenarioGen++;
+        lastOptResults = null;
+        lastOptFp      = null;
         java.util.List<String> warnings = new java.util.ArrayList<>();
         String ver = props.getProperty("scenario.version", "1");
         if (!SCENARIO_VERSION.equals(ver))
@@ -9326,8 +9463,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         }
         String desc = props.getProperty("scenario.description", "");
         if (tfDesc != null) tfDesc.setText(desc);
-        lastOptResults = null;
         if (tblOptModel != null) tblOptModel.setRowCount(0);
+        // v1 2026-10-20 (F5): the fingerprint shown was the previous plan's batch.
+        if (tfOptFingerprint != null) tfOptFingerprint.setText("--");
+        optResultsStale = false;
+        optRowDates.clear();
+        optRowResults.clear();
         if (lblOptStatus != null) lblOptStatus.setText("Scenario loaded. Review inputs, then Run Simulation or Run SS Optimizer.");
         updateAgeLabels();
         updateAccountTotal();
