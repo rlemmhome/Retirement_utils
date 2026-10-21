@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Tuesday, October 20, 2026 at 07:51 PM MST (UTC-7)
+// Last modified: Wednesday, October 21, 2026 at 10:19 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Tuesday, October 20, 2026 at 07:51 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Wednesday, October 21, 2026 at 10:19 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1659,7 +1659,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "tops (MFJ and Single). These are the 2026 figures the inflation projection<br>"
                 + "scales forward via the IRMAA threshold-growth mode -- edit them if the IRS<br>"
                 + "or CMS publishes new numbers, or to stress-test a different schedule.<br>"
-                + "Values persist with the scenario. Reset-to-2026 is available in the dialog.</html>");
+                + "Values persist with the scenario. Reset-to-2026 is available in the dialog.<br><br>"
+                // v1 2026-10-21 (Q1)
+                + "Edited values are part of the SS Optimizer fingerprint (the 2026 values are<br>"
+                + "not), so SS Optimizer results saved under other thresholds are never reused.</html>");
         btnEditThresholds.addActionListener(e -> showThresholdDialog());
 
         cmbFilingStatus = new JComboBox<>(new String[]{
@@ -4814,7 +4817,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "An interrupted batch "
                 + "costs one run rather than the whole night &mdash; press Run again and it resumes. Change any "
                 + "input that would alter a simulation and the fingerprint changes, so a stale file is never "
-                + "silently reused. Each row stores its full working as well as its results &mdash; every "
+                + "silently reused. Since October 21, 2026 that includes the IRMAA cliffs and bracket tops "
+                + "edited under <i>Edit thresholds&hellip;</i> on the <i>Roth Conversion &amp; IRMAA "
+                + "Surcharge</i> card; they join the hash only when they differ from the 2026 values, so a "
+                + "plan on the defaults keeps its fingerprint and its saved rows. Each row stores its full working as well as its results &mdash; every "
                 + "per-year violation, every graced dip, the floors it was judged against and its margin to "
                 + "each &mdash; so a batch read back off disk explains its verdicts exactly as a fresh one "
                 + "does. Delete the file for a clean slate; it costs only the resume.</p>"
@@ -6321,6 +6327,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "received -- the full benefit is paid from the first simulated year.</html>";
     }
 
+    /** v1 2026-10-21 (Q2): whole years of age in month y/m, birth month counted as a birthday. */
+    static int ageAtMonth(int birthY, int birthM, int y, int m) {
+        return Math.floorDiv((y * 12 + m) - (birthY * 12 + birthM), 12);
+    }
+
     static int[] firstScanMonth(int birthYear, int birthMonth, int todayY, int todayM) {
         int y = birthYear + 62, m = birthMonth + 1;
         if (m > 12) { m = 1; y++; }
@@ -6775,7 +6786,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 // state's code alone (stateCode, hashed above) said nothing about its
                 // RATE -- changing the Custom rate resumed over rows scored at the
                 // old one. Now a rule or Custom-field change orphans those rows.
-                .append(';').append(TaxEngine.stateProfile(in.stateCode).signature());
+                .append(';').append(TaxEngine.stateProfile(in.stateCode).signature())
+                // v1 2026-10-21 (Q1): IRMAA cliffs and bracket tops edited under Edit
+                // thresholds... -- appended only when they differ from 2026 (see
+                // thresholdSignature), so default plans keep their fingerprints.
+                .append(TaxEngine.thresholdSignature());
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
             byte[] d = md.digest(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -8277,6 +8292,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             System.arraycopy(wBrkMFJ,    0, editBracketTopMFJ,    0, nBrk);
             System.arraycopy(wBrkSingle, 0, editBracketTopSingle, 0, nBrk);
             syncActiveThresholds();
+            checkOptStale();   // v1 2026-10-21 (Q1): thresholds are part of the fingerprint now
             return;
         }
     }
@@ -11336,9 +11352,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 CURRENCY.format(guar1), CURRENCY.format(inc1), CURRENCY.format(spd1),
                 sur1 >= 0 ? "SURPLUS" : "GAP", CURRENCY.format(Math.abs(sur1)),
                 CURRENCY.format(inp.manSSAmount), inp.manSSStartMonth, inp.manSSStartYear,
-                inp.manAge + (inp.manSSStartYear - inp.baseYear),
+                // v1 2026-10-21 (Q2): the age at the claim month. It was today's age plus
+                // whole years from the start year, off by one when a birthday fell between.
+                ageAtMonth(inp.manBirthYear, inp.manBirthMonth, inp.manSSStartYear, inp.manSSStartMonth),
                 CURRENCY.format(inp.womanSSAmount), inp.womanSSStartMonth, inp.womanSSStartYear,
-                inp.womanAge + (inp.womanSSStartYear - inp.baseYear),
+                ageAtMonth(inp.womanBirthYear, inp.womanBirthMonth, inp.womanSSStartYear, inp.womanSSStartMonth),
                 ssPiaAsOfEff(inp),                                      // v12 2026-10-10
                 inp.ssCola * 100,
                 inp.ssColaTracksInflation
@@ -14511,6 +14529,26 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             ACTIVE_BRACKETS_SINGLE = deepCopy(BRACKETS_SINGLE_2026);
             ACTIVE_IRMAA_MFJ      = IRMAA_THRESH_MFJ_2026.clone();
             ACTIVE_IRMAA_SINGLE   = IRMAA_THRESH_SINGLE_2026.clone();
+        }
+
+        /**
+         * v1 2026-10-21 (Q1): the edited base thresholds, for the SS Optimizer
+         * fingerprint. They live here, not in SimInputs, so the hash never saw them:
+         * two plans differing only in an edited IRMAA cliff or bracket top shared a
+         * fingerprint, and one resumed the other's rows. Empty while every table
+         * equals its 2026 constant, so a plan on the defaults keeps the fingerprint --
+         * and the saved rows -- it already had.
+         */
+        static String thresholdSignature() {
+            if (java.util.Arrays.deepEquals(ACTIVE_BRACKETS_MFJ, BRACKETS_2026)
+                    && java.util.Arrays.deepEquals(ACTIVE_BRACKETS_SINGLE, BRACKETS_SINGLE_2026)
+                    && java.util.Arrays.equals(ACTIVE_IRMAA_MFJ, IRMAA_THRESH_MFJ_2026)
+                    && java.util.Arrays.equals(ACTIVE_IRMAA_SINGLE, IRMAA_THRESH_SINGLE_2026))
+                return "";
+            return ";thresholds=" + java.util.Arrays.deepToString(ACTIVE_BRACKETS_MFJ)
+                    + java.util.Arrays.deepToString(ACTIVE_BRACKETS_SINGLE)
+                    + java.util.Arrays.toString(ACTIVE_IRMAA_MFJ)
+                    + java.util.Arrays.toString(ACTIVE_IRMAA_SINGLE);
         }
 
         static double[][] brackets(FilingStatus fs) {
