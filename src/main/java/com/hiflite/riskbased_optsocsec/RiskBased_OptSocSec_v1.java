@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Wednesday, October 21, 2026 at 10:19 AM MST (UTC-7)
+// Last modified: Thursday, October 22, 2026 at 09:33 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Wednesday, October 21, 2026 at 10:19 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Thursday, October 22, 2026 at 09:33 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -572,6 +572,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private String  lastOptFp      = null;     // fingerprint of the results on screen
     private String  lastOptSummary = "";       // their summary line, restored if inputs return
     private volatile boolean optProgressDone = false;   // set when a batch ends: ignore late progress
+    // v1 2026-10-22 (Q3): the tax tables a running batch reads (edited thresholds, the
+    // Custom state profile) are shared with the GUI. optTaxGen moves when one changes
+    // under a batch; the batch keeps only combinations finished before it moved.
+    private volatile int    optTaxGen       = 0;      // written on the EDT only
+    private volatile String optStopReason   = null;   // what changed, when the batch stopped itself
+    private String          optBatchStateCode = null; // the running batch's state (EDT)
+    private String          lastCustomSig   = null;   // Custom values last pushed to the engine
+    private volatile int    optRunRan = 0, optRunDiscarded = 0;   // this batch's saved / discarded counts
     private final java.util.concurrent.atomic.AtomicLong simCount = new java.util.concurrent.atomic.AtomicLong(0);
     // v12 2026-10-11: the readout's work counters. simCount (above) is the number of
     // Monte Carlo trial paths actually run; simPathYears is the upper bound on the
@@ -1491,10 +1499,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         cmbState.setToolTipText(stateTooltip("AZ"));   // v12: follows the selection
         cmbState.addActionListener(e -> refreshStateFieldsEnabled());
 
+        // v1 2026-10-22 (Q3): the Custom values are live tax tables a running batch reads.
+        String customBatchNote = "<br><br>Changing it while an SS Optimizer batch runs a Custom-state plan<br>"
+                + "stops the batch; combinations it finished stay saved.</html>";
         spCustomStateRate = spinD(0.0, 0.0, 15.0, 0.1, "0.0");
         spCustomStateRate.setToolTipText("<html><b>Custom state flat rate (%)</b><br>"
                 + "Applied to the state taxable base. Used only when the state<br>"
-                + "selector is set to <b>Custom (flat rate)</b>.</html>");
+                + "selector is set to <b>Custom (flat rate)</b>." + customBatchNote);
         spCustomStateRate.addChangeListener(e -> syncCustomStateProfile());
 
         chkCustomTaxSS = new JCheckBox("Tax Social Security", false);
@@ -1502,7 +1513,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         chkCustomTaxSS.setToolTipText("<html><b>Custom: state taxes Social Security</b><br>"
                 + "OFF (default) = taxable Social Security is subtracted from the<br>"
                 + "state base (most states). ON = the state taxes SS like other<br>"
-                + "income. Custom mode only.</html>");
+                + "income. Custom mode only." + customBatchNote);
         chkCustomTaxSS.addActionListener(e -> syncCustomStateProfile());
 
         chkCustomExclRetire = new JCheckBox("Exclude retirement income", false);
@@ -1511,14 +1522,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "ON = the retirement ordinary draw (RMD / Traditional withdrawal)<br>"
                 + "is subtracted from the state base, up to the cap below (0 =<br>"
                 + "unlimited). Models states that exempt IRA/401(k)/pension income.<br>"
-                + "Custom mode only.</html>");
+                + "Custom mode only." + customBatchNote);
         chkCustomExclRetire.addActionListener(e -> { refreshStateFieldsEnabled(); syncCustomStateProfile(); });
 
         spCustomExclCap = spinI(0, 0, 1_000_000, 1_000, "#,###");
         spCustomExclCap.setToolTipText("<html><b>Custom: retirement exclusion cap ($/yr)</b><br>"
                 + "Maximum retirement income excluded from the state base per year<br>"
                 + "(base-year dollars, inflation-indexed). <b>0 = unlimited.</b> Live only<br>"
-                + "when 'Exclude retirement income' is checked in Custom mode.</html>");
+                + "when 'Exclude retirement income' is checked in Custom mode." + customBatchNote);
         spCustomExclCap.addChangeListener(e -> syncCustomStateProfile());
 
         // v12 2026-10-05: master switch. Unchecked = no Roth conversions anywhere
@@ -1662,7 +1673,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "Values persist with the scenario. Reset-to-2026 is available in the dialog.<br><br>"
                 // v1 2026-10-21 (Q1)
                 + "Edited values are part of the SS Optimizer fingerprint (the 2026 values are<br>"
-                + "not), so SS Optimizer results saved under other thresholds are never reused.</html>");
+                + "not), so SS Optimizer results saved under other thresholds are never reused.<br>"
+                // v1 2026-10-22 (Q3)
+                + "Changing them while an SS Optimizer batch runs stops the batch; combinations<br>"
+                + "it finished stay saved.</html>");
         btnEditThresholds.addActionListener(e -> showThresholdDialog());
 
         cmbFilingStatus = new JComboBox<>(new String[]{
@@ -4854,6 +4868,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "status line and scored as entered. A batch that stops on an error says so on the status line; its "
                 + "finished rows are saved and Run resumes. The completion summary stays on screen &mdash; "
                 + "a progress update arriving after the batch ends no longer replaces it.</p>"
+                // v1 2026-10-22 (Q3)
+                + "<p><b>Tax-table changes stop a batch (since October 22, 2026).</b> Two inputs are tax "
+                + "tables the running batch reads directly, not a copy taken at Run: the thresholds under "
+                + "<i>Edit thresholds&hellip;</i> on the <i>Roth Conversion &amp; IRMAA Surcharge</i> card, "
+                + "and the Custom state values (rate, <i>Tax Social Security</i>, <i>Exclude retirement "
+                + "income</i>, exclusion cap) when the plan's state is Custom. Changing either while a batch "
+                + "runs &mdash; directly, or by loading a scenario whose values differ &mdash; would score the "
+                + "rest of the batch on the new values and file it under the old fingerprint. So the batch "
+                + "stops instead: combinations finished before the change stay saved, those being scored at "
+                + "that moment are discarded, and the status line gives both counts. Run then starts a batch "
+                + "for the new values; changing them back reuses the finished rows. Custom values changed "
+                + "while the plan uses another state do not stop it.</p>"
                 // v12 2026-10-04: measured batch timings, the E-core pinning recipe, and
                 // the author's note -- all from Bob's runs on his 24-CPU laptop.
                 + "<p><b>Measured batch times</b> (author's 24-CPU laptop, October 2026 grid; "
@@ -6167,6 +6193,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         btnRunOpt.setEnabled(false);
         btnCancelOpt.setEnabled(true);
         optCancelRequested = false;
+        optStopReason      = null;   // v1 2026-10-22 (Q3)
+        optBatchStateCode  = null;   // set from the batch's own inputs below
         optResultsStale = false;
         tblOptModel.setRowCount(0);
         // v1 2026-10-20 (F1): the previous batch's results leave memory with the table.
@@ -6180,6 +6208,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         lblOptStatus.setText("Building candidate grid...");
 
         final BatchCfg cfg = readBatchCfg();
+        optBatchStateCode = cfg.base.stateCode;   // v1 2026-10-22 (Q3): Custom changes matter only then
         // v1 2026-10-20 (F2): a person past 70 is scored at the claim date entered; one
         // later than age 70 is noted on the status line (no dialog, no block).
         java.time.LocalDate today = java.time.LocalDate.now();
@@ -6217,7 +6246,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 } catch (InterruptedException | java.util.concurrent.CancellationException ignored) {
                     // not produced: the batch is never cancelled through the worker
                 }
-                if (optCancelRequested)
+                if (optStopReason != null)   // v1 2026-10-22 (Q3)
+                    lblOptStatus.setText(String.format("Stopped: the %s changed while the batch ran "
+                                    + "[elapsed %s]. Saved: %,d finished this run. Discarded: %,d in progress. ",
+                            optStopReason, minSec(optRunElapsedMs), optRunRan,
+                            optRunDiscarded)
+                            + (cfg.scenGen != optScenarioGen
+                            ? "A scenario was loaded, so they are not shown -- press Run for the loaded plan."
+                            : "Press Run for the new values (the finished rows are reused if the "
+                            + "values are changed back)."));
+                else if (optCancelRequested)
                     lblOptStatus.setText("Cancelled [elapsed " + minSec(optRunElapsedMs)
                             + "]. Finished combinations are saved -- press Run to resume.");
                 else
@@ -6371,6 +6409,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // completes, tagged with a fingerprint of the inputs and floors. A batch
         // interrupted at hour 8 costs one run, not eight hours, and pressing Run
         // again picks up where it stopped.
+        // v1 2026-10-22 (Q3): the tax tables this fingerprint describes. A later change
+        // moves optTaxGen, and the batch stops keeping what it scores.
+        final int taxGen0 = optTaxGen;
         String fp = batchFingerprint(c);
         batchWriteError = null;
         java.io.File resultsFile = batchFile();
@@ -6446,6 +6487,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         final java.util.concurrent.atomic.AtomicInteger next   = new java.util.concurrent.atomic.AtomicInteger();
         final java.util.concurrent.atomic.AtomicInteger ranCnt = new java.util.concurrent.atomic.AtomicInteger();
         final java.util.concurrent.atomic.AtomicInteger errCnt = new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.atomic.AtomicInteger discCnt = new java.util.concurrent.atomic.AtomicInteger();   // Q3
         final java.util.concurrent.atomic.AtomicReference<String> firstErr =
                 new java.util.concurrent.atomic.AtomicReference<>();
         final java.util.concurrent.atomic.AtomicReference<String> lastDone =
@@ -6474,6 +6516,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                                 cf.base, jb[0], jb[1], jb[2], jb[3], cf.single,
                                 cf.goGoFloor, cf.slowGoFloor, cf.greenBuf, cf.termGrace, cf.posTarget,
                                 cf.fullPaths, cf.fullFan, cf.binIters, cf.seed, OPT_SCORE_YEARS);
+                        // v1 2026-10-22 (Q3): a tax table changed while this was scored. It may
+                        // mix both versions and would be filed under the old fingerprint.
+                        if (optTaxGen != taxGen0) { discCnt.incrementAndGet(); continue; }
                         appendBatchResult(fpF, key, r);
                         slot[j] = r;                   // published to the coordinator by join()
                         ranCnt.incrementAndGet();
@@ -6481,6 +6526,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     } catch (Throwable ex) {
                         // One bad combination must not take a worker -- or the batch --
                         // down with it. It stays unsaved, so pressing Run retries it.
+                        // v1 2026-10-22 (Q3): after a tax-table change it is discarded instead --
+                        // the change itself (a profile being rebuilt) is the likely cause.
+                        if (optTaxGen != taxGen0) { discCnt.incrementAndGet(); continue; }
                         errCnt.incrementAndGet();
                         firstErr.compareAndSet(null, key + ": " + ex);
                     } finally {
@@ -6518,6 +6566,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             try { th.join(); } catch (InterruptedException ignored) { }
         }
         optRunElapsedMs = System.currentTimeMillis() - optRunStartMs;   // v12: final, frozen
+        optRunRan       = ranCnt.get();    // v1 2026-10-22 (Q3): for the stop message
+        optRunDiscarded = discCnt.get();
         optProgressDone = true;   // v1 2026-10-20 (F3): the summary below is the last word
 
         java.util.List<SsOptResult> results = new java.util.ArrayList<>();
@@ -8156,6 +8206,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      *  tables. Called before every simulation (from the input-gather) so any
      *  edits made in the dialog are live. No-op in effect when unedited. */
     private void syncActiveThresholds() {
+        // v1 2026-10-22 (Q3): a change under a running batch stops it. Announced before
+        // the tables move, so a worker that read a moved table sees optTaxGen moved too.
+        if (optBatchRunning && TaxEngine.thresholdsDiffer(editBracketTopMFJ, editBracketTopSingle,
+                editIrmaaThreshMFJ, editIrmaaThreshSingle))
+            stopBatchForTaxChange("tax thresholds");
         TaxEngine.setActiveThresholds(
                 editBracketTopMFJ, editBracketTopSingle,
                 editIrmaaThreshMFJ, editIrmaaThreshSingle);
@@ -8649,7 +8704,26 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         boolean taxSS   = chkCustomTaxSS != null && chkCustomTaxSS.isSelected();
         boolean exclRet = chkCustomExclRetire != null && chkCustomExclRetire.isSelected();
         double cap      = (spCustomExclCap != null) ? iv(spCustomExclCap) : 0;
+        // v1 2026-10-22 (Q3): unchanged values leave the live profile alone. setCustom
+        // rebuilds it (clear, then add), and every readInputs called this, so a running
+        // Custom-state batch could read it half-built.
+        String sig = ratePct + "|" + taxSS + "|" + exclRet + "|" + cap;
+        if (sig.equals(lastCustomSig)) return;
+        if (optBatchRunning && "CUSTOM".equals(optBatchStateCode))
+            stopBatchForTaxChange("Custom state values");
+        lastCustomSig = sig;
         TaxEngine.setCustom(ratePct / 100.0, taxSS, exclRet, cap);
+    }
+
+    /**
+     * v1 2026-10-22 (Q3): a tax table the running batch reads is about to change.
+     * The batch stops taking combinations, and any it is scoring now are discarded
+     * (they may have read both versions). Combinations finished before stay saved.
+     */
+    private void stopBatchForTaxChange(String what) {
+        optTaxGen++;   // single writer: the EDT
+        if (optStopReason == null) optStopReason = what;
+        optCancelRequested = true;
     }
 
     /**
@@ -14549,6 +14623,22 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     + java.util.Arrays.deepToString(ACTIVE_BRACKETS_SINGLE)
                     + java.util.Arrays.toString(ACTIVE_IRMAA_MFJ)
                     + java.util.Arrays.toString(ACTIVE_IRMAA_SINGLE);
+        }
+
+        /** v1 2026-10-22 (Q3): would setActiveThresholds(these) change the active tables?
+         *  Compared the way applyBracketTops writes them. */
+        static boolean thresholdsDiffer(double[] bracketTopMFJ, double[] bracketTopSingle,
+                                        double[] irmaaMFJ, double[] irmaaSingle) {
+            return topsDiffer(ACTIVE_BRACKETS_MFJ, bracketTopMFJ)
+                    || topsDiffer(ACTIVE_BRACKETS_SINGLE, bracketTopSingle)
+                    || (irmaaMFJ != null && !java.util.Arrays.equals(ACTIVE_IRMAA_MFJ, irmaaMFJ))
+                    || (irmaaSingle != null && !java.util.Arrays.equals(ACTIVE_IRMAA_SINGLE, irmaaSingle));
+        }
+        private static boolean topsDiffer(double[][] active, double[] tops) {
+            if (tops == null) return false;
+            for (int i = 0; i < Math.min(active.length, tops.length); i++)
+                if (active[i][1] != tops[i]) return true;
+            return false;
         }
 
         static double[][] brackets(FilingStatus fs) {
