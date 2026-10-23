@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Friday, October 23, 2026 at 03:52 PM MST (UTC-7)
+// Last modified: Friday, October 23, 2026 at 04:26 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Friday, October 23, 2026 at 03:52 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Friday, October 23, 2026 at 04:26 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -445,6 +445,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private JLabel     lblColaWarn;          // v6: guard note on historical sequences
     private JSpinner spGkUpperGuardrail, spGkLowerGuardrail;
     private JCheckBox chkGkSpendMults;   // v1 2026-10-23 (Q8): GK applies the go-go/slow-go multipliers
+    // v1 2026-10-23 (Q9): the GK defaults -- the spinners start here, and a scenario saved
+    // before these inputs were saved loads them.
+    private static final double GK_PRE_RATE_DEFAULT  = 4.7;    // %, was 5.4 (v11)
+    private static final double GK_GUARDRAIL_DEFAULT = 20.0;   // %, upper and lower
     private JLabel    lblGkPureNote;     // v1 2026-10-23 (Q8): states which mode the GK table was run in
     private JSpinner spManTradIRA, spManRothIRA, spManTrad401K, spManRoth401K;
     private JSpinner spWomanRoth401K, spWomanRothIRA, spWomanTradIRA, spWomanTrad401K;
@@ -968,7 +972,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         chkRandomize.setToolTipText("<html><b>Re-randomize each run</b><br>"
                 + "Checked: each run uses a different random seed -- natural MC variance.<br>"
                 + "Unchecked: same seed every run -- identical results for same inputs.<br>"
-                + "Use unchecked for scenario comparison; checked to explore uncertainty.</html>");
+                + "Use unchecked for scenario comparison; checked to explore uncertainty.<br>"
+                + "Saved with the scenario (default: checked). The SS Optimizer ignores it --<br>"
+                + "its batch seed is always 0.</html>");   // v1 2026-10-23 (Q9)
         chkRandomize.setFont(new Font("SansSerif", Font.PLAIN, 14));
         chkRandomize.setForeground(new Color(75, 75, 75));
         chkRandomize.setOpaque(false);
@@ -1023,8 +1029,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         spSimStartYear.addChangeListener(e -> updateHorizonFromPlanAge());   // v1 2026-10-16 (HZ5)
         spWithdrawStartYear.addChangeListener(runTipOnly);
 
-        // v11 2026-09-27: default raised 4.0% -> 5.4%.
-        spGkPreRate = spinD(5.4, 1.0, 10.0, 0.1, "0.0#");
+        // v11 2026-09-27: default raised 4.0% -> 5.4%. v1 2026-10-23 (Q9): now 4.7%.
+        spGkPreRate = spinD(GK_PRE_RATE_DEFAULT, 1.0, 10.0, 0.1, "0.0#");
         spGkPreRate.setToolTipText("<html><b>GK only -- initial withdrawal rate (%)</b><br>"
                 + "Used exclusively by the Guyton-Klinger tab.<br>"
                 + "Has no effect on the Income PoS tab.<br><br>"
@@ -1032,7 +1038,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "balance sets the GK withdrawal (prorated by start month).<br>"
                 + "From year 2 onward, CPR\u25bc / PR\u25b2 / WR\u2070 guardrail rules engage,<br>"
                 + "using this rate as the permanent benchmark for all comparisons.<br><br>"
-                + "<b>Default: 5.4%</b></html>");
+                + "<b>Default: 4.7%</b>. Saved with the scenario.</html>");   // v1 2026-10-23 (Q9)
 
         inner.add(card("Portfolio & Simulation", new Object[]{
                 "Simulation start year",       spSimStartYear,
@@ -2067,7 +2073,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // triggers the Capital Preservation Rule (a CUT); the LOWER guardrail is
         // the floor that triggers the Prosperity Rule (a RAISE). Unlike the Pro
         // PoS advisory guardrails above, these actually MODIFY the GK withdrawal.
-        spGkUpperGuardrail = spinD(20.0, 5.0, 60.0, 1.0, "0.0#");
+        spGkUpperGuardrail = spinD(GK_GUARDRAIL_DEFAULT, 5.0, 60.0, 1.0, "0.0#");
         spGkUpperGuardrail.setToolTipText("<html><b>Guyton-Klinger -- Upper guardrail (Capital Preservation Rule, CPR[v])</b><br>"
                 + "This <b>actually cuts</b> the GK withdrawal (it is not just an alert).<br><br>"
                 + "If the current GK withdrawal RATE rises more than this % <b>above</b> the<br>"
@@ -2076,14 +2082,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 // v1 2026-10-19 (G9)
                 + "As in Guyton and Klinger (2006), the cut rule expires 15 years before<br>"
                 + "the end of the plan: it never fires in the last 15 simulated years.<br>"
-                + "<b>Default: 20%</b></html>");
-        spGkLowerGuardrail = spinD(20.0, 5.0, 60.0, 1.0, "0.0#");
+                + "<b>Default: 20%</b>. Saved with the scenario.</html>");   // v1 2026-10-23 (Q9)
+        spGkLowerGuardrail = spinD(GK_GUARDRAIL_DEFAULT, 5.0, 60.0, 1.0, "0.0#");
         spGkLowerGuardrail.setToolTipText("<html><b>Guyton-Klinger -- Lower guardrail (Prosperity Rule, PR[^])</b><br>"
                 + "This <b>actually raises</b> the GK withdrawal (it is not just an alert).<br><br>"
                 + "If the current GK withdrawal RATE falls more than this % <b>below</b> the<br>"
                 + "initial rate -- meaning the portfolio has grown and the fixed draw is now<br>"
                 + "too small a slice of it -- the withdrawal is <b>raised 10%</b>.<br>"
-                + "<b>Default: 20%</b></html>");
+                + "<b>Default: 20%</b>. Saved with the scenario.</html>");   // v1 2026-10-23 (Q9)
         // v1 2026-10-23 (Q8): pure Guyton-Klinger by default. The multipliers were always
         // applied, and the only way to a run true to the 2006 spec was zeroing the go-go
         // and slow-go durations -- inputs the Pro PoS tab shares.
@@ -2648,10 +2654,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     }
                     case COL_ROTH_MM -> {
                         if (er.rmdOverage <= 0) return null;
-                        return "<html><b>-&gt; Money Mkt (year) -- this year's RMD overage</b><br>"
-                                + "Combined RMD (" + CURRENCY.format(er.combRmd) + ")<br>"
+                        // v1 2026-10-23 (Q10): in the table's dollars (it printed nominal).
+                        double d = showRealDollars ? er.inflFactor : 1.0;
+                        return "<html><b>-&gt; Money Mkt (year) -- this year's RMD overage</b> ("
+                                + (showRealDollars ? "today's $" : "nominal $") + ")<br>"
+                                + "Combined RMD (" + CURRENCY.format(Math.round(er.combRmd / d)) + ")<br>"
                                 + "exceeds this year's planned spending withdrawal.<br>"
-                                + "Overage (" + CURRENCY.format(er.rmdOverage) + ") is a <b>yearly amount</b>, not a running total.<br><br>"
+                                + "Overage (" + CURRENCY.format(Math.round(er.rmdOverage / d)) + ") is a <b>yearly amount</b>, not a running total.<br><br>"
                                 + "<b>v8:</b> this overage is RETAINED as already-taxed cash -- it is pulled<br>"
                                 + "from Traditional (its income tax is already in the Tax column) and<br>"
                                 + "added to <b>Money Mkt (total)</b>, where it accumulates. The simulation<br>"
@@ -9443,6 +9452,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         props.setProperty("mc.fanPaths",            String.valueOf(iv(spMcFanPaths)));
         props.setProperty("pro.shortfallGrace",     String.valueOf(iv(spShortfallGrace)));   // v1 2026-10-19 (SL1)
         props.setProperty("gk.useSpendMults",       String.valueOf(chkGkSpendMults.isSelected()));   // v1 2026-10-23 (Q8)
+        // v1 2026-10-23 (Q9): the GK inputs and the seed choice were never saved, so a
+        // load kept whatever was on screen.
+        props.setProperty("gk.preRate",             String.valueOf(dv(spGkPreRate)));
+        props.setProperty("gk.upperGuardrail",      String.valueOf(dv(spGkUpperGuardrail)));
+        props.setProperty("gk.lowerGuardrail",      String.valueOf(dv(spGkLowerGuardrail)));
+        props.setProperty("mc.reRandomize",         String.valueOf(chkRandomize.isSelected()));
         props.setProperty("opt.scenario",           String.valueOf(
                 cmbScenario != null ? cmbScenario.getSelectedIndex() : 0));
         // v9: per-scenario Pro PoS column view (model indices, CSV). Absent keys on
@@ -9721,6 +9736,15 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         setSpinnerIfPresent(spShortfallGrace, props, "pro.shortfallGrace");
         // v1 2026-10-23 (Q8): files saved before this setting load with it off (pure GK).
         chkGkSpendMults.setSelected(Boolean.parseBoolean(props.getProperty("gk.useSpendMults", "false").trim()));
+        // v1 2026-10-23 (Q9): files saved before these were saved load the defaults, so a
+        // loaded scenario gives the same results whatever was on screen before.
+        spGkPreRate.setValue(GK_PRE_RATE_DEFAULT);
+        spGkUpperGuardrail.setValue(GK_GUARDRAIL_DEFAULT);
+        spGkLowerGuardrail.setValue(GK_GUARDRAIL_DEFAULT);
+        if (props.getProperty("gk.preRate") != null)        setSpinnerD(spGkPreRate,        props, "gk.preRate",        warnings);
+        if (props.getProperty("gk.upperGuardrail") != null) setSpinnerD(spGkUpperGuardrail, props, "gk.upperGuardrail", warnings);
+        if (props.getProperty("gk.lowerGuardrail") != null) setSpinnerD(spGkLowerGuardrail, props, "gk.lowerGuardrail", warnings);
+        chkRandomize.setSelected(Boolean.parseBoolean(props.getProperty("mc.reRandomize", "true").trim()));
         if (cmbScenario != null) {
             String si = props.getProperty("opt.scenario");
             if (si != null) { try { cmbScenario.setSelectedIndex(Integer.parseInt(si.trim())); } catch (Exception ignored) {} }
@@ -13166,10 +13190,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 }
                 if (col == 22 && gr.rmdOverage > 0) { // RMD overage
                     // v1 2026-10-18 (D-1): says what the GK engine actually does with it.
-                    return "<html><b>RMD overage</b><br>"
-                            + "Combined RMD (" + CURRENCY.format(gr.combRmd) + ")<br>"
-                            + "exceeds planned GK withdrawal (" + CURRENCY.format(gr.wdActual) + ").<br>"
-                            + "Overage (" + CURRENCY.format(gr.rmdOverage) + ") is not spent.<br>"
+                    // v1 2026-10-23 (Q10): in the table's dollars. It printed nominal amounts
+                    // under a real-dollar table, so none of the three matched a cell.
+                    double d = showRealDollars ? gr.inflFactor : 1.0;
+                    return "<html><b>RMD overage</b> (" + (showRealDollars ? "today's $" : "nominal $") + ")<br>"
+                            + "Combined RMD (" + CURRENCY.format(Math.round(gr.combRmd / d)) + ")<br>"
+                            + "exceeds this year's Actual wd (" + CURRENCY.format(Math.round(gr.wdActual / d)) + ").<br>"
+                            + "Overage (" + CURRENCY.format(Math.round(gr.rmdOverage / d)) + ") is not spent.<br>"
                             + "The GK portfolio balance is not reduced by RMDs: the overage stays<br>"
                             + "invested in the portfolio and earns the portfolio's return. This tab<br>"
                             + "has no separate Money Mkt reserve (Pro PoS does).<br>"
