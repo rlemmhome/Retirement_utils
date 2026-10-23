@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Thursday, October 22, 2026 at 09:33 AM MST (UTC-7)
+// Last modified: Friday, October 23, 2026 at 03:52 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Thursday, October 22, 2026 at 09:33 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Friday, October 23, 2026 at 03:52 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -444,6 +444,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private JLabel     lblOptObjective;      // v6: banner naming the active objective
     private JLabel     lblColaWarn;          // v6: guard note on historical sequences
     private JSpinner spGkUpperGuardrail, spGkLowerGuardrail;
+    private JCheckBox chkGkSpendMults;   // v1 2026-10-23 (Q8): GK applies the go-go/slow-go multipliers
+    private JLabel    lblGkPureNote;     // v1 2026-10-23 (Q8): states which mode the GK table was run in
     private JSpinner spManTradIRA, spManRothIRA, spManTrad401K, spManRoth401K;
     private JSpinner spWomanRoth401K, spWomanRothIRA, spWomanTradIRA, spWomanTrad401K;
     private JSpinner spMmPrior;
@@ -693,11 +695,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         add(mainSplit,          BorderLayout.CENTER);
         add(buildStatusBar(),   BorderLayout.SOUTH);
 
-        pack();
+        // v1 2026-10-23 (Q7): open at the usable screen size, never the packed size. The
+        // Assumptions and Summary text report their full unwrapped width, so pack() sized
+        // the frame about 18,400 x 11,100 px -- a window the desktop had to create before
+        // the maximize shrank it to the screen.
         setMinimumSize(new Dimension(1300, 760));
-        setExtendedState(JFrame.MAXIMIZED_BOTH);
-        setLocationRelativeTo(null);
+        setBounds(GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds());
         setVisible(true);
+        // v1 2026-10-23 (Q7): maximize once the window exists. Maximized before it was
+        // shown, the desktop resized it after Java's first paint, and on KDE Wayland
+        // (XWayland) the content sometimes never redrew -- an empty frame until a
+        // minimize/restore.
+        SwingUtilities.invokeLater(() -> setExtendedState(JFrame.MAXIMIZED_BOTH));
         SwingUtilities.invokeLater(this::updateSSBenefitNote);
 
         // v9 Option C: show the branded splash centered on THIS frame, once the
@@ -717,14 +726,27 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         addWindowStateListener(new java.awt.event.WindowAdapter() {
             @Override public void windowStateChanged(java.awt.event.WindowEvent e) {
                 if ((e.getNewState() & JFrame.MAXIMIZED_BOTH) == JFrame.MAXIMIZED_BOTH) {
+                    redrawAll(RiskBased_OptSocSec_v1.this);   // v1 2026-10-23 (Q7)
                     trigger.run();
                 }
             }
         });
-        // Fallback: if the frame is already maximized by the time we get here (the
-        // state event can fire before the listener is attached), or the WM does not
-        // emit the event, place the splash on a later EDT cycle once bounds settle.
-        SwingUtilities.invokeLater(() -> SwingUtilities.invokeLater(trigger));
+        // Fallback: if the WM does not emit the state event (or it fired before the
+        // listener was attached), place the splash once bounds settle. v1 2026-10-23
+        // (Q7): about 3/4 s after start -- the maximize is now a later EDT cycle, so the
+        // old two-cycle fallback could run before it -- with one forced redraw too.
+        javax.swing.Timer settle = new javax.swing.Timer(750, e -> { redrawAll(this); trigger.run(); });
+        settle.setRepeats(false);
+        settle.start();
+    }
+
+    /** v1 2026-10-23 (Q7): one full re-layout and repaint of a window -- the safety net
+     *  for a desktop whose resize signal Java missed. */
+    private static void redrawAll(java.awt.Window w) {
+        if (w == null || !w.isDisplayable()) return;
+        if (w instanceof RootPaneContainer rpc) rpc.getRootPane().revalidate();
+        w.validate();
+        w.repaint();
     }
 
     // ========================================================================
@@ -831,7 +853,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "Press it once a year, when you commit to the withdrawal figure you<br>"
                 + "will actually draw against. Ordinary <i>Save Scenario</i> does NOT change<br>"
                 + "the baseline, so experimenting freely will not corrupt it.<br><br>"
-                + "The baseline is stored in the .ilscen file and survives reload.</html>");
+                + "The baseline is stored in the .ilscen file and survives reload.<br><br>"
+                + "See section 6c of the Assumptions &amp; Methods tab.</html>");   // Q4
         btnSetBaseline.addActionListener(e -> {
             if (!lastRunValid) return;
             baselineActualWd = lastRunActualWd;
@@ -855,7 +878,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<i>no material change</i> rather than prompting action, so ordinary<br>"
                 + "market noise between annual runs does not read as a signal.<br><br>"
                 + "<b>Default 5%</b>, matching the threshold risk-based guardrail<br>"
-                + "methodologies commonly use.</html>");
+                + "methodologies commonly use.<br><br>"
+                + "See section 6c of the Assumptions &amp; Methods tab.</html>");   // Q4
 
         JPanel scenBtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         scenBtnRow.setOpaque(false); scenBtnRow.setAlignmentX(LEFT_ALIGNMENT);
@@ -2060,7 +2084,23 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "initial rate -- meaning the portfolio has grown and the fixed draw is now<br>"
                 + "too small a slice of it -- the withdrawal is <b>raised 10%</b>.<br>"
                 + "<b>Default: 20%</b></html>");
+        // v1 2026-10-23 (Q8): pure Guyton-Klinger by default. The multipliers were always
+        // applied, and the only way to a run true to the 2006 spec was zeroing the go-go
+        // and slow-go durations -- inputs the Pro PoS tab shares.
+        chkGkSpendMults = new JCheckBox("Apply go-go / slow-go multipliers", false);
+        chkGkSpendMults.setBackground(Color.WHITE);
+        chkGkSpendMults.setToolTipText("<html><b>GK: apply the go-go / slow-go multipliers</b><br>"
+                + "<b>Off (default):</b> pure Guyton-Klinger, as in the 2006 paper -- Actual wd is<br>"
+                + "the guardrail withdrawal itself (plus any SS bridge).<br>"
+                + "<b>On:</b> Actual wd = GK withdrawal x the go-go or slow-go multiplier for that<br>"
+                + "year (the multipliers and durations on the <i>Annual Spending</i> card), so the GK<br>"
+                + "spending shape matches the Pro PoS tab.<br><br>"
+                + "Affects the Guyton-Klinger and Stress Test tabs only. The multipliers still<br>"
+                + "drive Pro PoS either way, and the SS Optimizer never uses GK, so this is not<br>"
+                + "part of its fingerprint. Saved with the scenario. See section 8 of the<br>"
+                + "Assumptions &amp; Methods tab.</html>");
         inner.add(card("Guyton-Klinger inputs", new Object[]{
+                "GK spending multipliers",                         chkGkSpendMults,
                 "GK only -- initial wd rate (%)",                  spGkPreRate,
                 "Upper guardrail -- Capital Preservation, cut (%)", spGkUpperGuardrail,
                 "Lower guardrail -- Prosperity, raise (%)",         spGkLowerGuardrail,
@@ -2200,14 +2240,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<b>vs baseline:</b> compares this run's Actual wd against the figure you<br>"
                 + "captured with <i>Set as annual baseline</i>, and splits the change into:<br>"
                 + "&nbsp;&nbsp;* <b>portfolio</b> -- your balance moved<br>"
-                + "&nbsp;&nbsp;* <b>horizon</b> -- one fewer year to fund raises the safe rate<br>"
+                // v1 2026-10-23 (Q4)
+                + "&nbsp;&nbsp;* <b>other changes</b> -- everything except the portfolio and go-go:<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;the horizon, Social Security dates, other inputs, and program<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;updates since the baseline<br>"
                 + "&nbsp;&nbsp;* <b>go-go</b> -- you changed the multiplier, or it turned off at<br>"
                 + "&nbsp;&nbsp;&nbsp;&nbsp;the end of the go-go window (planned, not distress). Raising<br>"
                 + "&nbsp;&nbsp;&nbsp;&nbsp;go-go also slightly LOWERS the base draw, since the survival<br>"
                 + "&nbsp;&nbsp;&nbsp;&nbsp;test spends more during those years -- both effects are shown.<br>"
                 + "The split reconciles exactly to the total change.<br><br>"
                 + "Changes smaller than the minimum-change % are reported as<br>"
-                + "<i>no material change</i> so ordinary noise does not prompt action.</html>");
+                + "<i>no material change</i> so ordinary noise does not prompt action.<br><br>"
+                + "See section 6c of the Assumptions &amp; Methods tab.</html>");   // Q4
 
         JPanel aSouth = new JPanel(new BorderLayout(2, 2)); aSouth.setOpaque(false);
         aSouth.add(lblDetail,   BorderLayout.NORTH);
@@ -3502,6 +3546,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<li><a href='#sec6' style='color:#264653; text-decoration:none;'>6. IRMAA &mdash; Medicare surcharge, costed and visible</a></li>"
                 + "<li><a href='#sec6a' style='color:#264653; text-decoration:none;'>6a. Which numbers to act on &mdash; the live column vs. the projected balances</a></li>"
                 + "<li><a href='#sec6b' style='color:#264653; text-decoration:none;'>6b. Re-solve cadence &mdash; annual decision, monthly paycheck</a></li>"
+                + "<li><a href='#sec6c' style='color:#264653; text-decoration:none;'>6c. Annual baseline &mdash; your yearly reference point</a></li>"   // v1 2026-10-23 (Q4)
                 + "<li><a href='#sec7' style='color:#264653; text-decoration:none;'>7. Spending, medical costs, and Roth conversions</a></li>"
                 + "<li><a href='#sec7a' style='color:#264653; text-decoration:none;'>7a. Spending curve &mdash; go-go, slow-go, no-go</a></li>"
                 + "<li><a href='#sec8' style='color:#264653; text-decoration:none;'>8. Why PoS is the primary method &mdash; the withdrawal-rate flaw</a></li>"
@@ -3510,6 +3555,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<li><a href='#sec11' style='color:#264653; text-decoration:none;'>11. SS Optimizer &mdash; objective, feasibility, and ranking</a></li>"
                 + "<li><a href='#sec12' style='color:#264653; text-decoration:none;'>12. Guaranteed income streams &mdash; annuity, pension, military retired pay</a></li>"
                 + "<li><a href='#sec13' style='color:#264653; text-decoration:none;'>13. Input checks and plan length</a></li>"
+                + "<li><a href='#sec14' style='color:#264653; text-decoration:none;'>14. Stress Test &mdash; living through history's worst markets</a></li>"   // v1 2026-10-23 (Q6)
                 + "</ul></div>"
                 + "<h3 style='color:#2a5d34;'><a name='intro'></a>Three approaches to dynamic spending</h3>"
                 + "<p>This tool contains two spending engines, and it is worth understanding how each relates to "
@@ -4239,6 +4285,52 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "change the tool's <i>inputs</i>, not just the balance, so a fresh solve is warranted. Ordinary market "
                 + "movement, up or down, is never a reason to re-solve between annual checkpoints.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                // v1 2026-10-23 (Q4): the annual baseline, for a new user
+                + "<h3 style='color:#2a5d34;'><a name='sec6c'></a>6c. Annual baseline &mdash; your yearly reference point</h3>"
+                + "<p><b>What it is.</b> Each run gives you a yearly amount you can safely take from your savings. "
+                + "The annual baseline is a bookmark: you pick one run and tell the program &ldquo;this is the number "
+                + "I am actually going to live on this year.&rdquo; From then on, every new run is compared with that "
+                + "bookmark, on the line at the top of the Pro PoS results.</p>"
+                + "<p><b>Why it exists.</b> Without a bookmark, every run is just a new number, and you cannot tell "
+                + "whether it has really changed since you made your decision, whether the change is big enough to "
+                + "act on or just ordinary market wobble, or what caused it &mdash; the markets, your own changes to "
+                + "the plan, or something else. The baseline answers all three in one line.</p>"
+                + "<p><b>How to use it.</b></p><ol>"
+                + "<li>Once a year, at your annual review, update your account balances and run the plan.</li>"
+                + "<li>If you will actually draw that amount this year, press <b>Set as annual baseline</b> on the "
+                + "<i>Scenario</i> card.</li>"
+                + "<li>Press <b>Save Scenario</b>. The baseline is kept in the scenario file (the program reminds you).</li>"
+                + "<li>During the year, experiment freely: saving a scenario never moves the baseline &mdash; only the "
+                + "button does.</li>"
+                + "<li>Next year, run again and read the comparison line before deciding anything.</li></ol>"
+                + "<p><b>How to read the comparison line</b> (illustrative figures):</p>"
+                + "<p style='margin-left:16px;'><tt>vs baseline of 2026-01-15: $60,000 -&gt; $64,800 (+8.0%)<br>"
+                + "portfolio +5.0% (+$3,000); other changes, incl. horizon +1 yr (+$600); go-go 1.40x -&gt; 1.50x "
+                + "(+$1,200) -- your edit</tt></p>"
+                + "<table border='1' cellpadding='3' cellspacing='0'>"
+                + "<tr><th>Part</th><th>What it tells you</th></tr>"
+                + "<tr><td>$60,000 -&gt; $64,800 (+8.0%)</td><td>The yearly amount you committed to, the amount now, "
+                + "and the change</td></tr>"
+                + "<tr><td>portfolio</td><td>How much of the change came from your savings growing or shrinking</td></tr>"
+                + "<tr><td>other changes</td><td>Everything else: a longer or shorter plan (shown when it changed), "
+                + "Social Security dates, your other inputs, and program updates since the baseline</td></tr>"
+                + "<tr><td>go-go</td><td>How much came from changing your early-retirement spending multiplier &mdash; "
+                + "shown separately so your own edit is not mistaken for market movement. &ldquo;your edit&rdquo; "
+                + "appears whenever the multiplier is higher than at the baseline; a lower one shows &ldquo;planned, "
+                + "not distress&rdquo;.</td></tr>"
+                + "</table>"
+                + "<p>The three parts always add up to the total change.</p>"
+                + "<p><b>When to act.</b> The <i>Min chg %</i> box on the Scenario card (default 5%) separates noise "
+                + "from a real change. If the yearly amount moved by less than that, the line says <i>no material "
+                + "change</i> &mdash; keep spending as planned. If it moved by more, it is worth revisiting your "
+                + "spending.</p>"
+                + "<p><b>The line just above it.</b> &ldquo;Re-run if portfolio falls below $X&rdquo; is a check for "
+                + "between reviews: if your real accounts drop below that figure before next year's review, run the "
+                + "plan again early (see 6b).</p>"
+                + "<p><b>Why it was built.</b> Retirement plans go wrong in two ways: reacting to every market wobble, "
+                + "or not noticing a real change. The baseline gives you a once-a-year commitment point, a fixed rule "
+                + "for what counts as a real change, and a breakdown of where any change came from.</p>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec7'></a>7. Spending, medical costs, and Roth conversions</h3>"
                 + "<p><b>Medical spending (the Medical column)</b> is a single lump input covering all health-care "
                 + "costs: medical premiums and out-of-pocket (deductible and copay, dentist / vision / hearing). "
@@ -4432,22 +4524,27 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "(a) does <b>not</b> cap the yearly inflation raise. The paper's Inflation Rule does: &quot;The "
                 + "maximum annual inflationary increase is 6 percent.&quot; So after a year of inflation above 6% "
                 + "the GK withdrawal here rises by the full rate &mdash; less conservative, and it matters only in "
-                + "high-inflation historical sequences such as the 1970s. (b) It applies this "
+                + "high-inflation historical sequences such as the 1970s. (b) <b>Optionally</b>, it applies this "
                 + "application's <b>go-go/slow-go spending multiplier on top of the GK-rule withdrawal</b> "
                 + "(Actual wd = GK withdrawal &times; the go-go or slow-go multiplier for that year), which the "
                 + "2006 spec has no concept of. "
-                + "Deviation (b) is a front-loading overlay, NOT conservative: it deliberately raises early "
-                + "withdrawals so the GK tab's spending shape is comparable to the Pro PoS tab. <b>To run a GK "
-                + "simulation true to the textbook spec, set the go-go and slow-go durations (go-go years and "
-                + "slow-go years) to 0 in the input panel</b> &mdash; then the multiplier resolves to 1.0 and the "
-                + "withdrawal shown is the pure rule output. Note those durations are <b>shared inputs</b> that "
-                + "also drive the Pro PoS and Stress Test tabs, so restore your normal go-go/slow-go settings "
-                + "afterward.</p>"
-                + "<p><b>The GK tab uses the full go-go / slow-go / no-go curve</b> (since October 7, 2026). "
+                // v1 2026-10-23 (Q8)
+                + "Since October 23, 2026 this is a checkbox, <b>Apply go-go / slow-go multipliers</b> on the "
+                + "<i>Guyton-Klinger inputs</i> card, and it is <b>off by default</b>: the GK tab and the Stress "
+                + "Test then run pure Guyton-Klinger, the withdrawal shown is the rule output, and scenarios saved "
+                + "before that date load with it off. Turned on, deviation (b) is a front-loading overlay, NOT "
+                + "conservative: it deliberately raises early withdrawals so the GK tab's spending shape is "
+                + "comparable to the Pro PoS tab. Before the checkbox, the only way to a run true to the spec was "
+                + "setting the go-go and slow-go durations to 0 &mdash; inputs the Pro PoS tab shares. The banner "
+                + "above the GK table states which mode the table was run in. The checkbox is not part of the SS "
+                + "Optimizer fingerprint: the optimizer never runs GK.</p>"
+                + "<p><b>With the multipliers on, the GK tab uses the full go-go / slow-go / no-go curve</b> "
+                + "(since October 7, 2026). "
                 + "It reads the same four inputs as the Pro PoS engine &mdash; the go-go and slow-go multipliers "
                 + "and durations on the Annual Spending card &mdash; through the same year windows, so both tabs "
-                + "and the Stress Test spend on one schedule. Slow-go rows are shaded the same paler green as on "
-                + "the Pro PoS tab. Before that date the GK engine applied go-go only and ran slow-go years at "
+                + "and the Stress Test spend on one schedule. Go-go and slow-go rows are shaded as on the Pro PoS "
+                + "tab (with the multipliers off, no rows are shaded). The SS bridge is the Pro PoS engine's "
+                + "schedule either way. Before that date the GK engine applied go-go only and ran slow-go years at "
                 + "1.0&times;. The guardrail rules still judge the GK withdrawal itself; the multiplier scales "
                 + "only Actual wd, which is what leaves the portfolio. Since v1 (2026-10-12) GK also withdraws at "
                 + "the start of the year, as the Pro PoS engine does, and its RMD buckets take each RMD at the "
@@ -4497,8 +4594,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "why the GK 'final balance' is misleading.</b> A red gap means the guardrail-driven paycheck "
                 + "plus guaranteed income fell short of the budgeted spending that year. In this model the GK "
                 + "withdrawal is set by the RULE (a percentage of balance, guardrail-adjusted), not by the "
-                + "spending need &mdash; and that rule-driven withdrawal, after the go-go/slow-go multiplier is "
-                + "applied (the Actual wd column), is what decrements the portfolio. The "
+                + "spending need &mdash; and that rule-driven withdrawal, after the go-go/slow-go multiplier when "
+                + "that box is on (the Actual wd column), is what decrements the portfolio. The "
                 + "shortfall is displayed but not funded, and the RMD overage stays invested rather "
                 + "than covering it. So the GK tab reports 'portfolio survived' while the red gaps show the "
                 + "paycheck under-funded the budget for years. The survival is real; the ADEQUACY is not.</p>"
@@ -5112,6 +5209,59 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "every column included whether shown or hidden. The Pro PoS and GK files follow the Today's $ "
                 + "toggle and say which in their names (_real or _nominal). A table with no results yet is "
                 + "skipped.</p>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                // v1 2026-10-23 (Q6): the Stress Test tab, for a new user
+                + "<h3 style='color:#2a5d34;'><a name='sec14'></a>14. Stress Test &mdash; living through history's worst markets</h3>"
+                + "<p><b>What it is.</b> The Stress Test tab replays four of the worst stretches in market history "
+                + "through your plan, as if each one began the year you retire, and shows what would have happened to "
+                + "your spending and your savings:</p>"
+                + "<table border='1' cellpadding='3' cellspacing='0'>"
+                + "<tr><th>Crisis</th><th>Years replayed</th></tr>"
+                + "<tr><td>Great Depression</td><td>1929&ndash;1942</td></tr>"
+                + "<tr><td>Stagflation Era (high inflation, weak markets)</td><td>1966&ndash;1982</td></tr>"
+                + "<tr><td>Dot-com Crash</td><td>2000&ndash;2006</td></tr>"
+                + "<tr><td>Housing Crisis / Great Financial Crisis</td><td>2007&ndash;2013</td></tr>"
+                + "</table>"
+                + "<p><b>Why it exists.</b> The main result (Pro PoS) tests your plan against hundreds of random "
+                + "futures and gives you a probability. Random futures rarely reproduce a long, specific bad stretch "
+                + "the way history did &mdash; sixteen years of high inflation from 1966 to 1982, for example. Timing "
+                + "matters most at the start of retirement: a crash in your first few years hurts more than the same "
+                + "crash later, because you are selling investments at low prices to pay the bills while your savings "
+                + "are largest. The Stress Test asks: <i>what if one of history's worst periods arrived just as I "
+                + "retired?</i></p>"
+                + "<p><b>Which plan it tests.</b> Your <i>guardrail</i> plan from the Guyton-Klinger tab, with the same "
+                + "inputs and the same setting of <b>Apply go-go / slow-go multipliers</b> on the <i>Guyton-Klinger "
+                + "inputs</i> card (off by default; the status line says which was used). A guardrail plan cuts "
+                + "spending by 10% when withdrawals grow too large compared with your savings, and raises it again when "
+                + "markets recover. So the answer is not simply pass or fail: the questions are <b>how much would my "
+                + "spending drop, and how long until it comes back?</b> A flexible plan bends instead of breaking.</p>"
+                + "<p><b>How to use it.</b> Press <b>Run Stress Test</b>. You get one row per crisis and a summary "
+                + "sentence underneath:</p>"
+                + "<table border='1' cellpadding='3' cellspacing='0'>"
+                + "<tr><th>Column</th><th>What it tells you</th></tr>"
+                + "<tr><td>Starts yr</td><td>When the crisis begins: your first retirement year, or later (see below)</td></tr>"
+                + "<tr><td>Initial Base Spend</td><td>Your starting yearly withdrawal, before any go-go extra</td></tr>"
+                + "<tr><td>Worst-Yr Base Spend (real)</td><td>The lowest it fell, in today's dollars</td></tr>"
+                + "<tr><td>Max Cut %</td><td>How deep that drop was</td></tr>"
+                + "<tr><td># Guardrail Cuts</td><td>How many 10% cuts the guardrails made</td></tr>"
+                + "<tr><td>Yrs to Recover</td><td>Years until spending got back to the starting level; &ldquo;not "
+                + "recovered&rdquo; means it stayed lower (shaded amber)</td></tr>"
+                + "<tr><td>Final Balance / Survived</td><td>Whether the money lasted to the end of the plan "
+                + "(<i>No</i> is shaded amber)</td></tr>"
+                + "</table>"
+                + "<p><b>Sequence starts N years in</b>, on the <i>Historical Stress Scenario</i> card, delays each "
+                + "crisis. A crisis a few years in, while go-go spending is still high, is often the harder test. The "
+                + "dropdown on the same card applies one chosen crisis to the Pro PoS and Guyton-Klinger tabs for a "
+                + "closer look; the SS Optimizer always ignores it. In the Stress Test, years before a delayed crisis "
+                + "and after it ends use your average return and inflation from the <i>Market Assumptions</i> card.</p>"
+                + "<p><b>What to do with it.</b> If a crisis would force cuts deeper or longer than you could live "
+                + "with, that is a signal to revisit your spending or Social Security claiming choices. The tab does "
+                + "not tell you a plan &ldquo;failed&rdquo;; it shows you what living through a bad stretch would "
+                + "look like.</p>"
+                + "<p><b>Why it was built.</b> People do not live through a probability &mdash; they live through "
+                + "spending changes. The Stress Test turns &ldquo;80% chance of success&rdquo; into something "
+                + "concrete: in a 1929-style decade, your spending would drop this much for this many years. It "
+                + "follows the approach of Income Lab, whose tools stress-test guardrail plans the same way.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "</body></html>";
 
@@ -5907,6 +6057,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         btnRunStress.setBorderPainted(true);
         btnRunStress.setBorder(BorderFactory.createLineBorder(new Color(16, 90, 55), 1));
         btnRunStress.addActionListener(e -> runStressTest());
+        // v1 2026-10-23 (Q6)
+        btnRunStress.setToolTipText("<html><b>Run Stress Test</b><br>"
+                + "Replays four of history's worst market periods -- the Great Depression,<br>"
+                + "the 1966-82 stagflation, the dot-com crash and the 2007-13 financial<br>"
+                + "crisis -- through your Guyton-Klinger plan, each starting your first<br>"
+                + "retirement year, and shows how far spending would be cut and how long<br>"
+                + "it would take to come back. See section 14 of the Assumptions &amp;<br>"
+                + "Methods tab.</html>");
 
         lblStressStatus = new JLabel("Click Run Stress Test to run your current plan through each historical crisis.");
         lblStressStatus.setFont(new Font("Monospaced", Font.PLAIN, 12));
@@ -5932,29 +6090,35 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         tblStress = new JTable(tblStressModel) {
             @Override public String getToolTipText(java.awt.event.MouseEvent e) {
                 int col = convertColumnIndexToModel(columnAtPoint(e.getPoint()));
+                // v1 2026-10-23 (Q5): each tip on its own column. The "Starts yr" column was
+                // added (v6) without one, which pushed every later tip one column left.
                 switch (col) {
                     case 0: return "<html>The historical crisis the guardrail plan was run through.<br>"
-                            + "After the sequence ends, remaining years use your random distribution.</html>";
-                    case 1: return "<html>The guardrail withdrawal in the first drawing year, <b>before</b> the<br>"
+                            + "Years before the crisis (when it is shifted in) and after it ends use<br>"
+                            + "your average return and inflation from the <i>Market Assumptions</i> card.</html>";
+                    case 1: return "<html>When the crisis begins. <b>yr 1</b> = your first retirement year;<br>"
+                            + "<b>+N yr</b> = shifted N years in by <i>Sequence starts N years in</i> on the<br>"
+                            + "<i>Historical Stress Scenario</i> card.</html>";
+                    case 2: return "<html>The guardrail withdrawal in the first drawing year, <b>before</b> the<br>"
                             + "go-go multiplier. This is the baseline the recovery metric returns to.<br><br>"
                             + "<b>Why before the multiplier (v12):</b> the planned step-down when go-go<br>"
                             + "ends is a spending choice, not a cut. Measured after the multiplier, it<br>"
                             + "counted as a cut, and 'recovery' meant returning to the go-go level --<br>"
                             + "which by design never happens. Only guardrail moves count here.</html>";
-                    case 2: return "<html>The lowest base (pre-go-go) withdrawal year during the crisis, in<br>"
+                    case 3: return "<html>The lowest base (pre-go-go) withdrawal year during the crisis, in<br>"
                             + "<b>real</b> (today's dollars) terms -- so an inflation-driven nominal rise is<br>"
                             + "not mistaken for 'no cut'. This is the trough of the guardrail adjustment.</html>";
-                    case 3: return "<html>Peak-to-trough cut in the base withdrawal: (initial - worst) / initial,<br>"
+                    case 4: return "<html>Peak-to-trough cut in the base withdrawal: (initial - worst) / initial,<br>"
                             + "in real terms, before the go-go multiplier. How deep the guardrail<br>"
                             + "reduction went.</html>";
-                    case 4: return "<html>Number of years the Capital Preservation Rule (CPR) cut the<br>"
+                    case 5: return "<html>Number of years the Capital Preservation Rule (CPR) cut the<br>"
                             + "withdrawal 10%. Each is a guardrail adjustment triggered by the crisis.</html>";
-                    case 5: return "<html>Years from the trough until the real base withdrawal (before the go-go<br>"
+                    case 6: return "<html>Years from the trough until the real base withdrawal (before the go-go<br>"
                             + "multiplier) returned to its initial level. 'not recovered' means it stayed<br>"
                             + "reduced through the remaining horizon. Income Lab emphasizes this<br>"
                             + "recovery timeline.</html>";
-                    case 6: return "<html>Portfolio balance at the end of the full horizon (nominal).</html>";
-                    case 7: return "<html><b>Yes</b> = the portfolio never depleted through the full horizon.<br>"
+                    case 7: return "<html>Portfolio balance at the end of the full horizon (nominal).</html>";
+                    case 8: return "<html><b>Yes</b> = the portfolio never depleted through the full horizon.<br>"
                             + "A guardrail plan that survives with reduced-then-restored spending is a<br>"
                             + "success in the Income Lab sense, even if spending dipped along the way.</html>";
                     default: return null;
@@ -5969,7 +6133,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         tblStress.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         tblStress.setSelectionBackground(new Color(190, 220, 255));
 
-        int[] cw = { 220, 110, 150, 90, 130, 120, 130, 90 };
+        int[] cw = { 220, 70, 110, 150, 90, 130, 120, 130, 90 };   // v1 2026-10-23 (Q5): all nine columns
         for (int i = 0; i < cw.length && i < tblStress.getColumnCount(); i++)
             tblStress.getColumnModel().getColumn(i).setPreferredWidth(cw[i]);
 
@@ -5982,12 +6146,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 java.awt.Component c = super.getTableCellRendererComponent(t, v, sel, foc, row, col);
                 if (!sel) {
                     c.setBackground(Color.WHITE);
-                    Object survived = tblStressModel.getValueAt(row, 7);
-                    Object recover  = tblStressModel.getValueAt(row, 5);
+                    // v1 2026-10-23 (Q5): Survived is column 8 and Yrs to Recover column 6 --
+                    // these read and colored Final Balance and # Guardrail Cuts instead.
+                    Object survived = tblStressModel.getValueAt(row, 8);
+                    Object recover  = tblStressModel.getValueAt(row, 6);
                     boolean didSurvive = "Yes".equals(survived);
                     boolean didRecover = recover != null && !recover.toString().startsWith("not");
-                    if (col == 7) c.setBackground(didSurvive ? OK_BG : WARN_BG);
-                    if (col == 5) c.setBackground(didRecover ? OK_BG : WARN_BG);
+                    if (col == 8) c.setBackground(didSurvive ? OK_BG : WARN_BG);
+                    if (col == 6) c.setBackground(didRecover ? OK_BG : WARN_BG);
                 }
                 setHorizontalAlignment(col == 0 ? LEFT : RIGHT);
                 return c;
@@ -6130,7 +6296,10 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + (stressOff > 0
                 ? " -- each sequence STARTING " + stressOff + " YEARS IN"
                 + " (from the 'Sequence starts N years in' spinner)."
-                : ", each starting in year 1.") + stressNotes[0]);   // v1 2026-10-16 (V)
+                : ", each starting in year 1.")
+                // v1 2026-10-23 (Q8): which GK mode the crises ran in
+                + (readInputs().gkUseSpendMults ? " Spending multipliers: on." : " Spending multipliers: off (pure GK).")
+                + stressNotes[0]);   // v1 2026-10-16 (V)
     }
 
     // == Apply SS dates and run IL simulation ================================
@@ -6788,6 +6957,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             "manSSMonthly",   "womanSSMonthly",  "manSSAmount",      "womanSSAmount",
             "gkPreRate",      "gkUpperGuardrail", "gkLowerGuardrail",
             "proPosUpperGuardrail", "proPosLowerGuardrail",
+            // v1 2026-10-23 (Q8): GK only -- the batch never runs GK.
+            "gkUseSpendMults",
             // v1 2026-10-12: a lazily cached function of inflation + its SD (both
             // hashed). Hashing it would make the fingerprint depend on whether the
             // cache had been filled yet -- NaN before a run, a number after.
@@ -9271,6 +9442,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         props.setProperty("mc.binIters",            String.valueOf(iv(spBinaryIters)));
         props.setProperty("mc.fanPaths",            String.valueOf(iv(spMcFanPaths)));
         props.setProperty("pro.shortfallGrace",     String.valueOf(iv(spShortfallGrace)));   // v1 2026-10-19 (SL1)
+        props.setProperty("gk.useSpendMults",       String.valueOf(chkGkSpendMults.isSelected()));   // v1 2026-10-23 (Q8)
         props.setProperty("opt.scenario",           String.valueOf(
                 cmbScenario != null ? cmbScenario.getSelectedIndex() : 0));
         // v9: per-scenario Pro PoS column view (model indices, CSV). Absent keys on
@@ -9547,6 +9719,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // v1 2026-10-19 (SL1): files saved before this input load with the default, 3.
         spShortfallGrace.setValue(3);
         setSpinnerIfPresent(spShortfallGrace, props, "pro.shortfallGrace");
+        // v1 2026-10-23 (Q8): files saved before this setting load with it off (pure GK).
+        chkGkSpendMults.setSelected(Boolean.parseBoolean(props.getProperty("gk.useSpendMults", "false").trim()));
         if (cmbScenario != null) {
             String si = props.getProperty("opt.scenario");
             if (si != null) { try { cmbScenario.setSelectedIndex(Integer.parseInt(si.trim())); } catch (Exception ignored) {} }
@@ -10244,6 +10418,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         i.gkUpperGuardrail     = dv(spGkUpperGuardrail)     / 100.0;
         i.gkLowerGuardrail     = dv(spGkLowerGuardrail)     / 100.0;
         i.gkPreRate          = dv(spGkPreRate)       / 100.0;
+        i.gkUseSpendMults    = chkGkSpendMults.isSelected();   // v1 2026-10-23 (Q8)
         i.scenarioIndex      = cmbScenario != null ? cmbScenario.getSelectedIndex() : 0;
         i.manAge             = computeAge(i.manBirthYear,   i.manBirthMonth);
         i.womanAge           = computeAge(i.womanBirthYear, i.womanBirthMonth);
@@ -12530,7 +12705,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             // helper the Pro PoS engine uses and the same four Annual Spending inputs.
             // Before, GK applied go-go only and ran slow-go years at 1.0x, so the GK
             // and Stress Test tabs spent less in those years than Pro PoS showed.
-            double goGoMult   = spendMultFor(inp, y, startY);
+            // v1 2026-10-23 (Q8): 1.0 unless the GK multipliers box is on.
+            double goGoMult   = inp.gkUseSpendMults ? spendMultFor(inp, y, startY) : 1.0;
 
             // Resolve this year's return and inflation from historical scenario or random mean
             // v12: honor 'Sequence starts N years in' (seqOffset), matching
@@ -12731,11 +12907,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             row.inflFactor = inflFactor;
             row.manRmd = (int) manRmd; row.womanRmd = (int) womanRmd;
             row.combRmd = (int) combRmd; row.rmdOverage = rmdOverage;
-            row.drawing = drawing; row.goGoActive = goGoRemaining > 0;
+            // v1 2026-10-23 (Q8): the go-go / slow-go flags drive the row shading and the
+            // Actual wd tooltip, so they are set only when the multipliers apply.
+            row.drawing = drawing; row.goGoActive = inp.gkUseSpendMults && goGoRemaining > 0;
             row.startShare = wdStartProration;   // v1 2026-10-19 (PR-2)
             // v12 2026-10-07: slow-go window, keyed exactly as the Pro PoS row is.
             int yFromStartGk = y - startY;
-            row.slowGoActive = (goGoRemaining <= 0)
+            row.slowGoActive = inp.gkUseSpendMults && (goGoRemaining <= 0)
                     && inp.slowGoDuration > 0
                     && yFromStartGk >= inp.goGoDuration
                     && yFromStartGk < inp.goGoDuration + inp.slowGoDuration;
@@ -12867,10 +13045,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 if (col == 4 && gr.drawing) { // Actual wd -- v1 2026-10-19 (G2)
                     double d = showRealDollars ? gr.inflFactor : 1.0;
                     String tier = gr.goGoActive ? "go-go" : gr.slowGoActive ? "slow-go" : "no-go";
+                    boolean multsOn = lastResults.inp.gkUseSpendMults;   // v1 2026-10-23 (Q8)
                     StringBuilder sb = new StringBuilder("<html><b>Actual wd -- what leaves the portfolio</b><br>")
                             .append("&nbsp;&nbsp;GK withdrawal:&nbsp;").append(CURRENCY.format(Math.round(gr.wdGK / d))).append("<br>")
-                            .append("&nbsp;&nbsp;x ").append(tier).append(" multiplier:&nbsp;")
-                            .append(String.format("%.3f", gr.spendMult)).append("<br>");
+                            .append(multsOn
+                                    ? "&nbsp;&nbsp;x " + tier + " multiplier:&nbsp;" + String.format("%.3f", gr.spendMult) + "<br>"
+                                    : "&nbsp;&nbsp;x spending multiplier:&nbsp;off (pure Guyton-Klinger)<br>");
                     if (gr.ssBridge > 0) sb.append("&nbsp;&nbsp;+ SS bridge:&nbsp;")
                             .append(CURRENCY.format(Math.round(gr.ssBridge / d))).append("<br>");
                     sb.append("&nbsp;&nbsp;= Actual wd:&nbsp;<b>").append(CURRENCY.format(Math.round(gr.wdActual / d)))
@@ -13060,6 +13240,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     case 4 -> gkHeader.setToolTipText(   // v1 2026-10-19 (G2)
                             "<html><b>Actual wd -- what leaves the portfolio</b><br>"
                                     + "= GK withdrawal x the go-go / slow-go / no-go multiplier<br>"
+                                    // v1 2026-10-23 (Q8)
+                                    + "&nbsp;&nbsp;(only when <i>Apply go-go / slow-go multipliers</i> is checked on<br>"
+                                    + "&nbsp;&nbsp;the Guyton-Klinger inputs card; off by default = x 1.0)<br>"
                                     + "&nbsp;&nbsp;+ the SS bridge, when one applies (SS bridge mode, Social<br>"
                                     + "&nbsp;&nbsp;Security card), as on the Pro PoS tab.<br><br>"
                                     + "The guardrails judge the GK withdrawal alone, so neither the<br>"
@@ -13243,7 +13426,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // v1 2026-10-19: the lavender "Year 1 initial rate" and blue "GK rules start"
         // chips named colors no cell ever gets (G6); "* legacy basis" went with the
         // flat-only Tax (est) (G1); PMR0 is now the paper's Withdrawal Rule (G8).
-        legend.add(gkLegendChip(new Color(180, 230, 205), new Color(0, 90, 50),    "Go-go years"));
+        legend.add(gkLegendChip(new Color(180, 230, 205), new Color(0, 90, 50),    "Go-go years (multipliers on)"));   // Q8
         legend.add(gkLegendChip(new Color(255, 235, 185), new Color(120, 70, 0),   "WR0 -- inflation raise skipped"));
         legend.add(gkLegendChip(new Color(255, 210, 210), new Color(150, 30, 30),  "CPR[v] -- cut 10%"));
         legend.add(gkLegendChip(new Color(210, 240, 210), new Color(30, 110, 30),  "PR[^]  -- raised 10%"));
@@ -13268,18 +13451,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 BorderFactory.createLineBorder(new Color(220, 190, 150), 1),
                 BorderFactory.createEmptyBorder(5, 8, 5, 8)));
 
-        // Pure-GK fidelity banner (deep blue, italic). The go-go/slow-go multipliers
-        // scale the GK withdrawal, which the 2006 spec does not include. To run a
-        // textbook-faithful GK simulation, the user zeroes the go-go/slow-go DURATIONS
-        // -- but those inputs are shared with the Pro PoS and Stress Test tabs, so the
-        // banner warns to restore them afterward. See Assumptions section 8.
-        JLabel gkPureNote = new JLabel("<html><i><b>Pure Guyton-Klinger note:</b> the go-go and slow-go "
-                + "multipliers scale the withdrawals shown here (Actual wd = GK withdrawal x go-go or slow-go multiplier). "
-                + "The 2006 Guyton-Klinger spec has no go-go concept. To run a simulation true to the spec, set "
-                + "the <b>go-go years</b> and <b>slow-go years</b> (durations) to <b>0</b> in the input panel. "
-                + "Note that these are shared inputs that also drive the Pro PoS and Stress Test tabs -- "
-                + "<b>restore your go-go/slow-go settings afterward.</b> See section 8 on the Assumptions &amp; "
-                + "Methods tab.</i></html>");
+        // Pure-GK fidelity banner (deep blue, italic). v1 2026-10-23 (Q8): it states the
+        // mode the table was run in -- set from the run's inputs in updateGkTable. It
+        // used to tell the user to zero the shared go-go/slow-go durations instead.
+        JLabel gkPureNote = new JLabel(gkPureNoteText(chkGkSpendMults.isSelected()));
+        lblGkPureNote = gkPureNote;
         gkPureNote.setFont(new Font("SansSerif", Font.PLAIN, 12));
         gkPureNote.setForeground(new Color(20, 60, 120));   // deep, muted blue
         gkPureNote.setBorder(BorderFactory.createCompoundBorder(
@@ -13324,9 +13500,24 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     }
 
 
+    /** v1 2026-10-23 (Q8): the GK tab's mode banner -- multipliers on or off. */
+    private static String gkPureNoteText(boolean multsOn) {
+        return multsOn
+                ? "<html><i><b>Spending multipliers: ON.</b> Actual wd = GK withdrawal x the go-go or slow-go "
+                + "multiplier for that year (<i>Annual Spending</i> card), so the spending shape matches the Pro PoS "
+                + "tab. The 2006 Guyton-Klinger spec has no go-go concept: for a run true to the spec, clear "
+                + "<b>Apply go-go / slow-go multipliers</b> on the <i>Guyton-Klinger inputs</i> card. See section 8 "
+                + "on the Assumptions &amp; Methods tab.</i></html>"
+                : "<html><i><b>Spending multipliers: OFF -- pure Guyton-Klinger.</b> Actual wd is the guardrail "
+                + "withdrawal itself, as in the 2006 spec (plus any SS bridge). To scale it by the go-go and "
+                + "slow-go multipliers like the Pro PoS tab, check <b>Apply go-go / slow-go multipliers</b> on the "
+                + "<i>Guyton-Klinger inputs</i> card. See section 8 on the Assumptions &amp; Methods tab.</i></html>";
+    }
+
     private void updateGkTable(ProResults res) {
         if (tblGkModel == null) return;
         SimInputs inp = res.inp;
+        if (lblGkPureNote != null) lblGkPureNote.setText(gkPureNoteText(inp.gkUseSpendMults));   // Q8
         boolean showRealDollars = this.showRealDollars;
         if (res.gkResults != null) {
             GkResults gk = res.gkResults;
@@ -15312,6 +15503,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         double proPosUpperGuardrail, proPosLowerGuardrail;   // Pro PoS advisory alerts only
         double gkUpperGuardrail, gkLowerGuardrail;           // Guyton-Klinger active adjustments
         double gkPreRate;
+        boolean gkUseSpendMults;   // v1 2026-10-23 (Q8): GK applies the go-go/slow-go multipliers
         int scenarioIndex; // 0=Random, 1=Depression, 2=Stagflation, 3=DotCom, 4=GFC
 
         // v9 Option 2: a shallow copy of every instance field, used by the SS
@@ -15594,9 +15786,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the year. One number to check against the real account between runs.
     // Baseline comparison: the withdrawal is essentially rate x balance, so the
     // year-over-year change splits exactly into a portfolio effect and a rate
-    // (horizon) effect, with no residual:
+    // effect, with no residual:
     //     portfolio effect = (balNow - balBase) * rateBase
-    //     horizon  effect = balNow * (rateNow - rateBase)
+    //     rate      effect = balNow * (rateNow - rateBase)
+    // v1 2026-10-23 (Q4): the rate effect is every other change -- horizon, SS
+    // dates, other inputs, program updates -- and is labeled "other changes".
     private void refreshBaselineLine() {
         if (lblBaseline == null) return;
         if (!lastRunValid) { lblBaseline.setText(" "); return; }
@@ -15658,10 +15852,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             sb.append("<br>&nbsp;&nbsp;portfolio ")
                     .append(String.format("%+.1f%%", (lastRunBalance / (double) baselineBalance - 1) * 100))
                     .append(" (").append(signed(balEff)).append("); ")
-                    .append(horizonDelta > 0
-                            ? "horizon " + horizonDelta + " fewer year(s) to fund"
-                            : (horizonDelta < 0 ? "horizon lengthened"
-                            : "rate change (assumptions)"))
+                    // v1 2026-10-23 (Q4): everything except the portfolio and go-go -- the
+                    // horizon, SS dates, other inputs and program updates. It was named
+                    // after the horizon alone, and showed a gain for a LONGER horizon.
+                    .append(horizonDelta != 0
+                            ? String.format("other changes, incl. horizon %+d yr", -horizonDelta)
+                            : "other changes")
                     .append(" (").append(signed(rateEff)).append(")");
             if (multChanged) {
                 sb.append("; <b>go-go ")
@@ -16163,6 +16359,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             dismissed[0] = true;
             splash.setVisible(false);
             splash.dispose();
+            redrawAll(owner);   // v1 2026-10-23 (Q7)
         };
 
         // Auto-close at 5 seconds.
