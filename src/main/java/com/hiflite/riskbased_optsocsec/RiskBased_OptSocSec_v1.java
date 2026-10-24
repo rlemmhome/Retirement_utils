@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Friday, October 23, 2026 at 04:26 PM MST (UTC-7)
+// Last modified: Friday, October 23, 2026 at 05:09 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Friday, October 23, 2026 at 04:26 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Friday, October 23, 2026 at 05:09 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1038,6 +1038,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "balance sets the GK withdrawal (prorated by start month).<br>"
                 + "From year 2 onward, CPR\u25bc / PR\u25b2 / WR\u2070 guardrail rules engage,<br>"
                 + "using this rate as the permanent benchmark for all comparisons.<br><br>"
+                // v1 2026-10-23 (Q11): where the defaults come from
+                + "<b>Research basis</b> (Guyton &amp; Klinger, \"Decision Rules and Maximum Initial<br>"
+                + "Withdrawal Rates,\" <i>Journal of Financial Planning</i>, March 2006):<br>"
+                + "&nbsp;&nbsp;* With the decision rules and at least 65% stocks, initial rates of<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;5.2%-5.6% were sustainable at 99% confidence over 40 years.<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;5.4% is the midpoint of that range, for the paper's asset mix.<br>"
+                + "&nbsp;&nbsp;* With 50% stocks the maximum fell to as low as 4.6%. The 4.7%<br>"
+                + "&nbsp;&nbsp;&nbsp;&nbsp;default sits just above that figure.<br><br>"
                 + "<b>Default: 4.7%</b>. Saved with the scenario.</html>");   // v1 2026-10-23 (Q9)
 
         inner.add(card("Portfolio & Simulation", new Object[]{
