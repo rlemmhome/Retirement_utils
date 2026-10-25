@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Friday, October 23, 2026 at 05:09 PM MST (UTC-7)
+// Last modified: Sunday, October 25, 2026 at 09:54 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Friday, October 23, 2026 at 05:09 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, October 25, 2026 at 09:54 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -341,6 +341,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private static final int STREAM_ANNUITY  = 0;
     private static final int STREAM_PENSION  = 1;
     private static final int STREAM_MILITARY = 2;
+    // v1 2026-10-25 (Q14): stream COLA choice that follows the Social Security COLA
+    // settings. Resolved to mode 1 or 2 in readStream, so the engine never sees it.
+    private static final int COLA_SAME_AS_SS = 3;
     private static final int STREAM_COUNT    = 3;
     private static final String[] STREAM_NAME = { "annuity", "pension", "military" };
     private final JCheckBox[] chkUseStream    = new JCheckBox[STREAM_COUNT];
@@ -1323,7 +1326,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 /*stateExempt*/false));
         inner.add(Box.createVerticalStrut(4));
         inner.add(buildStreamCard(STREAM_MILITARY, "Military retired pay", "Use military retired pay",
-                "Annual retired pay ($)", 0, 2026, 1, /*cola*/2, /*survPct*/55,
+                "Annual retired pay ($)", 0, 2026, 1, /*cola*/COLA_SAME_AS_SS, /*survPct*/55,   // Q14
                 /*stateExempt*/true));
         inner.add(Box.createVerticalStrut(4));
 
@@ -1389,6 +1392,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
 
         // == Spending ======================================================
         spLivingExp    = spinI( 70_000, 0, 500_000, 1_000, "#,###");
+        // v1 2026-10-25 (Q12)
+        spLivingExp.setToolTipText("<html><b>Living expenses ($/yr)</b><br>"
+                + "This is the amount you (and your spouse, together) spend each year. It is<br>"
+                + "the baseline for consumer spending. Enter it in simulation-start-year<br>"
+                + "dollars; it grows with inflation each year.<br><br>"
+                + "It does <b>not</b> include medical expenses or taxes. Each has its own column<br>"
+                + "in the table, and each grows by its own rule instead of with the usual<br>"
+                + "increase in the cost of living:<br>"
+                + "&nbsp;&nbsp;* Medical grows at the <i>Medical Cost Increase (%/yr)</i> rate on this card.<br>"
+                + "&nbsp;&nbsp;* Taxes follow brackets and thresholds set by Congress, not by the economy.</html>");
         spMedical      = spinI(  6_200, 0, 100_000,   500, "#,###");
         spMedical.setToolTipText("<html><b>Medical premiums &amp; out-of-pocket ($/yr)</b><br>"
                 + "All health-care costs: <b>medical premiums and out-of-pocket</b> (deductible<br>"
@@ -2447,7 +2460,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             any = true;
                             sb.append("<tr><td><b>").append(nm[k]).append("</b></td><td>")
                                     .append(CURRENCY.format(Math.round(vals[k] / d)))
-                                    .append("</td><td><i>").append(colaDesc(ss[k]))
+                                    .append("</td><td><i>").append(colaDesc(ss[k], si))
                                     .append("</i></td></tr>");
                         }
                         if (!any) sb.append("<tr><td colspan=3><i>No stream is active."
@@ -2459,12 +2472,25 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                         if (er.survivorYear) sb.append("<br><i>Survivor year: any stream set to"
                                 + " reduce on this death is already at its survivor"
                                 + " percentage.</i><br>");
-                        sb.append("<br>A <b>non-COLA</b> stream is a fixed check, so its buying"
-                                + " power erodes: at 3.79% inflation it holds about <b>67%</b>"
-                                + " of its starting-year value after 10 years and roughly"
-                                + " <b>50%</b> after 18. Toggle <b>Real $</b> to watch that"
-                                + " happen. A stream that <b>tracks inflation</b> holds its"
-                                + " real value instead, and stays roughly flat in Real $.");
+                        // v1 2026-10-25 (Q13): worked from the plan's own inflation. It quoted a
+                        // fixed 3.79% (the 1961-2024 average), whatever the plan used.
+                        double infl = (si != null) ? si.inflation : 0.023;
+                        String inflTxt = String.format("%.2f%%", infl * 100);
+                        sb.append(showRealDollars
+                                ? String.format("<br>In Today's $, each amount above is divided by this year's"
+                                + " Infl factor (%.3f), the <b>typical</b> simulated price level, which"
+                                + " runs a little below your %s average inflation in the early years"
+                                + " (Assumptions section 2).", er.inflFactor, inflTxt)
+                                : "<br>Amounts are in future (nominal) dollars. Today's $ divides each by"
+                                + " that year's Infl factor, the <b>typical</b> simulated price level,"
+                                + " which runs a little below your " + inflTxt + " average inflation"
+                                + " in the early years (Assumptions section 2).");
+                        sb.append(String.format("<br>A fixed-%% COLA grows by that %% in nominal $ and by roughly"
+                                        + " that %% minus inflation in Today's $. A <b>non-COLA</b> stream holds about"
+                                        + " <b>%.0f%%</b> of its starting value after 10 years at %s and about"
+                                        + " <b>%.0f%%</b> after 18. A stream that tracks inflation, or follows Social"
+                                        + " Security, stays roughly flat in Today's $.",
+                                100 / Math.pow(1 + infl, 10), inflTxt, 100 / Math.pow(1 + infl, 18)));
                         sb.append("</html>");
                         return sb.toString();
                     }
@@ -3834,6 +3860,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "start year on, used only when <i>SS COLA tracks simulated inflation</i> is off (it is on "
                 + "by default for new scenarios). See section 9.</li>"
                 + "</ul>"
+                // v1 2026-10-25 (Q13)
+                + "<p><b>The Infl factor column.</b> The Infl factor column shows the <b>typical</b> (middle) "
+                + "simulated price level, not the average, for the same reason median income is quoted instead "
+                + "of mean income: a few extreme years would distort an average. Inflation is lopsided. It "
+                + "rarely falls but sometimes spikes, so the typical year runs a little below the average. In "
+                + "the simulation, every future averages exactly the inflation you entered (2.3% by default). "
+                + "Because no year can go below 0%, the typical year is about 1.9% (at the default 2.3% "
+                + "average and 2.73% spread), and the typical path's growth approaches the average over time. "
+                + "Real US inflation shows the same pattern: 1961-2024 averaged 3.79% a year, while the "
+                + "typical year was 3.02%.</p>"
 
                 + "<p><b>Historical basis (available as a stress case).</b> The 1961-2024 historical averages "
                 + "&mdash; nominal S&amp;P 500 CAGR of ~10.5%, general inflation of 3.79% &mdash; remain "
@@ -5130,12 +5166,29 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<p><b>COLA.</b> <i>None</i> is a fixed nominal check that never rises &mdash; the usual case "
                 + "for private pensions and non-COLA annuities, and what the pre-v11 annuity did "
                 + "unconditionally. <i>Fixed %</i> compounds a set rate. <i>Tracks inflation</i> rides each "
-                + "path's simulated inflation, holding real purchasing power flat: <b>military retired pay works "
-                + "this way</b>, being indexed to CPI-W, which is why that card defaults to it. The optional "
+                + "path's simulated inflation, holding real purchasing power flat. The optional "
                 + "<i>COLA haircut</i> subtracts a constant amount from the indexing each year and defaults to "
                 + "0; it is the same control Social Security has, and exists because CPI-W weights a "
                 + "working-age basket while retirees spend more on healthcare and housing (the experimental "
                 + "CPI-E has historically run about 0.2 pp/yr higher).</p>"
+                // v1 2026-10-25 (Q14)
+                + "<p><b>Same as Social Security (since October 25, 2026).</b> This COLA choice uses whatever "
+                + "Social Security uses in the plan &mdash; simulated inflation minus the COLA shortfall, or "
+                + "the fixed SS COLA when <i>SS COLA tracks simulated inflation</i> is off &mdash; counted from "
+                + "the stream's own start year. By law, military retired pay and VA disability compensation "
+                + "receive the Social Security COLA (CPI-W), so the military card defaults to it for new "
+                + "scenarios; scenario files saved earlier keep their saved choice. REDUX / Career Status Bonus "
+                + "retirees get CPI-W minus 1% until a one-time catch-up at 62: use <i>Tracks inflation</i> "
+                + "with a 1.00 haircut (the catch-up is not modeled). A first-year partial COLA is not "
+                + "modeled either.</p>"
+                // v1 2026-10-25 (Q13)
+                + "<p><b>COLA rules in Today's $.</b> Nominal amounts are what is actually paid; Today's $ "
+                + "divides each by that year's Infl factor (section 2). A <i>Fixed %</i> COLA grows by that "
+                + "percentage in nominal dollars and by roughly that percentage minus inflation in Today's $. "
+                + "A stream that tracks inflation, or follows Social Security, stays roughly flat in Today's $, "
+                + "less any haircut or shortfall. A <i>None</i> stream loses buying power: at 2.3% inflation "
+                + "it keeps about 80% of its starting value after 10 years and about 66% after 18. Social "
+                + "Security itself follows simulated inflation minus the COLA shortfall (section 9).</p>"
                 + "<p><b>Survivor continuation.</b> A stream can drop to a percentage of itself after the death "
                 + "event: 0% for a single-life annuity or pension, 50/75/100% for a joint-and-survivor "
                 + "election, 55% for the standard military Survivor Benefit Plan. It applies only when "
@@ -8982,7 +9035,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "the stream pays through that year and nothing after.</html>");
 
         cmbStreamCola[k] = new JComboBox<>(new String[]{
-                "None (fixed nominal)", "Fixed % per year", "Tracks inflation" });
+                "None (fixed nominal)", "Fixed % per year", "Tracks inflation",
+                "Same as Social Security" });   // v1 2026-10-25 (Q14)
         cmbStreamCola[k].setSelectedIndex(defCola);
         cmbStreamCola[k].setToolTipText("<html><b>Cost-of-living adjustment</b><br>"
                 + "<b>None</b> -- a fixed check that never rises. Most PRIVATE PENSIONS and<br>"
@@ -8990,8 +9044,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<b>Fixed %</b> -- rises by a set percentage every year. Some public<br>"
                 + "pensions cap their COLA this way.<br>"
                 + "<b>Tracks inflation</b> -- rises with the SIMULATED inflation of each path,<br>"
-                + "holding real purchasing power flat. <b>MILITARY RETIRED PAY works this<br>"
-                + "way</b> (it is indexed to CPI-W), as does Social Security.</html>");
+                + "holding real purchasing power flat, less the optional haircut below.<br>"
+                // v1 2026-10-25 (Q14)
+                + "<b>Same as Social Security</b> -- uses whatever COLA Social Security uses here:<br>"
+                + "simulated inflation minus its COLA shortfall (Historical Stress Scenario<br>"
+                + "card), or the fixed SS COLA (Social Security card) when <i>SS COLA tracks<br>"
+                + "simulated inflation</i> is off. By law <b>military retired pay</b> and VA<br>"
+                + "disability compensation get the Social Security COLA, so the military card<br>"
+                + "defaults to this. REDUX / Career Status Bonus retirees get CPI-W minus 1%<br>"
+                + "until a one-time catch-up at 62: use Tracks inflation with a 1.00 haircut<br>"
+                + "(the catch-up is not modeled). See section 12 of the Assumptions tab.</html>");
         cmbStreamCola[k].addActionListener(e -> refreshStreamFieldsEnabled());
 
         spStreamColaRate[k] = spinD(2.00, 0.0, 15.0, 0.05, "0.00");
@@ -9122,14 +9184,29 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private FixedStream readStream(int k) {
         if (chkUseStream[k] == null) return FixedStream.none();
         int amt = chkUseStream[k].isSelected() ? iv(spStreamAmt[k]) : 0;
+        int    cola = cmbStreamCola[k].getSelectedIndex();
+        double rate = dv(spStreamColaRate[k]) / 100.0;
+        double hc   = dv(spStreamColaHaircut[k]) / 100.0;
+        // v1 2026-10-25 (Q14): "Same as Social Security" becomes the rule the SS settings
+        // describe -- inflation less the COLA shortfall, or the fixed SS COLA -- the same
+        // math ssGrowth uses, counted from the stream's own start year.
+        if (cola == COLA_SAME_AS_SS) {
+            if (chkSSColaTracksInfl != null && chkSSColaTracksInfl.isSelected()) {
+                cola = 2;
+                hc   = (spColaShortfall != null) ? dv(spColaShortfall) / 100.0 : 0.002;
+            } else {
+                cola = 1;
+                rate = dv(spSSCola) / 100.0;
+            }
+        }
         return new FixedStream(
                 amt,
                 iv(spStreamStartY[k]),
                 iv(spStreamStartM[k]),
                 iv(spStreamEndY[k]),
-                cmbStreamCola[k].getSelectedIndex(),
-                dv(spStreamColaRate[k]) / 100.0,
-                dv(spStreamColaHaircut[k]) / 100.0,
+                cola,
+                rate,
+                hc,
                 dv(spStreamSurvPct[k]),
                 cmbStreamSurvWho[k].getSelectedIndex(),
                 chkStreamStateExempt[k].isSelected(),
@@ -12256,13 +12333,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         return c;
     }
 
-    /** v11: human-readable COLA description for one stream. */
-    private static String colaDesc(FixedStream s) {
+    /** v11: human-readable COLA description for one stream. v1 2026-10-25 (Q14): says
+     *  so when the rule is the one Social Security uses in this plan. */
+    private static String colaDesc(FixedStream s, SimInputs inp) {
+        boolean sameAsSs = inp != null && (inp.ssColaTracksInflation
+                ? s.colaMode() == 2 && Math.abs(s.colaHaircut() - Math.max(0, inp.ssColaShortfall)) < 1e-9
+                : s.colaMode() == 1 && Math.abs(s.colaRate() - inp.ssCola) < 1e-9);
+        String ss = sameAsSs ? " (same as Social Security)" : "";
         if (s.colaMode() == 2)
-            return s.colaHaircut() > 0
+            return (s.colaHaircut() > 0
                     ? String.format("COLA tracks inflation less %.2f%%/yr", s.colaHaircut() * 100)
-                    : "COLA tracks inflation";
-        if (s.colaMode() == 1) return String.format("COLA %.2f%%/yr", s.colaRate() * 100);
+                    : "COLA tracks inflation") + ss;
+        if (s.colaMode() == 1) return String.format("COLA %.2f%%/yr", s.colaRate() * 100) + ss;
         return "non-COLA";
     }
 
@@ -12283,7 +12365,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             sb.append(names[k]).append(' ').append(CURRENCY.format(ss[k].amount()))
                     .append(String.format("/yr from %02d/%d", ss[k].startMonth(), ss[k].startYear()))
                     .append(ss[k].endYear() > 0 ? " through " + ss[k].endYear() : "")
-                    .append(" (").append(colaDesc(ss[k])).append(')');
+                    .append(" (").append(colaDesc(ss[k], inp)).append(')');
         }
         return sb.length() == 0 ? "none" : sb.toString();
     }
