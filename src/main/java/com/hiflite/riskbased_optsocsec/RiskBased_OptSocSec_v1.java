@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Sunday, October 25, 2026 at 09:54 AM MST (UTC-7)
+// Last modified: Sunday, October 25, 2026 at 04:02 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,14 +112,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Sunday, October 25, 2026 at 09:54 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, October 25, 2026 at 04:02 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
     }
 
     private static final int BASE_YEAR_DEFAULT = java.time.Year.now().getValue();
-    private static int BASE_YEAR = BASE_YEAR_DEFAULT;
     /**
      * v1 2026-10-14 (F1): RMD starting age by birth year -- the SECURE 2.0
      * "applicable age" as the final regulations (2024) set it: 73 for anyone born
@@ -593,13 +592,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // v12 2026-10-11: the readout's work counters. simCount (above) is the number of
     // Monte Carlo trial paths actually run; simPathYears is the upper bound on the
     // years those paths simulated (a trial path stops early when it depletes). Both
-    // are fed ONLY by the Pro PoS run's own thread (proRunThread), so an SS
+    // are fed ONLY by the Pro PoS run's own threads (countsProWork), so an SS
     // Optimizer batch running behind it can never inflate the Pro tab's readout.
     // Replaces simTotal, a pre-run formula that ignored the fan paths' reduced
     // solver and so overstated the work about 18x (and mixed two units).
     private final java.util.concurrent.atomic.AtomicLong simPathYears = new java.util.concurrent.atomic.AtomicLong(0);
-    private volatile Thread proRunThread = null;
-    private volatile java.util.function.LongConsumer simProgressCallback = null;
+    // v1 2026-10-25 (Q15): true on the Run Simulation thread and on the helper
+    // threads it starts (runIndexed passes it on); false everywhere else, the SS
+    // batch's workers included. Replaces proRunThread, a single-thread identity
+    // check that would have dropped the helpers' work from the readout.
+    private final ThreadLocal<Boolean> countsProWork = ThreadLocal.withInitial(() -> Boolean.FALSE);
 
     // Calibration: stores past run times to estimate duration of next run
     private static final int    CALIB_MAX              = 20;
@@ -646,6 +648,14 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private static final Object BATCH_FILE_LOCK = new Object();
     private JSpinner spOptLeaveFree;
     private JLabel   lblOptWorkers;
+    // v1 2026-10-25 (Q15): Run Simulation's own "leave free", separate from the
+    // batch's -- a Run is a burst of seconds, a batch runs for many minutes, and
+    // each deserves its own limit. Same range and clamp as the batch spinner, and
+    // likewise an APP preference: never in a scenario, never in the fingerprint.
+    private static final String PREF_PRO_LEAVE_FREE    = "pro.leaveFree";
+    private static final int    PRO_LEAVE_FREE_DEFAULT = 4;
+    private int      proLeaveFree = clampLeaveFree(PRO_LEAVE_FREE_DEFAULT);
+    private JSpinner spProLeaveFree;
 
     private static final NumberFormat CURRENCY = NumberFormat.getCurrencyInstance(Locale.US);
     static { CURRENCY.setMaximumFractionDigits(0); }
@@ -1016,6 +1026,24 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "<b>Default: 3.</b> Changing it re-counts the last run instantly; it does<br>"
                 + "not change any simulated number.</html>");
         spShortfallGrace.addChangeListener(e -> refreshActualPoSSub(lastResults));
+        // v1 2026-10-25 (Q15): Run Simulation's CPU budget (an app preference).
+        spProLeaveFree = spinI(proLeaveFree, leaveFreeMin(), leaveFreeMax(), 1, "#");
+        spProLeaveFree.setEnabled(CPU_COUNT > 1);
+        spProLeaveFree.setToolTipText("<html><b>Leave free for other work (CPUs)</b><br>"
+                + "How many of this machine's " + CPU_COUNT + " CPUs Run Simulation leaves alone;<br>"
+                + "it uses the rest. While an SS Optimizer batch runs, the batch's CPUs<br>"
+                + "count against that, so the run uses only what is left (at least 1).<br><br>"
+                + "Changes only SPEED, never results. It is not part of the plan fingerprint,<br>"
+                + "and it is saved as an app preference, not in the scenario.<br><br>"
+                + "Separate from the spinner of the same name on the SS Optimizer tab,<br>"
+                + "which governs the batch.<br><br>"
+                + "<b>Default: " + PRO_LEAVE_FREE_DEFAULT + "</b> (one less than the CPU count on a machine with "
+                + (PRO_LEAVE_FREE_DEFAULT + 1) + " or fewer).</html>");
+        spProLeaveFree.addChangeListener(e -> {
+            proLeaveFree = iv(spProLeaveFree);
+            saveAppPrefs();
+            updateRunTooltip();
+        });
 
         // v1 2026-10-20 (F4): optimizer staleness moved to checkOptStale(), which every
         // input control calls (installOptStaleWatch) -- it was wired to three spinners here.
@@ -1060,6 +1088,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 "MC solve paths",              spMcSolvePaths,
                 "Binary search iterations",    spBinaryIters,
                 "Fan chart paths",             spMcFanPaths,
+                "Leave free for other work (CPUs)", spProLeaveFree,   // v1 2026-10-25 (Q15)
                 "Shortfall grace (final years)", spShortfallGrace,   // v1 2026-10-19 (SL1)
         }));
         inner.add(Box.createVerticalStrut(4));
@@ -3787,6 +3816,18 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "stops early when it depletes). Before this date it printed a pre-run formula that charged every fan "
                 + "path the full solver, overstating the work about 18&times; &mdash; for example ~509M where about "
                 + "28M paths were actually run. Hover the Run button for the estimate's breakdown.</p>"
+                // v1 2026-10-25 (Q15)
+                + "<p><b>Run Simulation uses several CPUs (since October 25, 2026).</b> The fan paths, and "
+                + "then the table's yearly solves, are spread across CPUs. Every path seeds its own random "
+                + "stream, and every table row needs only its own year's median balance, so the numbers are "
+                + "identical to a single-CPU run; only the time changes. <i>Leave free for other work "
+                + "(CPUs)</i> on the <i>Portfolio &amp; Simulation</i> card sets how many CPUs it leaves "
+                + "alone (default 4, or one less than the machine's CPUs when it has 5 or fewer). While an "
+                + "SS Optimizer batch runs, the batch's CPUs count against that, so Run Simulation takes "
+                + "only what is left, and always at least one. The batch itself still scores each "
+                + "combination on one CPU &mdash; its speed comes from running many combinations at once "
+                + "(section 11) &mdash; so the two never multiply. The completion line names the CPUs the "
+                + "run used, and the countdown learns run times separately for each CPU count.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec2'></a>2. Market assumptions &mdash; forward capital-market basis (2026 CMAs)</h3>"
                 + "<p>Prior versions used the 1961-2024 historical average as the primary basis. The current "
@@ -6068,6 +6109,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             p.load(in);
             String v = p.getProperty(PREF_LEAVE_FREE);
             if (v != null) optLeaveFree = clampLeaveFree(Integer.parseInt(v.trim()));
+            String pv = p.getProperty(PREF_PRO_LEAVE_FREE);   // v1 2026-10-25 (Q15)
+            if (pv != null) proLeaveFree = clampLeaveFree(Integer.parseInt(pv.trim()));
         } catch (Exception ignored) { /* keep the default */ }
     }
 
@@ -6079,10 +6122,23 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             catch (Exception ignored) { }
         }
         p.setProperty(PREF_LEAVE_FREE, String.valueOf(optLeaveFree));
+        p.setProperty(PREF_PRO_LEAVE_FREE, String.valueOf(proLeaveFree));   // v1 2026-10-25 (Q15)
         try (java.io.FileOutputStream out = new java.io.FileOutputStream(f)) {
             p.store(out, "IncomeLab app preferences (not scenario data)");
         } catch (Exception ignored) { }
     }
+
+    /**
+     * v1 2026-10-25 (Q15): CPUs for the next Run Simulation -- what the Pro
+     * "Leave free" setting allows, less the SS batch workers busy at this moment
+     * (so a Run started during a batch never pushes the machine past that
+     * setting), and never fewer than 1.
+     */
+    private int proRunThreads() {
+        return Math.max(1, CPU_COUNT - proLeaveFree - OPT_BUSY_WORKERS.get());
+    }
+
+    private static String cpuWord(int n) { return n + (n == 1 ? " CPU" : " CPUs"); }
 
     // =========================================================================
     //  STRESS TEST TAB  (v3)  -- Income Lab style
@@ -6418,9 +6474,11 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     //     touches any lastOpt* cache the Pro tab reads.
     //   * simulatePro itself writes no instance fields -- verified by scoring 16
     //     combinations concurrently and getting identical results.
-    //   * the "~N simulations" counter is NOT fed by the batch, and the batch does
-    //     not fire simProgressCallback. Otherwise the Pro tab's readout would jump
-    //     around for hours while a batch ran behind it.
+    //   * the "~N simulations" counter is NOT fed by the batch. Otherwise the Pro
+    //     tab's readout would jump around for hours while a batch ran behind it.
+    //   * the batch scores each combination on ONE thread (v1 2026-10-25, Q15):
+    //     its parallelism is one combination per worker, never threads inside a
+    //     worker. Only Run Simulation spreads a single run across CPUs.
     // The Pro PoS tab therefore behaves exactly as it did before this change.
     private void runSsOptimizer() {
         // v1 2026-10-16 (V): input checks once per batch. Claim dates are skipped --
@@ -7365,8 +7423,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         ProResults pr;
         try {
             // v11 item C: the optimizer never reads res.gkResults, so skip the
-            // Guyton-Klinger overlay entirely.
-            pr = simulatePro(inp, seed, solvePaths, fanPaths, binIters, /*withGk=*/false);
+            // Guyton-Klinger overlay entirely. One thread (Q15): the batch already
+            // runs one combination per worker.
+            pr = simulatePro(inp, seed, solvePaths, fanPaths, binIters, /*withGk=*/false, /*threads=*/1);
         } catch (Exception ex) {
             r.feasible = false; r.shortfall = Integer.MAX_VALUE; return r;
         }
@@ -10084,8 +10143,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     /**
      * Load average elapsed time for runs matching these parameters.
      * Returns 0 if no matching entries (calibration not yet available).
+     * v1 2026-10-25 (Q15): the CPU count is part of the match -- a 20-CPU run
+     * takes a fraction of a 1-CPU run's time. Lines written before then have no
+     * CPU column; every run then was single-threaded, so they read as 1.
      */
-    private long loadCalibrationEstimate(int solvePaths, int binIters, int fanPaths, int horizon) {
+    private long loadCalibrationEstimate(int solvePaths, int binIters, int fanPaths, int horizon,
+                                         int threads) {
         java.io.File f = new java.io.File(CALIB_FILE);
         if (!f.exists()) return 0;
         java.util.List<Long> matches = new java.util.ArrayList<>();
@@ -10100,7 +10163,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     int fp = Integer.parseInt(parts[2].trim());
                     int hz = Integer.parseInt(parts[3].trim());
                     long ms = Long.parseLong(parts[4].trim());
-                    if (sp == solvePaths && bi == binIters && fp == fanPaths && hz == horizon)
+                    int th  = (parts.length >= 6) ? Integer.parseInt(parts[5].trim()) : 1;
+                    if (sp == solvePaths && bi == binIters && fp == fanPaths && hz == horizon
+                            && th == threads)
                         matches.add(ms);
                 } catch (NumberFormatException ignored) {}
             }
@@ -10118,7 +10183,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      * (oldest dropped first across all parameter sets).
      */
     private void saveCalibrationEntry(int solvePaths, int binIters,
-                                      int fanPaths, int horizon, long elapsedMs) {
+                                      int fanPaths, int horizon, int threads, long elapsedMs) {
         java.util.List<String> lines = new java.util.ArrayList<>();
         java.io.File f = new java.io.File(CALIB_FILE);
         if (f.exists()) {
@@ -10129,7 +10194,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             } catch (Exception ignored) {}
         }
         // New entry at the end
-        lines.add(solvePaths + "\t" + binIters + "\t" + fanPaths + "\t" + horizon + "\t" + elapsedMs);
+        lines.add(solvePaths + "\t" + binIters + "\t" + fanPaths + "\t" + horizon + "\t" + elapsedMs
+                + "\t" + threads);   // v1 2026-10-25 (Q15): 6th column = CPUs used
         // Trim to max
         if (lines.size() > CALIB_MAX)
             lines = lines.subList(lines.size() - CALIB_MAX, lines.size());
@@ -10296,6 +10362,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         final int fanPaths    = iv(spMcFanPaths);
         final int binIters    = iv(spBinaryIters);
         final int horizon     = iv(spHorizon);
+        final int threads     = proRunThreads();   // v1 2026-10-25 (Q15): fixed for this run
 
         // v12 2026-10-11: estimate from the engine's actual call pattern (see
         // estimateProWork); the completion message reports the real counters.
@@ -10316,7 +10383,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 });
         final long startMs = System.currentTimeMillis();
         // Load calibration estimate for this parameter set
-        final long estimatedMs = loadCalibrationEstimate(solvePaths, binIters, fanPaths, horizon);
+        final long estimatedMs = loadCalibrationEstimate(solvePaths, binIters, fanPaths, horizon, threads);
         progressScheduler.scheduleAtFixedRate(() -> {
             long elapsed = System.currentTimeMillis() - startMs;
             // Progress bar tracks elapsed time vs estimated duration (not sim count)
@@ -10343,14 +10410,15 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         SwingWorker<ProResults, Void> worker = new SwingWorker<>() {
             @Override protected ProResults doInBackground() {
                 // No publish() calls -- scheduler handles all UI updates
-                simProgressCallback = null;  // disable legacy callback
-                // v12 2026-10-11: this thread alone feeds the readout counters.
-                proRunThread = Thread.currentThread();
+                // v12 2026-10-11: only this run's threads feed the readout counters
+                // (v1 2026-10-25, Q15: this thread and the helpers it starts).
+                countsProWork.set(Boolean.TRUE);
                 ProResults r;
                 try {
-                    r = simulatePro(readInputs(), seed, solvePaths, fanPaths, binIters);
+                    r = simulatePro(readInputs(), seed, solvePaths, fanPaths, binIters,
+                            /*withGk=*/true, threads);
                 } finally {
-                    proRunThread = null;
+                    countsProWork.remove();   // SwingWorker threads are pooled
                 }
                 // v12 2026-10-06: snapshot the state the run used (see ProResults).
                 TaxEngine.StateTaxProfile sp = TaxEngine.stateProfile(r.inp.stateCode);
@@ -10371,11 +10439,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     // v12 2026-10-11: ACTUAL counts from this run, not an estimate.
                     progressBar.setString(String.format(
                             "Complete -- %s Monte Carlo paths (up to %s simulated years) . "
-                                    + "%,d fan paths . %,d solve paths . %d iters . %s",
+                                    + "%,d fan paths . %,d solve paths . %d iters . %s . %s",
                             fmtWork(simCount.get()), fmtWork(simPathYears.get()),
-                            fanPaths, solvePaths, binIters, elapsedStr) + runNotes[0]);   // v1 2026-10-16 (V)
+                            fanPaths, solvePaths, binIters, cpuWord(threads),   // v1 2026-10-25 (Q15)
+                            elapsedStr) + runNotes[0]);   // v1 2026-10-16 (V)
                     // Save calibration entry for future countdown estimates
-                    saveCalibrationEntry(solvePaths, binIters, fanPaths, horizon, elapsed);
+                    saveCalibrationEntry(solvePaths, binIters, fanPaths, horizon, threads, elapsed);
                 } catch (Exception ex) {
                     progressBar.setString("Error: " + ex.getMessage());
                     ex.printStackTrace();
@@ -10389,7 +10458,6 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     private SimInputs readInputs() {
         SimInputs i = new SimInputs();
         i.baseYear           = iv(spSimStartYear);
-        BASE_YEAR            = i.baseYear;
         i.horizon            = iv(spHorizon);
         i.targetPoS          = iv(spTargetPoS) / 100.0;
         i.withdrawStartYear  = iv(spWithdrawStartYear);
@@ -10547,16 +10615,6 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     //     dynamic-spending overlay.
     // ========================================================================
     /**
-     * v11 (item C): the 5-argument form every existing caller uses. Runs the
-     * Guyton-Klinger overlay as it always has, so the Pro tab's GK results are
-     * unaffected.
-     */
-    private ProResults simulatePro(SimInputs inp, long seed,
-                                   int solvePaths, int fanPaths, int binIters) {
-        return simulatePro(inp, seed, solvePaths, fanPaths, binIters, /*withGk=*/true);
-    }
-
-    /**
      * v11 (item C): withGk=false skips the Guyton-Klinger overlay.
      *
      * simulateGK runs as the last statement of this method purely so the GK tab
@@ -10565,10 +10623,17 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
      * for a full GK simulation per combination and discarding every one -- 48 of
      * them on a year grid, thousands on a monthly one. Passing false skips that
      * work and changes no number the optimizer uses.
+     *
+     * v1 2026-10-25 (Q15): `threads` spreads the fan paths (Step 1) and the
+     * table's yearly solves (Step 4) across that many threads (see runIndexed).
+     * 1 runs both as plain loops in order, exactly as before. Results do not
+     * depend on it: every fan path seeds its own random stream and writes only
+     * its own rows, and every yearly solve needs only that year's median balance.
+     * Run Simulation passes its CPU budget (proRunThreads); the SS batch passes 1.
      */
     private ProResults simulatePro(SimInputs inp, long seed,
                                    int solvePaths, int fanPaths, int binIters,
-                                   boolean withGk) {
+                                   boolean withGk, int threads) {
         ProResults res   = new ProResults();
         res.inp          = inp;
         res.medianRows   = new ArrayList<>();
@@ -10596,8 +10661,13 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         // v6: one bridge schedule shared by the fan paths, the solver and the
         // display, so the extra drawdown is identical in all three.
         double[] ssBridge = buildSsBridgeSchedule(inp);
+        // v1 2026-10-25 (Q15): the one value the paths would otherwise compute and
+        // store on the shared inputs (a lazily cached constant). Computing it here,
+        // before any thread starts, leaves the paths reading inputs only.
+        inflDrawMean(inp);
 
-        for (int p = 0; p < fanPaths; p++) {
+        // One fan path: reads the shared inputs, writes only row p of each array.
+        java.util.function.IntConsumer fanPath = p -> {
             SeededRng rng = new SeededRng(p * 17 + 11 + seed);
             double trad = (double) inp.manTradIRA + inp.manTrad401K
                     + inp.womanTradIRA + inp.womanTrad401K;
@@ -10812,7 +10882,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 res.fanBalances[p][y + 1] = b;
                 fpTrad[p][y + 1] = trad; fpRoth[p][y + 1] = roth;
             }
-        }
+        };
+        runIndexed(fanPaths, threads, fanPath);   // v1 2026-10-25 (Q15)
 
         // == Step 2: Actual PoS ============================================
         int survived = 0;
@@ -10873,6 +10944,29 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
         double medManStartInfl   = inflAt(medInfl, inp.baseYear, inp.baseYear);
         double medWomanStartInfl = inflAt(medInfl, inp.baseYear, inp.baseYear);
 
+        // v1 2026-10-25 (Q15): each row's full withdrawal solve needs only that
+        // year's median balance -- nothing from the row above it -- so every row is
+        // solved first, spread across threads, and the row loop below reads the
+        // answers in order. Same inputs and seeds as the in-loop solve it replaces.
+        final int[] medBalByYear = new int[inp.horizon];
+        for (int y = 0; y < inp.horizon; y++) {
+            // True 50th-percentile balance at this year.
+            double[] balArr = new double[fanPaths];
+            for (int p = 0; p < fanPaths; p++) balArr[p] = res.fanBalances[p][y];
+            Arrays.sort(balArr);
+            medBalByYear[y] = (int) balArr[fanPaths / 2];
+        }
+        final int[] wdByYear = new int[inp.horizon];
+        runIndexed(inp.horizon, threads, y -> {
+            int calYear = inp.baseYear + y;
+            boolean drawing = calYear >= inp.withdrawStartYear;
+            wdByYear[y] = drawing && medBalByYear[y] > 0
+                    ? solveWithdrawalPro(medBalByYear[y], calYear, inp.horizon - y,
+                    inp, 999L + y * 37 + seed, solvePaths, binIters, y - startY,   // v1 2026-10-17 (SG1)
+                    java.util.Arrays.copyOfRange(ssBridge, y, ssBridge.length))
+                    : 0;
+        });
+
         // v3: MAGI history for the IRMAA 2-year lookback (index by sim year).
         double[] magiHistory = new double[inp.horizon];
         // v8: exact-tie-out Money Mkt (total) reserve. This REPLACES the old
@@ -10894,11 +10988,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             int womanAge = calYear - inp.womanBirthYear;
             boolean drawing = calYear >= inp.withdrawStartYear;
 
-            // True 50th-percentile balance at this year.
-            double[] balArr = new double[fanPaths];
-            for (int p = 0; p < fanPaths; p++) balArr[p] = res.fanBalances[p][y];
-            Arrays.sort(balArr);
-            int medBal = (int) balArr[fanPaths / 2];
+            int medBal = medBalByYear[y];   // true 50th-percentile balance (Q15: taken above)
 
             // Median Traditional / Roth SHARE of the portfolio, applied to the
             // median balance. Fractions (not dollars) are averaged across paths
@@ -10923,11 +11013,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             double medRoth = medBal * rFrac;
 
             int goGoRem = Math.max(0, inp.goGoDuration - Math.max(0, y - startY));
-            int wd = drawing && medBal > 0
-                    ? solveWithdrawalPro(medBal, calYear, inp.horizon - y,
-                    inp, 999L + y * 37 + seed, solvePaths, binIters, y - startY,   // v1 2026-10-17 (SG1)
-                    java.util.Arrays.copyOfRange(ssBridge, y, ssBridge.length))
-                    : 0;
+            int wd = wdByYear[y];   // v1 2026-10-25 (Q15): solved above
             // v1 2026-10-12: the headline comes from the first drawing row.
             if (drawing && !yr1Set) { yr1Wd = wd; yr1Bal = medBal; yr1Set = true; }
 
@@ -11435,19 +11521,61 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
             if (rate > inp.targetPoS) lo = mid; else hi = mid;
         }
         long added   = (long) binIters * solvePaths;
-        // v12 2026-10-11: count only the Pro PoS run's own work (see proRunThread).
+        // v12 2026-10-11: count only the Pro PoS run's own work (see countsProWork).
         // Bookkeeping only -- nothing below reads these, and the return value is
         // unchanged.
-        if (Thread.currentThread() != proRunThread) return (int)((lo + hi) / 2.0);
+        if (!countsProWork.get()) return (int)((lo + hi) / 2.0);
         simPathYears.addAndGet(added * horizon);
-        long running = simCount.addAndGet(added);
-        long prevM   = (running - added) / 1_000_000;
-        long currM   = running / 1_000_000;
-        if (currM > prevM) {
-            java.util.function.LongConsumer cb = simProgressCallback;
-            if (cb != null) cb.accept(running);
-        }
+        simCount.addAndGet(added);
         return (int)((lo + hi) / 2.0);
+    }
+
+    /**
+     * v1 2026-10-25 (Q15): runs task.accept(0 .. n-1). With threads <= 1 it is a
+     * plain loop in index order -- the single-threaded code path, unchanged.
+     * Otherwise that many helper threads each take the next unclaimed index until
+     * none is left, and the call returns once every index is done; the first
+     * failure stops the others taking new indices and is rethrown here. Every
+     * task must write only its own slots, so no result can depend on which thread
+     * ran which index. Helpers inherit the caller's countsProWork, so a Run
+     * Simulation's readout counts their work and the SS batch's never does.
+     */
+    private void runIndexed(int n, int threads, java.util.function.IntConsumer task) {
+        int k = Math.min(threads, n);
+        if (k <= 1) {
+            for (int i = 0; i < n; i++) task.accept(i);
+            return;
+        }
+        final boolean counts = countsProWork.get();
+        final java.util.concurrent.atomic.AtomicInteger next = new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.atomic.AtomicReference<Throwable> fail = new java.util.concurrent.atomic.AtomicReference<>();
+        Thread[] helpers = new Thread[k];
+        for (int t = 0; t < k; t++) {
+            helpers[t] = new Thread(() -> {
+                countsProWork.set(counts);
+                try {
+                    int i;
+                    while (fail.get() == null && (i = next.getAndIncrement()) < n) task.accept(i);
+                } catch (RuntimeException | Error ex) {
+                    fail.compareAndSet(null, ex);
+                }
+            }, "pro-run-" + t);
+            helpers[t].setDaemon(true);
+            helpers[t].start();
+        }
+        // Wait for every helper even if this thread is interrupted (nothing
+        // interrupts a Run today), so no helper is left writing after the return.
+        boolean interrupted = false;
+        for (Thread h : helpers) {
+            while (true) {
+                try { h.join(); break; }
+                catch (InterruptedException ie) { interrupted = true; }
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt();
+        Throwable f = fail.get();   // only a RuntimeException or an Error is caught above
+        if (f instanceof Error er) throw er;
+        if (f != null) throw (RuntimeException) f;
     }
 
     /**
@@ -16284,13 +16412,16 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                             + "Fan: %,d paths x %d drawing yrs x (%,d paths x %d iters) = <b>%s</b><br>"
                             + "Median: %d drawing yrs x (%,d paths x %d iters) = <b>%s</b><br>"
                             + "<i>(the headline is the first median row's solve, not a separate one)</i><br>"
-                            + "Total: <b>~%s Monte Carlo paths</b>, up to ~%s simulated years<br><br>"
+                            + "Total: <b>~%s Monte Carlo paths</b>, up to ~%s simulated years<br>"
+                            + "Runs on up to <b>%s</b> (<i>Leave free for other work</i>, Portfolio &amp; Simulation<br>"
+                            + "card); an SS Optimizer batch running at the time counts against that.<br><br>"
                             + "<i>Fan paths re-solve each year with a reduced solver: solve paths / 8<br>"
                             + "(minimum 20) and at most 10 iterations. A trial path stops early when<br>"
                             + "it depletes, so simulated years is an upper bound.</i></html>",
                     fanPaths, draw, fanSp, fanIt, fmtWork(fanPathsN),
                     draw, solvePaths, binIters, fmtWork(medPathsN),
-                    fmtWork(est[0]), fmtWork(est[1])));
+                    fmtWork(est[0]), fmtWork(est[1]),
+                    cpuWord(Math.max(1, CPU_COUNT - proLeaveFree))));   // v1 2026-10-25 (Q15)
             return "Running -- ~" + fmtWork(est[0]) + " Monte Carlo paths (up to ~"
                     + fmtWork(est[1]) + " simulated years)...";
         } catch (Exception e) { return "Running Monte Carlo..."; }
