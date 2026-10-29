@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v1.java
-// Last modified: Sunday, October 25, 2026 at 04:02 PM MST (UTC-7)
+// Last modified: Wednesday, October 28, 2026 at 08:11 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v1";
-    private static final String BUILD_STAMP = "Sunday, October 25, 2026 at 04:02 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Wednesday, October 28, 2026 at 08:11 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -4978,8 +4978,12 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "the drawing years after the go-go and slow-go windows. It answers <i>how much is available "
                 + "late in life</i> once the go-go and slow-go floors are met &mdash; the money that covers "
                 + "medical costs and anything else the no-go years bring.</li>"
-                + "<li><b>Worst no-go year</b> &mdash; the leanest no-go year's Surplus/gap, terminal-grace years "
-                + "excluded: the cushion every no-go year can count on, not just the total.</li>"
+                // v1 2026-10-28 (Q16): says which way the sort runs -- best of the worst.
+                + "<li><b>Worst no-go year</b> &mdash; each claim pair's leanest no-go year: its lowest "
+                + "Surplus/gap across the no-go years, terminal-grace years excluded. This is the cushion every "
+                + "no-go year can count on, not just the total. <b>Ranking by it picks the best of the "
+                + "worst:</b> the top row is the claim pair whose worst no-go year is the least bad. A year with "
+                + "a surplus ranks above any year with a gap, and a small gap ranks above a large one.</li>"
                 + "<li><b>Lifetime spendable</b> &mdash; Surplus/gap summed over every drawing year.</li>"
                 + "<li><b>Go-go + slow-go spendable</b> &mdash; summed over the go-go and slow-go years only.</li>"
                 + "<li><b>Final 5-year portfolio draws</b> &mdash; portfolio withdrawals over the last 5 years, "
@@ -5346,6 +5350,27 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "spending by 10% when withdrawals grow too large compared with your savings, and raises it again when "
                 + "markets recover. So the answer is not simply pass or fail: the questions are <b>how much would my "
                 + "spending drop, and how long until it comes back?</b> A flexible plan bends instead of breaking.</p>"
+                // v1 2026-10-28 (Q17): why the guardrail plan and not Pro PoS, in plain terms.
+                + "<p><b>Why the guardrail plan and not Pro PoS.</b> The Stress Test asks what living through one "
+                + "particular stretch of history would be like. The guardrail plan can answer that. It follows one "
+                + "life, year by year, through what markets and prices actually did in 1929 or 1966. Its spending "
+                + "changes for reasons you could act on yourself:</p>"
+                + "<ul>"
+                + "<li>It cuts spending 10% when withdrawals grow too large compared with your savings.</li>"
+                + "<li>It raises spending again when markets recover.</li>"
+                + "<li>After a losing year, it skips the inflation raise if withdrawals are already running high.</li>"
+                + "</ul>"
+                + "<p>That is what makes <i>how deep was the cut, how many cuts, and how long until spending came "
+                + "back</i> real, countable answers.</p>"
+                + "<p>Pro PoS answers a different question. It imagines hundreds of random futures and shows the "
+                + "middle result, a blend of many futures rather than the story of one. Its spending is not a rule "
+                + "a person follows. Each year it recalculates the most you could spend and still keep your "
+                + "<i>Target probability of success</i> (80% by default), so its spending moves whenever that "
+                + "calculation changes, and &ldquo;number of cuts&rdquo; or &ldquo;years to recover&rdquo; have no "
+                + "clear meaning there. It is also far slower: it would need a full simulation for each crisis, "
+                + "where the guardrail plan replays all four almost instantly. To see how one crisis shifts the "
+                + "probability picture, choose it in the dropdown on the <i>Historical Stress Scenario</i> card, "
+                + "which applies it to the Pro PoS tab as well.</p>"
                 + "<p><b>How to use it.</b> Press <b>Run Stress Test</b>. You get one row per crisis and a summary "
                 + "sentence underneath:</p>"
                 + "<table border='1' cellpadding='3' cellspacing='0'>"
@@ -5785,7 +5810,8 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                 + "(after the go-go and slow-go windows) -- money available late in life, Social<br>"
                 + "Security included.<br>"
                 + "<b>Worst no-go year</b>: the leanest no-go year's Surplus/gap (terminal-grace years<br>"
-                + "excluded) -- the medical cushion you can count on every no-go year.<br>"
+                + "excluded) -- the medical cushion you can count on every no-go year. Best of the<br>"
+                + "worst: the top row's worst year is the least bad.<br>"   // v1 2026-10-28 (Q16)
                 + "<b>Lifetime spendable</b>: Surplus/gap summed over every drawing year.<br>"
                 + "<b>Go-go + slow-go spendable</b>: summed over the go-go and slow-go years.<br>"
                 + "<b>Final 5-year portfolio draws</b>: the pre-2026-10-11 measure, for comparison.<br><br>"
@@ -8797,7 +8823,9 @@ public class RiskBased_OptSocSec_v1 extends JFrame {
                     + "after living, medical and tax. The default ranking measure.</html>";
             case OCOL_NOGOWORST: return "<html><b>Worst no-go year</b> (today's $)<br>"
                     + "The leanest no-go year's Surplus/gap, terminal-grace years excluded --<br>"
-                    + "the cushion available in EVERY no-go year, e.g. for medical costs.</html>";
+                    + "the cushion available in EVERY no-go year, e.g. for medical costs.<br>"
+                    + "When rows are ranked by this, the top row is the best of the worst:<br>"
+                    + "its worst no-go year is the least bad.</html>";   // v1 2026-10-28 (Q16)
             case OCOL_LIFETIME: return "<html><b>Lifetime spendable</b> (today's $)<br>"
                     + "Surplus/gap summed over every drawing year.</html>";
             case OCOL_EARLY: return "<html><b>Go-go + slow-go spendable</b> (today's $)<br>"
