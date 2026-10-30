@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Friday, October 30, 2026 at 08:39 AM MST (UTC-7)
+// Last modified: Friday, October 30, 2026 at 02:49 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Friday, October 30, 2026 at 08:39 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Friday, October 30, 2026 at 02:49 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -507,6 +507,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private boolean lastRunValid = false;
     private JLabel            lblActualPoS, lblMedianFinal, lblYr10Wd, lblInitRate;
     private JLabel            lblActualPoSSub;   // v1 2026-10-17 (PD1): paths that ran out
+    private String            actualPoSSubText;  // v2 2026-10-30 (Q18): its paragraph before wrapping
+    private int               actualPoSSubWrapW; // v2 2026-10-30 (Q18): the width it was wrapped to
     private JTable            tblPro;
     private DefaultTableModel tblProModel;
     // v9/v19: Pro PoS column picker state. Model-column indices the user has hidden,
@@ -2348,16 +2350,23 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         lblInitRate    = mkMetricLabel();
         // v1 2026-10-17 (PD1): the line under Actual PoS reports the paths that ran out.
         lblActualPoSSub = new JLabel("from fan simulation");
-        lblActualPoSSub.setToolTipText("<html><b>Paths that ran out</b><br>"
-                + "A fan path runs out when its portfolio reaches $0. It stays at $0 and counts<br>"
-                + "as a failure in Actual PoS, so Actual PoS = 100% minus this share.<br>"
-                + "<i>first</i> and <i>median</i> are the calendar years those paths ran out.<br>"
-                // v1 2026-10-29 (TU1)
-                + "<i>used Money Mkt</i>: paths whose final-years top-up (last 5 plan years) went on<br>"
-                + "to draw the Money Mkt reserve after the portfolio was empty. Actual PoS counts<br>"
-                + "the portfolio only, so they are failures even when the reserve filled the gap.<br><br>"
+        // v2 2026-10-30 (Q18): the paragraph also reports what the Money Mkt reserve did.
+        lblActualPoSSub.setToolTipText("<html><b>Paths that reached $0</b><br>"
+                + "A fan path fails when its portfolio reaches $0. It stays at $0 and counts as a<br>"
+                + "failure in Actual PoS, so Actual PoS = 100% minus this share. Actual PoS counts<br>"
+                + "the portfolio only, never the Money Mkt reserve.<br>"
+                + "<i>first</i> and <i>median</i> are the calendar years those paths reached $0.<br><br>"
+                + "<b>Money Mkt reserve</b><br>"
+                + "In the last 5 plan years the final-years top-up covers a short year from the<br>"
+                + "portfolio, then from the Money Mkt reserve. A path whose portfolio reached $0<br>"
+                + "is <i>carried to the end by the reserve</i> when no year from then on was left short.<br>"
+                + "<i>Never ran out of money</i> = all paths minus those still short after the reserve.<br>"
+                + "<i>More in the reserve</i>: for each path still short, its shortfalls from the year it<br>"
+                + "reached $0 to the plan's end, added up in the plan's first-year dollars on that<br>"
+                + "path's own inflation (the model grows the reserve with inflation). The largest is<br>"
+                + "shown, rounded to $1,000.<br><br>"
                 // v1 2026-10-19 (SL1)
-                + "<b>Short years</b> (second line)<br>"
+                + "<b>Short years</b> (last line)<br>"
                 + "How many fan paths had at least one withdrawal year whose income -- Social<br>"
                 + "Security, pensions and the year's withdrawal -- fell short of its spending<br>"
                 + "(Living, Medical and taxes), by any amount. A shortfall in the final<br>"
@@ -2367,6 +2376,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "always counts. Actual PoS can be 100%<br>"
                 + "while this count is not zero: the money lasted, but some years came up short.</html>");
         metricsRow.add(wrapMetric(lblActualPoS,   "Actual PoS",                lblActualPoSSub));
+        // v2 2026-10-30 (Q18): re-wrap the paragraph to the box's width whenever it changes.
+        lblActualPoSSub.getParent().addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) { wrapActualPoSSub(); }
+        });
         metricsRow.add(wrapMetric(lblMedianFinal, "True median final balance", "50th pct of fan paths"));
         metricsRow.add(wrapMetric(lblYr10Wd,      "Yr 10 withdrawal (median)", "see dollar toggle"));
         metricsRow.add(wrapMetric(lblInitRate,    "Initial withdrawal rate",   "% of portfolio"));
@@ -3824,19 +3837,24 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "The <b>headline</b> is the first withdrawal year's Pro PoS withdrawal (the first drawing row), and "
                 + "a first year that starts after January is prorated by the start month in every engine.</p>"
                 // v1 2026-10-18 (AP1): what Actual PoS does and does not measure.
-                + "<p><b>What Actual PoS measures.</b> Actual PoS answers only one question: did the money "
-                + "ever run out completely? It does not ask whether you got all the spending money you wanted. "
-                + "The program cuts your spending at the next yearly check (each January), so the money almost "
-                + "never runs out. The bad luck shows up as smaller paychecks, which this number doesn't "
-                + "count.</p>"
-                + "<p><b>Q) Why 100% when the target is 80%</b><br>"
-                + "A) The 80% check pretends you'll never adjust after this year. Real lifetimes in the program "
-                + "adjust every year, so they do far better than 80% at never running dry.</p>"
+                // v2 2026-10-30 (Q18): rewritten -- since the final-years top-up (2026-10-29)
+                // the portfolio can reach $0 by design in the last 5 plan years.
+                + "<p><b>What Actual PoS measures.</b> Actual PoS answers one question: did the portfolio "
+                + "ever reach $0? Each simulated lifetime re-checks its withdrawal every January, so in most of "
+                + "the plan a bad market shows up as smaller paychecks, not an empty portfolio. In the last 5 "
+                + "plan years the final-years top-up works the other way: it spends the portfolio, and then the "
+                + "Money Mkt reserve, to cover any year whose income falls short. Lifetimes with poor markets "
+                + "can therefore reach $0 near the end by design. Actual PoS is a separate result from the "
+                + "target PoS and is not set by it.</p>"
+                + "<p><b>Q) Why isn't Actual PoS 100%, or exactly the target?</b><br>"
+                + "A) The yearly re-check protects most of the plan, but the top-up spends down the portfolio "
+                + "in the final years. The line under Actual PoS shows how many of those lifetimes the Money "
+                + "Mkt reserve carried to the end, and how much more reserve the rest would have needed.</p>"
                 + "<p><b>Q) What does each number tell you</b></p>"
                 + "<table border='1' cellpadding='3' cellspacing='0'>"
                 + "<tr><th>Question you're asking</th><th>Where to look</th></tr>"
                 + "<tr><td>Did the money ever run out completely?</td>"
-                + "<td>Actual PoS and its line &quot;no path ran out&quot;</td></tr>"
+                + "<td>Actual PoS and the line under it</td></tr>"   // v2 2026-10-30 (Q18)
                 + "<tr><td>Did I get as much to spend as I planned?</td>"
                 + "<td>Surplus/gap column (red means spending was more than income that year); the table "
                 + "follows the typical (middle) lifetime</td></tr>"
@@ -3845,7 +3863,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "line and the lowest fan lines</td></tr>"
                 + "</table>"
                 // v1 2026-10-19 (SL1)
-                + "<p><b>Short years (since 2026-10-19).</b> The second line under Actual PoS counts the fan "
+                // v2 2026-10-30 (Q18): it is now the last line of the paragraph under Actual PoS.
+                + "<p><b>Short years (since 2026-10-19).</b> The last line under Actual PoS counts the fan "
                 + "paths that had at least one <i>short year</i>: a withdrawal year whose income (Social Security, "
                 + "pensions and the year's withdrawal) fell short of its spending (Living, Medical and taxes), by "
                 + "any amount. Each path is costed on its own inflation and its own tax. In the final "
@@ -3854,6 +3873,17 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "final-years top-up below has already spent the portfolio and the Money Mkt on it, so a gap "
                 + "left there always counts. Changing the grace years re-counts the last run without "
                 + "re-running it.</p>"
+                // v2 2026-10-30 (Q18)
+                + "<p><b>Money Mkt reserve (since 2026-10-30).</b> The paragraph under Actual PoS also says what "
+                + "the Money Mkt reserve did for the lifetimes whose portfolio reached $0. One is <i>carried to "
+                + "the end by the reserve</i> when no year from then on was left short; the rest are still "
+                + "short after the reserve. <i>Never ran out of money</i> counts every lifetime except those "
+                + "still short. For each still-short lifetime the program adds up its shortfalls from the year "
+                + "its portfolio reached $0 to the plan's end, in the plan's first-year dollars on that "
+                + "lifetime's own inflation (the model grows the reserve with inflation), and shows the largest, "
+                + "rounded to $1,000: the extra reserve that lifetime would have needed. For example, if 120 of "
+                + "1,000 lifetimes reach $0 and the reserve carries 90 of them, 970 of 1,000 (97.0%) never ran "
+                + "out of money, and the line names the most any of the other 30 needed.</p>"
                 // v1 2026-10-29 (TU1)
                 + "<p><b>Final-years top-up (since 2026-10-29).</b> In the last 5 plan years, a year whose "
                 + "income falls short of its spending is brought to a $0 Surplus/gap, in the fan paths and in "
@@ -3864,7 +3894,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "balance) still sizes every planned draw, and the top-up is added after it, as the SS bridge "
                 + "is. Years before the window are unchanged, and a gap there still shows as a gap. Actual PoS "
                 + "counts the portfolio only: a path the top-up empties is a failure even when the reserve fills "
-                + "its gap, and the line under Actual PoS adds how many paths used the Money Mkt. A gap left "
+                // v2 2026-10-30 (Q18): the line now reports what the reserve did, not just its use.
+                + "its gap, and the line under Actual PoS says how many such paths the reserve carried to the "
+                + "end. A gap left "
                 + "after both are spent still shows, and neither grace setting forgives it; in practice it "
                 + "would come from cash held outside the portfolio or from home equity &mdash; for example, "
                 + "selling the home on a move to assisted living. Wd % includes the top-up; the Rate drift "
@@ -14225,6 +14257,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
      * the end of sim year i-1, so a path first at or below $0 at index i ran out
      * during calendar year baseYear + i - 1. With NB1 a path that reaches $0 stays
      * there, so this count is exactly the failures in Actual PoS.
+     * v2 2026-10-30 (Q18): the line became a paragraph -- the paths that reached $0,
+     * what the Money Mkt reserve did for them, then the short-year count -- wrapped
+     * to the box's width by wrapActualPoSSub().
      */
     // v1 2026-10-19 (SL1): the line under Actual PoS -- paths that ran out, then
     // paths with a short year. The grace spinner re-counts the shown run instantly.
@@ -14232,8 +14267,64 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         if (lblActualPoSSub == null || res == null) return;
         int grace = (spShortfallGrace != null) ? iv(spShortfallGrace) : 3;
         String sn = shortfallNote(res.fanShort, res.fanBalances, grace);
-        lblActualPoSSub.setText("<html>" + depletionNote(res.fanBalances, res.fanUsedMM, res.inp.baseYear)
-                + (sn.isEmpty() ? "" : "<br>" + sn) + "</html>");
+        int winStart = res.inp.horizon;
+        for (int y = 0; y < res.inp.horizon; y++) if (inTopUpWindow(res.inp, y)) { winStart = y; break; }
+        actualPoSSubText = depletionNote(res.fanBalances, res.fanShort, res.fanUsedMM,
+                res.fanInflFactors, res.inp.baseYear, winStart)
+                + (sn.isEmpty() ? "" : "<br>" + sn);
+        actualPoSSubWrapW = -1;
+        wrapActualPoSSub();
+    }
+
+    // v2 2026-10-30 (Q18): wraps the paragraph to the box's inner width, measured
+    // with the label's own font (bold words with the bold font). Each wrapped line is
+    // its own <div>, ending in a space, so the export reads it back as one sentence.
+    private void wrapActualPoSSub() {
+        if (lblActualPoSSub == null || actualPoSSubText == null) return;
+        java.awt.Container box = lblActualPoSSub.getParent();
+        int w = 0;
+        if (box != null) {
+            java.awt.Insets in = box.getInsets();
+            w = box.getWidth() - in.left - in.right - 2;
+        }
+        if (w == actualPoSSubWrapW) return;
+        actualPoSSubWrapW = w;
+        Font f = lblActualPoSSub.getFont();
+        lblActualPoSSub.setText(wrapHtmlPx(actualPoSSubText, lblActualPoSSub.getFontMetrics(f),
+                lblActualPoSSub.getFontMetrics(f.deriveFont(Font.BOLD)), w));
+    }
+
+    // v2 2026-10-30 (Q18): text with <b>..</b> and <br> (paragraph break) only.
+    // width <= 0 (not laid out yet): one line per paragraph, re-wrapped on resize.
+    static String wrapHtmlPx(String text, java.awt.FontMetrics plain, java.awt.FontMetrics bold, int width) {
+        StringBuilder out = new StringBuilder("<html>");
+        for (String para : text.split("<br>", -1)) {
+            StringBuilder line = new StringBuilder();
+            int lineW = 0;
+            boolean inBold = false, lineStartsBold = false;
+            for (String word : para.trim().split(" +")) {
+                if (word.isEmpty()) continue;
+                boolean opens = word.contains("<b>"), closes = word.contains("</b>");
+                String plainWord = word.replace("<b>", "").replace("</b>", "");
+                int ww = ((inBold || opens) ? bold : plain).stringWidth(plainWord);
+                int sp = plain.stringWidth(" ");
+                if (line.length() > 0 && width > 0 && lineW + sp + ww > width) {
+                    out.append("<div>").append(lineStartsBold ? "<b>" : "").append(line)
+                            .append(inBold ? "</b>" : "").append(" </div>");
+                    line.setLength(0);
+                    lineW = 0;
+                    lineStartsBold = inBold;
+                }
+                if (line.length() > 0) { line.append(' '); lineW += sp; }
+                line.append(word);
+                lineW += ww;
+                if (opens) inBold = true;
+                if (closes) inBold = false;
+            }
+            out.append("<div>").append(lineStartsBold ? "<b>" : "").append(line)
+                    .append(inBold ? "</b>" : "").append(" </div>");
+        }
+        return out.append("</html>").toString();
     }
 
     /**
@@ -14260,25 +14351,74 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 if (!graced) { shortPaths++; break; }
             }
         }
-        return (shortPaths == 0) ? "no short years" : shortPaths + " of " + n + " had a short year";
+        // v2 2026-10-30 (Q18): a full sentence, as the last line of the paragraph.
+        return (shortPaths == 0) ? "No path had a short year."
+                : shortPaths + " of " + n + " paths had at least one short year.";
     }
 
     // v1 2026-10-29 (TU1): + how many paths the final-years top-up carried on the
     // Money Mkt reserve after their portfolio ran out.
-    static String depletionNote(double[][] fanBalances, boolean[] usedMM, int baseYear) {
+    // v2 2026-10-30 (Q18): a path that reached $0 is STILL SHORT when any year from
+    // its run-out year to the end has a shortfall left (fanShort is already net of
+    // the Money Mkt draw); otherwise the reserve carried it (usedMM) or it needed
+    // nothing more. "Never ran out of money" = all paths minus the still-short ones.
+    // A still-short path's shortfalls are summed in plan-start dollars on its own
+    // inflation (fanInfl[p][y] = inflation to the start of sim year y); the largest
+    // sum is the extra reserve shown. winStart = first sim year of the top-up window.
+    static String depletionNote(double[][] fanBalances, double[][] fanShort, boolean[] usedMM,
+                                double[][] fanInfl, int baseYear, int winStart) {
         if (fanBalances == null || fanBalances.length == 0) return "from fan simulation";
-        int n = fanBalances.length, out = 0, mm = 0;
+        int n = fanBalances.length, out = 0, before = 0, carried = 0, noMore = 0, still = 0;
+        double worst = 0;
         int[] yrs = new int[n];
-        for (double[] f : fanBalances) {
-            for (int i = 1; i < f.length; i++) {
-                if (f[i] <= 0) { yrs[out++] = baseYear + i - 1; break; }
-            }
+        for (int p = 0; p < n; p++) {
+            double[] f = fanBalances[p];
+            int y0 = -1;
+            for (int i = 1; i < f.length; i++) if (f[i] <= 0) { y0 = i - 1; break; }
+            if (y0 < 0) continue;
+            yrs[out++] = baseYear + y0;
+            if (y0 < winStart) before++;
+            double left = 0;
+            if (fanShort != null && fanShort[p] != null)
+                for (int y = y0; y < fanShort[p].length; y++)
+                    if (fanShort[p][y] > 0.5)
+                        left += fanShort[p][y] / ((fanInfl != null && fanInfl[p][y] > 0) ? fanInfl[p][y] : 1.0);
+            if (left > 0) { still++; worst = Math.max(worst, left); }
+            else if (usedMM != null && usedMM[p]) carried++;
+            else noMore++;
         }
-        if (usedMM != null) for (boolean u : usedMM) if (u) mm++;
-        if (out == 0) return "no path ran out";
+        if (out == 0) return "No path's portfolio reached $0.";
         java.util.Arrays.sort(yrs, 0, out);
-        return out + " of " + n + " paths ran out . first " + yrs[0] + ", median " + yrs[out / 2]
-                + (mm > 0 ? " . " + mm + " used Money Mkt" : "");
+        String when = (out == 1) ? "in " + yrs[0] : "first " + yrs[0] + ", median " + yrs[out / 2];
+        String topUp = "the last " + TOPUP_YEARS + " plan years";
+        StringBuilder s = new StringBuilder("This counts the portfolio only. ");
+        if (before == 0) {
+            s.append(out == 1 ? "The 1 path whose portfolio reached $0 did so in "
+                            : "All " + out + " paths whose portfolio reached $0 did so in ")
+                    .append(topUp).append(" (").append(when).append("), where the final-years top-up spends ")
+                    .append("the portfolio to cover shortfalls. ");
+        } else {
+            s.append(out).append(out == 1 ? " path" : " paths").append(" reached $0 (").append(when).append("): ")
+                    .append(out - before).append(" in ").append(topUp).append(", where the final-years top-up ")
+                    .append("spends the portfolio to cover shortfalls, and ").append(before).append(" earlier. ");
+        }
+        if (carried > 0) s.append(carried).append(carried == 1 ? " was" : " were")
+                .append(" carried to the end by the Money Mkt reserve");
+        else s.append("None was carried to the end by the Money Mkt reserve");
+        if (noMore > 0) s.append(" and ").append(noMore).append(" needed nothing more");
+        s.append(String.format(", so <b>%d of %d (%.1f%%) never ran out of money</b>.",
+                n - still, n, 100.0 * (n - still) / n));
+        if (still > 0) {
+            long more = Math.max(1000L, Math.round(worst / 1000.0) * 1000L);
+            String amt = String.format("$%,d", more);
+            if (before == 0) s.append(" The other ").append(still).append(still == 1 ? " ran out of reserve too; it needed"
+                    : " ran out of reserve too; the largest needed");
+            else s.append(" The other ").append(still).append(still == 1 ? " still came up short; it needed"
+                    : " still came up short; the largest needed");
+            s.append(" about ").append(amt).append(" more in the reserve (").append(baseYear)
+                    .append(" dollars) to finish.");
+        }
+        return s.toString();
     }
 
     /** Standard normal CDF via erfc (Numerical Recipes erfcc, |error| < 1.2e-7). */
