@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Friday, October 30, 2026 at 02:49 PM MST (UTC-7)
+// Last modified: Friday, October 30, 2026 at 05:40 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Friday, October 30, 2026 at 02:49 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Friday, October 30, 2026 at 05:40 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -4983,6 +4983,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "deductions and counted only the other spouse's Social Security as income, which made the "
                 + "replaced benefit nearly tax-free and the bridge 4&ndash;9% too large; that overstated the "
                 + "cost of delaying a claim.</p>"
+                // v2 2026-10-30 (Q19)
+                + "<p><b>A draw the portfolio cannot pay (since 2026-10-30).</b> A year never draws more than "
+                + "the portfolio holds: when the planned withdrawal plus the bridge (and any final-years top-up) "
+                + "is more than the balance, only what the portfolio can pay counts as income, and the rest "
+                + "shows as a gap in Surplus/gap and in the short-year count, never as income.</p>"
 
                 + "<p><b>Terminal-year artifact.</b> The Pro engine sizes withdrawals to hold your PoS "
                 + "target, re-solved each year &mdash; it is <b>not</b> a &quot;spend the balance to zero&quot; "
@@ -5733,8 +5738,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
      *                  the Money Mkt reserve -- and Term grace no longer forgives a
      *                  gap the balance could cover (the top-up has spent it). Rows
      *                  with a final-years gap move; every batch re-runs.
+     *  24  2026-10-30  a year never draws more than the portfolio holds (Q19): the
+     *                  SS bridge could ask a small portfolio for more than it had,
+     *                  and the year's income counted the unpaid part. The unpaid
+     *                  part is now a gap. Rows where a bridge outran the portfolio
+     *                  move; every batch re-runs.
      */
-    private static final int SCORER_VERSION = 23;
+    private static final int SCORER_VERSION = 24;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -10951,6 +10961,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 // v6: the SS bridge is spent on top of the normal draw, so the
                 // portfolio carries the full cost of delaying.
                 double wdWithBridge = wdActual + ssBridge[y];
+                // v2 2026-10-30 (Q19): never draw more than the portfolio holds. The
+                // solver's own trials keep the planned draw fundable, but the SS bridge
+                // is fixed, so a small portfolio could be asked for more than it has --
+                // and the year's income counted the unpaid part. Cap the draw at the
+                // January balance; `unfunded` comes off income below, so it shows as a
+                // gap (which the top-up's Money Mkt draw covers inside the window).
+                final double unfunded = drawing
+                        ? Math.max(0, wdWithBridge - (Math.max(0, trad) + Math.max(0, roth))) : 0;
+                wdWithBridge -= unfunded;
                 // v1 2026-10-29 (TU1): in the final years, draw what brings the year's
                 // gap to $0 -- the extra comes out Traditional first (the gap function
                 // taxes it), then Roth -- and take any gap the emptied portfolio leaves
@@ -10963,7 +10982,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                     double[] t = topUp(base, cap, mmPath, d -> fanYearGap(inp, yy, calYear,
                             manAge, womanAge, true, startPror, res.fanInflFactors[p],
                             pManStartInfl, pWomanStartInfl, pMagi,
-                            Math.max(rmd, Math.min(d, tr0)), wdActual, ssBridge[yy], d - base,
+                            Math.max(rmd, Math.min(d, tr0)), wdActual, ssBridge[yy],
+                            d - base - unfunded,   // v2 2026-10-30 (Q19): income = the draw paid
                             mmI, 0)[0]);
                     topUpX  = t[0] - base;
                     mmDrawX = t[1];
@@ -10993,6 +11013,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 // TU1: a top-up that took the whole portfolio leaves exactly $0 (not
                 // a rounding remnant that would count the path as surviving).
                 if (emptied) { trad = 0; roth = 0; }
+                // v2 2026-10-30 (Q19): a capped draw took the whole portfolio -- leave
+                // exactly $0, not a rounding remnant (found in testing: 135 of 600
+                // paths kept ~1e-11 and read as not run out until the top-up window).
+                if (unfunded > 0) { trad = 0; roth = 0; }
 
                 // --- growth on what REMAINS INVESTED after the January draw;
                 //     b is DERIVED as the sum, so trad + roth == b exactly. ---
@@ -11038,8 +11062,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 if (drawing || inp.computedTax) {
                     double[] yg = fanYearGap(inp, y, calYear, manAge, womanAge, drawing,
                             startPror, res.fanInflFactors[p], pManStartInfl, pWomanStartInfl,
-                            pMagi, tradDraw, wdActual, ssBridge[y], topUpX, mmIntPath,
-                            fpConv[p][y]);
+                            pMagi, tradDraw, wdActual, ssBridge[y],
+                            topUpX - unfunded,   // v2 2026-10-30 (Q19): income = the draw paid
+                            mmIntPath, fpConv[p][y]);
                     if (!Double.isNaN(yg[1])) pMagi[y] = yg[1];
                     if (drawing) res.fanShort[p][y] = Math.max(0, yg[0] - mmDrawX);
                 }
@@ -11289,6 +11314,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             // as the Tax block below will -- then Roth), then, once that is spent, from
             // the Money Mkt reserve. Rounded up to the dollar, so the row reads $0.
             int wdPlanned = wdActual;   // the solved draw + bridge: the guardrail's basis
+            // v2 2026-10-30 (Q19): as the fan paths do, never draw more than the median
+            // portfolio holds; the unpaid part leaves Actual wd and Total income, so it
+            // shows as a gap. It comes off the SS bridge first: the solver already keeps
+            // the planned draw fundable alongside the bridge, so the excess is bridge.
+            if (drawing && wdActual > Math.max(0, medBal)) {
+                int unfundedTbl = wdActual - Math.max(0, medBal);
+                bridgeThisYear -= Math.min(bridgeThisYear, unfundedTbl);
+                wdActual       -= unfundedTbl;
+            }
             int topUpTbl = 0;
             double mmDrawTbl = 0;
             if (drawing && inTopUpWindow(inp, y)) {
@@ -12981,6 +13015,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
      * included); spending = Living + Medical + Tax (est); a mid-year first
      * withdrawal year counts from the start month (PR-2). `extra` is the top-up and
      * adds to income only -- its tax arrives through `tradDraw`.
+     * v2 2026-10-30 (Q19): the fan path passes `extra` less any part of the planned
+     * draw + bridge the portfolio could not pay, so income is the draw actually paid.
      * Returns { spending - income (NaN when not drawing), MAGI to record (NaN = none) }.
      */
     private double[] fanYearGap(SimInputs inp, int y, int calYear, int manAge, int womanAge,
