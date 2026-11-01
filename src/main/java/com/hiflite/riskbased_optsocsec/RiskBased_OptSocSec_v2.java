@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Sunday, November 01, 2026 at 02:18 PM MST (UTC-7)
+// Last modified: Sunday, November 01, 2026 at 04:20 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Sunday, November 01, 2026 at 02:18 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, November 01, 2026 at 04:20 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -384,6 +384,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private JSpinner   spCustomExclCap;     // custom: retirement-exclusion cap ($, 0=unlimited)
     private JToggleButton tglConvMode;      // selected = fill-to-target, unselected = flat $
     private JCheckBox chkConvEnabled;       // v12: master on/off for Roth conversions
+    private JCheckBox chkMmCoversEarly;     // v2 2026-11-01 (Q21): Money Mkt pays short years before the last 5
     private JSpinner   spConvFlat;          // flat annual conversion $ (flat mode)
     private JSpinner   spConvBuffer;        // MAGI buffer below IRMAA cliff (fill mode)
     private JSpinner   spConvCap;           // max conversion cap (fill mode; 0 = uncapped)
@@ -1175,13 +1176,42 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "each year at inflation (MM return ~= inflation, ~0% real) and adds<br>"
                 + "new RMD overage. The simulation spends it <b>only as a last resort</b>:<br>"
                 + "in the last 5 plan years, once the portfolio is empty, a short year<br>"
-                + "draws on Money Mkt (total) to bring Surplus/gap to $0 (v1 2026-10-29).<br><br>"
+                + "draws on Money Mkt (total) to bring Surplus/gap to $0 (v1 2026-10-29).<br>"
+                // v2 2026-11-01 (Q21)
+                + "With <i>Money Mkt covers short years before the last 5</i> checked (below),<br>"
+                + "it also pays short years earlier in the plan.<br><br>"
                 + "<b>Excluded from Portfolio balance</b> (Option A): the Portfolio column is<br>"
                 + "the money the sim actually draws on (Traditional + Roth).<br>"
                 + "Your ACTUAL total at the start of a year = that row's Portfolio balance<br>"
                 + "+ the PREVIOUS row's Money Mkt (total), an end-of-year figure. Because this<br>"
                 + "reserve is outside the normal draw, it is NOT added to the Account<br>"
                 + "total above and does NOT redistribute into the qualified accounts.</html>");
+        // v2 2026-11-01 (Q21): let the Money Mkt pay short years before the final-years window.
+        chkMmCoversEarly = new JCheckBox("Money Mkt covers short years before the last 5", false);
+        chkMmCoversEarly.setBackground(Color.WHITE);
+        chkMmCoversEarly.setToolTipText("<html><b>Money Mkt covers short years before the last 5</b><br>"
+                + "<b>Default: off.</b> In the last 5 plan years the Money Mkt always backs up the<br>"
+                + "portfolio (the final-years top-up). This box decides whether it also pays<br>"
+                + "short years <b>earlier</b> in the plan.<br><br>"
+                + "<b>Checked:</b> every withdrawal year before the last 5 whose Surplus/gap is<br>"
+                + "negative draws the difference from <b>Money Mkt (total)</b>, as far as it has<br>"
+                + "money, so the year reads $0. A part it cannot cover stays as a gap and counts<br>"
+                + "as a short year. The draw comes <b>only from the Money Mkt, never from the<br>"
+                + "portfolio</b>, and it never adds to a portfolio draw. It is already-taxed cash,<br>"
+                + "so the draw adds no tax. One small knock-on effect: a smaller Money Mkt earns<br>"
+                + "less interest, and that interest is taxable, so later years' tax and Roth<br>"
+                + "conversions can shift a little -- and with them the portfolio balances, later<br>"
+                + "withdrawals and, occasionally, Actual PoS.<br><br>"
+                + "<b>The tradeoff:</b> money spent on early short years is not there in the last<br>"
+                + "5 years. Fewer lifetimes may then be carried to the end by the reserve, so the<br>"
+                + "\"never ran out of money\" figure under Actual PoS can go down even as the<br>"
+                + "short-year count goes down.<br><br>"
+                + "Example (made-up numbers): a year with $90,000 of income and $95,000 of<br>"
+                + "spending is $5,000 short. Checked, with $40,000 in the Money Mkt, the Money<br>"
+                + "Mkt pays $5,000, the year reads $0 and the Money Mkt ends near $35,000 (plus<br>"
+                + "that year's interest and any RMD overage).<br><br>"
+                + "Saved with the scenario. In the SS Optimizer a covered year is not red.<br>"
+                + "See Assumptions &amp; Methods section 1.</html>");
         lblAccountTotal  = new JLabel("Account total: --");
         lblAccountTotal.setFont(new Font("SansSerif", Font.BOLD, 13));
         lblAccountTotal.setForeground(new Color(40, 80, 40));
@@ -1201,7 +1231,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 "Spouse -- Roth IRA ($)  [no RMD]",             spWomanRothIRA,
                 "Spouse -- Traditional IRA ($)  [RMD at 73 or 75 by birth year]",  spWomanTradIRA,
                 "Spouse -- Traditional 401K ($)  [RMD at 73 or 75 by birth year]", spWomanTrad401K,
-                "Money Mkt (prior, $)  [carry-in, final-years backstop, not in Portfolio]", spMmPrior,
+                "Money Mkt (prior, $)  [carry-in, backstop, not in Portfolio]", spMmPrior,   // v2 2026-11-01 (Q21): label
+                null,                                          chkMmCoversEarly,   // v2 2026-11-01 (Q21)
                 null,                                          lblAccountTotal,
         }));
         inner.add(Box.createVerticalStrut(4));
@@ -2361,6 +2392,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "In the last 5 plan years the final-years top-up covers a short year from the<br>"
                 + "portfolio, then from the Money Mkt reserve. A path whose portfolio reached $0<br>"
                 + "is <i>carried to the end by the reserve</i> when no year from then on was left short.<br>"
+                // v2 2026-11-01 (Q21)
+                + "With <i>Money Mkt covers short years before the last 5</i> checked (Account<br>"
+                + "Balances card), the reserve also pays earlier short years. That lowers the<br>"
+                + "short-year count, but money spent early is not there in the last 5 years, so<br>"
+                + "<i>never ran out of money</i> can go down.<br>"
                 + "<i>Never ran out of money</i> = all paths minus those still short after the reserve.<br>"
                 + "<i>More in the reserve</i>: for each path still short, its shortfalls from the year it<br>"
                 + "reached $0 to the plan's end, added up in the plan's first-year dollars on that<br>"
@@ -2374,7 +2410,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<i>Shortfall grace</i> years (Portfolio &amp; Simulation card) is forgiven when that<br>"
                 + "path's portfolio covers it -- except in the last 5 plan years, where the top-up<br>"
                 + "has already spent the portfolio and the Money Mkt on it, so a gap left there<br>"
-                + "always counts. Actual PoS can be 100%<br>"
+                + "always counts. Whatever the Money Mkt paid comes off a shortfall first.<br>"   // v2 2026-11-01 (Q21)
+                + "Actual PoS can be 100%<br>"
                 + "while this count is not zero: the money lasted, but some years came up short.</html>");
         metricsRow.add(wrapMetric(lblActualPoS,   "Actual PoS",                lblActualPoSSub));
         // v2 2026-10-30 (Q18): re-wrap the paragraph to the box's width whenever it changes.
@@ -2739,7 +2776,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                         + (mm ? "&nbsp;&nbsp;Money Mkt draw:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
                                         + CURRENCY.format(Math.round(er.mmDraw / d)) + "<br>" : "")
                                         + "&nbsp;&nbsp;= Total income:&nbsp;<b>%s</b>"
-                                        + (mm ? "<br><br>The portfolio is empty, so the final-years top-up drew<br>"
+                                        // v2 2026-11-01 (Q21): an early-year draw has its own reason.
+                                        + (mm && er.mmEarly ? "<br><br><i>Money Mkt covers short years before the last 5</i> is<br>"
+                                        + "checked, so this year's shortfall was paid from Money Mkt (total),<br>"
+                                        + "not from the portfolio. It is already-taxed cash, so the draw adds no tax." : "")
+                                        + (mm && !er.mmEarly ? "<br><br>The portfolio is empty, so the final-years top-up drew<br>"
                                         + "the rest of this year's spending from Money Mkt (total).<br>"
                                         + "It is already-taxed cash, so the draw adds no tax." : "")
                                         + "</html>",
@@ -2766,7 +2807,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                         + "the portfolio is empty -- from Money Mkt (total). A gap still<br>"
                                         + "showing there means both are spent; it would come from cash<br>"
                                         + "outside the portfolio or home equity (for example, selling<br>"
-                                        + "the home on a move to assisted living).%s%s</html>",
+                                        + "the home on a move to assisted living).<br><br>"
+                                        // v2 2026-11-01 (Q21)
+                                        + "<b>Earlier years:</b> a negative gap shows as it is, unless<br>"
+                                        + "<i>Money Mkt covers short years before the last 5</i> (Account<br>"
+                                        + "Balances card) is checked. Then Money Mkt (total) pays it, as far<br>"
+                                        + "as it has money -- never the portfolio.%s%s</html>",
                                 CURRENCY.format(Math.round(er.totalIncome / d)),
                                 CURRENCY.format(Math.round(er.totalSpend / d)),
                                 (er.surplus >= 0 ? "+" : "-")
@@ -3363,6 +3409,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "<b>Spent by the sim only as a last resort:</b> in the last 5 plan years,<br>"
                             + "once the Portfolio balance is $0, a short year draws on it to bring<br>"
                             + "Surplus/gap to $0 (already-taxed cash, so the draw adds no tax).<br>"
+                            // v2 2026-11-01 (Q21)
+                            + "With <i>Money Mkt covers short years before the last 5</i> checked<br>"
+                            + "(Account Balances card), it also pays short years earlier in the plan.<br>"
                             + "Otherwise it is your manual safety buffer. It is EXCLUDED from the<br>"
                             + "Portfolio balance column. Your ACTUAL total at<br>"
                             + "the start of a year = that row's Portfolio balance + the PREVIOUS<br>"
@@ -3893,7 +3942,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "and, once the portfolio is empty, from the Money Mkt (total) reserve, which is already-taxed "
                 + "cash, so that draw adds no tax. The Pro PoS solver is unchanged: its ceiling (22% of the "
                 + "balance) still sizes every planned draw, and the top-up is added after it, as the SS bridge "
-                + "is. Years before the window are unchanged, and a gap there still shows as a gap. Actual PoS "
+                + "is. Years before the window are unchanged, and a gap there still shows as a gap unless the "
+                + "Money Mkt option below is on. Actual PoS "
                 + "counts the portfolio only: a path the top-up empties is a failure even when the reserve fills "
                 // v2 2026-10-30 (Q18): the line now reports what the reserve did, not just its use.
                 + "its gap, and the line under Actual PoS says how many such paths the reserve carried to the "
@@ -3902,6 +3952,24 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "would come from cash held outside the portfolio or from home equity &mdash; for example, "
                 + "selling the home on a move to assisted living. Wd % includes the top-up; the Rate drift "
                 + "guardrail judges the planned draw without it.</p>"
+                // v2 2026-11-01 (Q21)
+                + "<p><b>Money Mkt covers short years before the last 5 (since 2026-11-01).</b> A checkbox under "
+                + "<i>Money Mkt (prior, $)</i> on the <i>Account Balances</i> card, <b>off by default</b>. Checked, "
+                + "every withdrawal year before the last 5 whose Surplus/gap is negative is paid from Money Mkt "
+                + "(total), as far as it has money, in the fan paths and in the table alike; a part it cannot "
+                + "cover stays as a gap and counts as a short year. The money comes <b>only from the Money Mkt, "
+                + "never from the portfolio</b>, and the option never adds to a portfolio draw. The draw is "
+                + "already-taxed cash and adds no tax. A smaller reserve then earns less interest, and that "
+                + "interest is taxable income, so later years' tax and Roth conversions can shift a little; "
+                + "through them the portfolio balances, later withdrawals and, occasionally, Actual PoS can "
+                + "move slightly. <b>The tradeoff:</b> "
+                + "money spent on early short years is not there for the final-years top-up, so fewer lifetimes "
+                + "may be carried to the end by the reserve and the &quot;never ran out of money&quot; figure under "
+                + "Actual PoS can go down while the short-year count goes down. For example, with a $40,000 "
+                + "reserve, three early years each $5,000 short use $15,000 of it, leaving roughly $25,000 "
+                + "(plus interest and any RMD overage) for the last 5 years. The setting is saved with the "
+                + "scenario; in the SS Optimizer a year the Money Mkt covered is not red, so turning it on can "
+                + "change which claim pairs pass.</p>"
                 // v1 2026-10-19 (PR-2)
                 + "<p><b>A first withdrawal year that starts after January (since 2026-10-19).</b> That year's "
                 + "row counts only the months from the start month on, as the withdrawal already did: Living, "
@@ -7322,6 +7390,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 // how every build before it behaved, so leaving it out keeps every
                 // existing batch file's fingerprint -- and its rows -- valid.
                 if (n.equals("convEnabled") && Boolean.TRUE.equals(f.get(in))) continue;
+                // v2 2026-11-01 (Q21): likewise mmCoversEarly joins only when ON (off = every
+                // earlier build), so existing batch files keep their fingerprints.
+                if (n.equals("mmCoversEarly") && Boolean.FALSE.equals(f.get(in))) continue;
                 sb.append(n).append('=').append(f.get(in)).append(';');
             }
         } catch (Exception ex) { return "nofp"; }
@@ -9753,6 +9824,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         props.setProperty("woman.tradIRA",          String.valueOf(iv(spWomanTradIRA)));
         props.setProperty("woman.trad401K",         String.valueOf(iv(spWomanTrad401K)));
         props.setProperty("mm.prior",               String.valueOf(iv(spMmPrior)));
+        props.setProperty("mm.coversEarly",         String.valueOf(chkMmCoversEarly.isSelected()));  // v2 2026-11-01 (Q21)
         props.setProperty("market.nomReturn",       String.valueOf(dv(spNomReturn)));
         props.setProperty("market.stdDev",          String.valueOf(dv(spStdDev)));
         props.setProperty("market.inflation",       String.valueOf(dv(spInflation)));
@@ -9962,6 +10034,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         setSpinnerI(spWomanTradIRA,       props, "woman.tradIRA",          warnings);
         setSpinnerI(spWomanTrad401K,      props, "woman.trad401K",         warnings);
         setSpinnerI(spMmPrior,            props, "mm.prior",                warnings);
+        // v2 2026-11-01 (Q21): absent in older files -> off, which is how they always behaved.
+        chkMmCoversEarly.setSelected(Boolean.parseBoolean(props.getProperty("mm.coversEarly", "false")));
         setSpinnerD(spNomReturn,          props, "market.nomReturn",       warnings);
         setSpinnerD(spStdDev,             props, "market.stdDev",          warnings);
         setSpinnerD(spInflation,          props, "market.inflation",       warnings);
@@ -10754,6 +10828,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         i.taxInflation       = dv(spTaxInflation)    / 100.0;
         i.computedTax        = chkComputedTax.isSelected();
         i.convEnabled        = chkConvEnabled.isSelected();   // v12
+        i.mmCoversEarly      = chkMmCoversEarly.isSelected(); // v2 2026-11-01 (Q21)
         i.convFillMode       = tglConvMode.isSelected();
         i.convFlat           = iv(spConvFlat);
         i.convBuffer         = iv(spConvBuffer);
@@ -11074,7 +11149,22 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             topUpX - unfunded,   // v2 2026-10-30 (Q19): income = the draw paid
                             mmIntPath, fpConv[p][y]);
                     if (!Double.isNaN(yg[1])) pMagi[y] = yg[1];
-                    if (drawing) res.fanShort[p][y] = Math.max(0, yg[0] - mmDrawX);
+                    // v2 2026-11-01 (Q21): before the top-up window, with "Money Mkt covers
+                    // short years before the last 5" on, this path's Money Mkt pays the gap
+                    // (as far as it has money) -- never the portfolio, and never an added
+                    // portfolio draw. Already-taxed cash: no tax. The smaller reserve earns
+                    // less taxable interest (mmIntPath), which later years' tax and
+                    // conversion sizing see -- the only way it reaches the portfolio.
+                    // fanUsedMM marks a path the reserve carried after its portfolio ran
+                    // out (the Actual PoS paragraph reads it only for such paths), so an
+                    // early draw sets it only once this path's portfolio is $0.
+                    double mmEarlyX = 0;
+                    if (drawing && inp.mmCoversEarly && !inTopUpWindow(inp, y) && yg[0] > 0.5) {
+                        mmEarlyX = Math.min(yg[0], Math.max(0, mmPath));
+                        mmPath  -= mmEarlyX;
+                        if (mmEarlyX > 0 && trad + roth <= 0) res.fanUsedMM[p] = true;
+                    }
+                    if (drawing) res.fanShort[p][y] = Math.max(0, yg[0] - mmDrawX - mmEarlyX);
                 }
 
                 // --- b is the sum of the DRAWABLE components: the invariant, not
@@ -11592,6 +11682,20 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 mmIntTaxInt = (int) (mmIntTaxInt * startPror);
             }
             double totalSpend = drawing ? living + medical + tax : 0;
+            // v2 2026-11-01 (Q21): before the top-up window, with "Money Mkt covers short
+            // years before the last 5" on, Money Mkt (total) pays a negative Surplus/gap
+            // as far as it has money -- never the portfolio. Rounded up to the dollar, so
+            // a covered row reads $0; the draw adds no tax (already-taxed cash).
+            boolean mmEarlyRow = false;
+            if (drawing && inp.mmCoversEarly && !inTopUpWindow(inp, y)) {
+                double gap0 = totalSpend - (guaranteed + wdActual);
+                if (gap0 > 0.5 && mmReserveRun > 0) {
+                    double mmEarly = Math.min(mmReserveRun, Math.ceil(gap0));
+                    mmReserveRun -= mmEarly;
+                    mmDrawTbl    += mmEarly;
+                    mmEarlyRow    = true;
+                }
+            }
             double totalIncome= guaranteed + wdActual + mmDrawTbl;   // TU1: + Money Mkt draw
             double surplus    = totalIncome - totalSpend;
             double wdPct      = (drawing && medBal > 0) ? wdActual / (double) medBal * 100.0 : 0;
@@ -11661,6 +11765,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             row.ssBridge      = bridgeThisYear;  // v6
             row.topUp         = topUpTbl;        // v1 2026-10-29 (TU1)
             row.mmDraw        = (int) Math.round(mmDrawTbl);
+            row.mmEarly       = mmEarlyRow;      // v2 2026-11-01 (Q21)
             row.baseRate      = rowBaseRate;     // v6
             row.yr1Rate       = rowYr1Rate;      // v6
             row.rateVsYr1     = rowRateVsYr1;    // v6
@@ -16198,6 +16303,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v3 tax engine
         boolean computedTax;
         boolean convEnabled = true; // v12: false = no Roth conversions anywhere
+        boolean mmCoversEarly;      // v2 2026-11-01 (Q21): Money Mkt pays short years before the last 5
         boolean convFillMode;       // true = fill-to-target, false = flat
         int convFlat, convBuffer, convCap;
         int irmaaThreshMode;        // 0=frozen 1=chained-CPI 2=full-CPI
@@ -16338,6 +16444,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // portfolio was spent (in totalIncome, not in wdActual). Both 0 outside the
         // last TOPUP_YEARS plan years.
         int  topUp, mmDraw;
+        boolean mmEarly;   // v2 2026-11-01 (Q21): mmDraw paid a short year before the last 5
         double baseRate, yr1Rate, rateVsYr1;
         int  tradBal, rothBal;         // v6: median Traditional / Roth bucket balances
         int  mmBal;                    // v6: median Money Market (taxable) bucket
