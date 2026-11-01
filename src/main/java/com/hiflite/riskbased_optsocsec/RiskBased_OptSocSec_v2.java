@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Friday, October 30, 2026 at 05:40 PM MST (UTC-7)
+// Last modified: Sunday, November 01, 2026 at 02:18 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Friday, October 30, 2026 at 05:40 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, November 01, 2026 at 02:18 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -998,7 +998,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         spMcSolvePaths = spinI(1000, 50, 5000, 50, "#,###");
         spMcSolvePaths.setToolTipText("<html><b>Monte Carlo solve paths</b><br>"
                 + "Number of simulation paths per binary-search iteration<br>"
-                + "used to find the target PoS withdrawal amount.<br><br>"
+                + "used to find the target PoS withdrawal amount.<br>"
+                + "Each runs from the year being solved to the plan's end; repeated every year.<br><br>"   // v2 2026-11-01 (Q20)
                 + "<b>Default: 1,000</b> -- high accuracy.<br>"
                 + "200 = ~4x faster, ~$500 variance. 100 = ~8x faster, ~$1,000 variance.<br>"
                 + "Biggest single driver of total runtime.</html>");
@@ -3947,10 +3948,17 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "so that a user on a modest machine cannot accidentally set something like 50,000 and appear to hang the app while "
                 + "it grinds through hundreds of millions of extra year-calculations. On a fast workstation the ceilings run in a "
                 + "few seconds; the point of the cap is protecting the slow case, not restricting yours.</p>"
-                + "<p><b>How they fit together.</b> Solve paths and binary-search iterations are the <i>inner</i> cost, paid "
-                + "at every displayed year to find that year's sustainable draw (solve paths &times; iterations MC runs per "
-                + "year); fan paths are the <i>outer</i> layer that turns the solved policy into the chart and the PoS "
-                + "number. The SS Optimizer (section 11) scores every combination with one run at these same full "
+                // v2 2026-11-01 (Q20): rewritten to say what one solve path is and how often the solve repeats.
+                + "<p><b>How they fit together.</b> <i>MC solve paths</i> are simulated futures, each run from the "
+                + "year being solved to the end of the plan, to test whether a withdrawal amount survives in at least "
+                + "the target share of them. A binary search of <i>Binary search iterations</i> candidate amounts, each "
+                + "tested against all the solve paths, halves the range every step to home in on the largest amount "
+                + "that passes. This is repeated fresh for every drawing year of the table, from that year's median "
+                + "balance with new random futures. At the defaults that is 1,000 futures &times; 25 candidates per "
+                + "year: up to 750,000 simulated lifetimes, of shrinking length, over a 30-year plan. Each of the "
+                + "<i>Fan chart paths</i> (500 at the default) does the same yearly re-check at a smaller size: solve "
+                + "paths &divide; 8 (minimum 20) futures &times; at most 10 candidates, which is 125 &times; 10 at the "
+                + "defaults. The SS Optimizer (section 11) scores every combination with one run at these same full "
                 + "settings; there is no reduced-fidelity scan.</p>"
                 + "<p><b>What the readout counts (v12 2026-10-11).</b> The status bar reports the Monte Carlo trial "
                 + "paths the run actually executed, and an upper bound on the years those paths simulated (a trial path "
