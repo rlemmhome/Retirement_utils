@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Sunday, November 01, 2026 at 04:20 PM MST (UTC-7)
+// Last modified: Monday, November 02, 2026 at 03:14 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Sunday, November 01, 2026 at 04:20 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, November 02, 2026 at 03:14 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -456,6 +456,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private JSpinner spManTradIRA, spManRothIRA, spManTrad401K, spManRoth401K;
     private JSpinner spWomanRoth401K, spWomanRothIRA, spWomanTradIRA, spWomanTrad401K;
     private JSpinner spMmPrior;
+    private JSpinner spSaleProceeds, spSaleBasis;   // v2 2026-11-02 (Q22): one-year sale, plan's first year
     private JLabel   lblAccountTotal;
     private JSpinner spManPlanAge, spWomanPlanAge;
     private JLabel   lblHorizonNote;
@@ -1186,6 +1187,31 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "+ the PREVIOUS row's Money Mkt (total), an end-of-year figure. Because this<br>"
                 + "reserve is outside the normal draw, it is NOT added to the Account<br>"
                 + "total above and does NOT redistribute into the qualified accounts.</html>");
+        // v2 2026-11-02 (Q22): a sale of taxable shares done outside the program in the plan's
+        // first year -- the two numbers needed for the Money Mkt, that year's taxes and MAGI.
+        spSaleProceeds   = spinI(      0,  0, 20_000_000, 1_000, "#,###");
+        spSaleBasis      = spinI(      0,  0, 20_000_000, 1_000, "#,###");
+        spSaleProceeds.setToolTipText("<html><b>Taxable Brokerage Sale Proceeds ($)</b> -- this year's sale, default 0<br>"
+                + "For shares sold <b>outside</b> this program in the plan's first year, with the<br>"
+                + "cash moved into the money market. Enter the total the sale brought in: the<br>"
+                + "brokerage site's <i>realized gain/loss</i> page (\"proceeds\"), later Form 1099-B box 1d.<br>"
+                + "The program adds it to <b>Money Mkt (total)</b> in the first year. The proceeds are<br>"
+                + "not taxed -- only the gain is (proceeds minus <i>Cost Basis of Brokerage Shares<br>"
+                + "Sold</i>, below).<br><br>"
+                + "<b>Do the sale early in the year, and enter it here as soon as it is complete.</b><br><b>The program uses the sale proceeds and cost basis to compute this year's MAGI and</b><br><b>taxes, and sizes the Roth conversion from them against the tax-bracket and IRMAA</b><br><b>limits. Estimates can push the conversion over a limit or a cliff.</b><br><br>"
+                + "All sales are treated as long-term capital gains. Both 0 = no sale. At the next<br>"
+                + "yearly run enter 0 in both: the cash is then part of <i>Money Mkt (prior, $)</i>.<br>"
+                + "See Assumptions section 7c.</html>");
+        spSaleBasis.setToolTipText("<html><b>Cost Basis of Brokerage Shares Sold ($)</b> -- default 0<br>"
+                + "What was paid for the shares sold this year (plus any reinvested dividends) --<br>"
+                + "money already taxed. From the same <i>realized gain/loss</i> page (\"cost basis\"),<br>"
+                + "later Form 1099-B box 1e.<br>"
+                + "Gain = <i>Taxable Brokerage Sale Proceeds</i> minus this basis. The gain is taxed<br>"
+                + "at the long-term capital-gain rates (0%, 15% or 20%, on top of ordinary income)<br>"
+                + "and counts in MAGI. A basis above the proceeds is a loss: up to $3,000 comes off<br>"
+                + "ordinary income this year, and nothing carries forward.<br><br>"
+                + "<b>Do the sale early in the year, and enter it here as soon as it is complete.</b><br><b>The program uses the sale proceeds and cost basis to compute this year's MAGI and</b><br><b>taxes, and sizes the Roth conversion from them against the tax-bracket and IRMAA</b><br><b>limits. Estimates can push the conversion over a limit or a cliff.</b><br><br>"
+                + "All sales are treated as long-term capital gains. See Assumptions section 7c.</html>");
         // v2 2026-11-01 (Q21): let the Money Mkt pay short years before the final-years window.
         chkMmCoversEarly = new JCheckBox("Money Mkt covers short years before the last 5", false);
         chkMmCoversEarly.setBackground(Color.WHITE);
@@ -1232,7 +1258,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 "Spouse -- Traditional IRA ($)  [RMD at 73 or 75 by birth year]",  spWomanTradIRA,
                 "Spouse -- Traditional 401K ($)  [RMD at 73 or 75 by birth year]", spWomanTrad401K,
                 "Money Mkt (prior, $)  [carry-in, backstop, not in Portfolio]", spMmPrior,   // v2 2026-11-01 (Q21): label
-                null,                                          chkMmCoversEarly,   // v2 2026-11-01 (Q21)
+                null,                                          chkMmCoversEarly,   // v2 2026-11-01 (Q21); Q24: right below Money Mkt (prior, $)
+                "Taxable Brokerage Sale Proceeds ($)  [this year, long-term gain, into Money Mkt]", spSaleProceeds,   // v2 2026-11-02 (Q22, Q24)
+                "Cost Basis of Brokerage Shares Sold ($)",     spSaleBasis,        // v2 2026-11-02 (Q22, Q24)
                 null,                                          lblAccountTotal,
         }));
         inner.add(Box.createVerticalStrut(4));
@@ -1687,8 +1715,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         tglConvMode = new JToggleButton("Fill to MAGI target", true);
         tglConvMode.setToolTipText("<html><b>Roth conversion sizing mode</b><br>"
                 + "<b>Selected (Fill to MAGI target):</b> each year converts the largest amount<br>"
-                + "that keeps MAGI under the binding ceiling -- the lower of the IRMAA<br>"
-                + "Tier-0 cliff (minus your buffer) and the 22%-&gt;24% bracket edge --<br>"
+                + "that keeps MAGI under the binding ceiling -- the lower of the selected<br>"
+                + "IRMAA tier's cliff (minus your buffer) and the selected tax-bracket top --<br>"   // v2 2026-11-02 (Q23)
                 + "then capped by the cap below. The table reports which ceiling bound it.<br>"
                 + "<b>Unselected (Flat $):</b> converts the fixed amount below every year.</html>");
         tglConvMode.addActionListener(e -> {
@@ -1705,9 +1733,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         spConvBuffer = spinI(13_000, 0, 100_000, 1_000, "#,###");
         spConvBuffer.setToolTipText("<html><b>MAGI buffer below the IRMAA cliff ($)</b><br>"
                 + "Used in <b>Fill to MAGI target</b> mode. The fill stops this many dollars<br>"
-                + "below the IRMAA Tier-0 threshold (2026 base $218,000, inflation-indexed),<br>"
-                + "leaving headroom so an income surprise does not trip the surcharge.<br>"
-                + "Default $13,000 (targets ~$205,000 MAGI in 2026 dollars).<br><br>"
+                + "below the selected IRMAA tier's threshold (Standard: 2026 base $218,000,<br>"   // v2 2026-11-02 (Q23)
+                + "inflation-indexed), leaving headroom so an income surprise does not trip<br>"
+                + "the surcharge. Default $13,000 (with Standard selected, a ~$205,000 MAGI<br>"
+                + "target in 2026 dollars).<br><br>"
                 + "<b>Inflation-indexed</b> (v12): enter it in 2026 dollars; each year it grows<br>"
                 + "with inflation, as the threshold does under Full CPI (current law), so the<br>"
                 + "cushion -- and the MAGI target -- hold steady in today's dollars.</html>");
@@ -2897,12 +2926,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                         + "&nbsp;&nbsp;Taxable Social Security:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;Ordinary income (RMD/draw + annuity + MM interest):&nbsp;%s<br>"
                                         + "%s"   // v12: MM-interest sub-line, when there is any
+                                        + "%s"   // v2 2026-11-02 (Q22): the sale's line, first year
                                         + "%s"   // v1 2026-10-20 (SD1): senior-deduction line, 2025-2028
                                         + "&nbsp;&nbsp;Top marginal bracket:&nbsp;<b>%s</b><br><br>"
                                         + "&nbsp;&nbsp;Federal tax:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;%s:&nbsp;%s<br>"
                                         + "%s"   // v12: framework-state breakdown
                                         + "&nbsp;&nbsp;IRMAA surcharge:&nbsp;%s<br>"
+                                        + "%s"   // v2 2026-11-02 (Q22): NIIT, when any
                                         + "&nbsp;&nbsp;= Total living-expenses tax:&nbsp;<b>%s</b><br><br>"
                                         + "%s"   // v12: dollar-basis note
                                         + "Brackets and standard deduction (MFJ + age-65) are 2026<br>"
@@ -2916,6 +2947,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                         ? "&nbsp;&nbsp;&nbsp;&nbsp;<i>incl. money-market interest:&nbsp;"
                                         + CURRENCY.format(Math.round(er.mmInterest / d)) + "</i><br>"
                                         : "",
+                                saleTaxLine(er, d),   // v2 2026-11-02 (Q22)
                                 seniorDedLine(er.seniorDed, er.seniorCount, er.calYear, d),
                                 er.topBracket,
                                 CURRENCY.format(Math.round(er.fedTax / d)),
@@ -2923,6 +2955,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                 CURRENCY.format(Math.round(er.stateTax / d)),
                                 stateBreakdown(er, d),
                                 CURRENCY.format(Math.round(er.irmaa / d)),
+                                (er.niit > 0.5)   // v2 2026-11-02 (Q22)
+                                        ? "&nbsp;&nbsp;Net Investment Income Tax (3.8%):&nbsp;"
+                                        + CURRENCY.format(Math.round(er.niit / d)) + "<br>"
+                                        : "",
                                 CURRENCY.format(Math.round(er.tax / d)),
                                 dollarBasisNote(er));
                     }
@@ -3028,7 +3064,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                         // v12 2026-10-11: the extra taxable SS the conversion caused (tax
                         // torpedo) is its own MAGI term, so it too comes out of the residual.
                         long indComp  = Math.round(er.convSSInduced / d);
-                        long tradComp = magiDisp - ssComp - annComp - convComp - mmComp - indComp;
+                        // v2 2026-11-02 (Q22): the one-year sale's gain (or the loss taken) too.
+                        long saleComp = Math.round(er.saleGain / d);
+                        long tradComp = magiDisp - ssComp - annComp - convComp - mmComp - indComp - saleComp;
+                        String saleLine = (er.saleGain > 0)
+                                ? "&nbsp;&nbsp;Sale's long-term gain:&nbsp;+" + CURRENCY.format(saleComp) + "<br>"
+                                : (er.saleGain < 0)
+                                ? "&nbsp;&nbsp;Sale's loss (up to $3,000):&nbsp;-" + CURRENCY.format(-saleComp) + "<br>"
+                                : "";
                         String indLine = (er.convSSInduced > 0)
                                 ? "&nbsp;&nbsp;Extra taxable SS caused by the conversion:&nbsp;+"
                                 + CURRENCY.format(indComp) + "<br>"
@@ -3043,6 +3086,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                         + "&nbsp;&nbsp;&nbsp;&nbsp;<i>= RMD or larger discretionary draw</i><br>"
                                         + "&nbsp;&nbsp;Annuity/Pen/Mil:&nbsp;%s<br>"
                                         + "&nbsp;&nbsp;Money-market interest:&nbsp;%s<br>"   // v12
+                                        + "%s"   // v2 2026-11-02 (Q22): the sale, first year
                                         + "&nbsp;&nbsp;Roth conversion (gross):&nbsp;+%s<br>"
                                         + "%s"   // v12 2026-10-11: torpedo line, when any
                                         + "&nbsp;&nbsp;----------------------------<br>"
@@ -3058,6 +3102,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                 CURRENCY.format(tradComp),
                                 CURRENCY.format(annComp),
                                 CURRENCY.format(mmComp),
+                                saleLine,
                                 CURRENCY.format(convComp),
                                 indLine,
                                 CURRENCY.format(magiDisp),
@@ -3334,7 +3379,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "IRAs. Raises MAGI (IRMAA) but is NOT in the Tax column.<br>"
                             + "Taken in late December, AFTER the year's RMD and January withdrawal<br>"
                             + "(an RMD can never be converted), and capped at the Traditional balance<br>"
-                            + "left after that withdrawal. Hover a cell.</html>";
+                            + "left after that withdrawal. Hover a cell.<br>"
+                            + "Paid from the conversion; see Assumptions 7b.</html>";   // v2 2026-11-02 (Q23)
                     // v1 2026-10-20 (CT1): the selected state's label, not a hardcoded "AZ 2.5%"
                     // (the state has been selectable since 2026-10-05). The state the displayed
                     // run used, or the dropdown before any run.
@@ -3346,7 +3392,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "(net = gross - this tax lands in Roth) and leaves your asset base --<br>"
                             + "the one real cost of converting. Separate from the living-expenses<br>"
                             + "Tax column. In 2025-2028 it also carries the tax on the OBBBA senior<br>"
-                            + "deduction the conversion phases out. Hover a cell for detail.</html>";   // v1 2026-10-20 (SD1)
+                            + "deduction the conversion phases out. Hover a cell for detail.<br>"   // v1 2026-10-20 (SD1)
+                            + "Paid from the conversion; see Assumptions 7b.</html>";   // v2 2026-11-02 (Q23)
                     case 27 -> "<html><b>Trad Bal (v6) -- combined Traditional balance, 50th pct</b><br>"
                             + "The median across fan paths of the combined Traditional bucket<br>"
                             + "(User + Spouse, IRA + 401k) at this year. Unlike v5, this balance<br>"
@@ -3397,6 +3444,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "then (2) adds that year's RMD overage (the -&gt; Money Mkt (year) value):<br>"
                             + "&nbsp;&nbsp;row 1 = <b>Money Mkt (prior, $)</b> input (carry-in from a past run)<br>"
                             + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ row 1's overage<br>"
+                            + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ any <b>Taxable Brokerage Sale Proceeds</b> (Account Balances card; first year only)<br>"   // v2 2026-11-02 (Q22)
                             + "&nbsp;&nbsp;each year: balance x (1 + inflation) + overage - any top-up draw<br>"
                             + "Each cell is the balance at the <b>END</b> of its year.<br><br>"
                             + "The inflation growth reflects the assumption that money-market<br>"
@@ -3721,6 +3769,87 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     //  source. This is the canonical source of truth referenced by the tax /
     //  IRMAA / conversion tooltips.
     // =========================================================================
+    /** v2 2026-11-02 (Q23, Q22): Assumptions sections 7b (who pays the Roth conversion tax)
+     *  and 7c (a sale of taxable shares this year). Generic numbers only. */
+    private static String assumptions7b7c() {
+        return ""
+                + "<h3 style='color:#2a5d34;'><a name='sec7b'></a>7b. Who pays the Roth conversion tax</h3>"
+                + "<p><b>This program pays every conversion's tax out of the conversion itself.</b> Each December "
+                + "the gross conversion leaves the Traditional IRAs. Its tax (the Conv Tax column, section 7) comes "
+                + "out of it, and only the rest reaches the Roth IRAs. That tax leaves the portfolio for good. This "
+                + "is the most conservative stance: it projects the smallest Roth balances and the lowest Portfolio "
+                + "balance. Actual PoS, which counts the portfolio only, comes out lower than it would if the tax "
+                + "were paid from elsewhere.</p>"
+                + "<p><b>Paying the tax from outside money is more efficient.</b> A household may instead pay it "
+                + "from money held elsewhere: the money market, a brokerage account, savings. Then the whole "
+                + "conversion reaches the Roth and grows tax-free. <i>Example (made-up numbers):</i> a $40,000 "
+                + "conversion taxed at a combined 24.5% costs $9,800. Paid from the conversion, $30,200 reaches the "
+                + "Roth. Paid from outside money, all $40,000 does, and the outside account is $9,800 smaller. "
+                + "Either way MAGI counts the whole $40,000, so the IRMAA and bracket limits don't change.</p>"
+                + "<p><b>How to do it, and how to show it here.</b> Convert the full amount with no tax withheld, "
+                + "and pay the tax from the outside money through an estimated-tax payment or with the tax return. "
+                + "(Outside cash can't simply be deposited into a Roth IRA. That would be a regular contribution, "
+                + "which has a yearly limit and requires earned income.) The program doesn't project this. "
+                + "Instead, at the next yearly run, enter the real balances: the Roth IRAs include the whole "
+                + "conversion, and <i>Money Mkt (prior, $)</i> (Account Balances card) is lower by the tax paid.</p>"
+                + "<p><b>What this program does not do.</b> This is a spending and income simulator. It does not "
+                + "project any other way of paying conversion tax beyond the conservative approach above, and it "
+                + "never uses the Money Mkt reserve for it (section 7: the reserve is earmarked for "
+                + "sequence-of-returns protection). It also does not deal with the tangled lump of spaghetti "
+                + "involved in brokerage accounts: cost basis, dividends, gains, losses and their timing. Even the "
+                + "best-known planning programs simplify them. The one exception is a sale completed in the plan's "
+                + "first year and entered on the Account Balances card (section 7c). That entry only adds the cash "
+                + "to the Money Mkt and that year's gain to taxes and MAGI.</p>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+
+                + "<h3 style='color:#2a5d34;'><a name='sec7c'></a>7c. A sale of taxable shares this year (since 2026-11-02)</h3>"
+                + "<p><b>Do the sale early in the year, and enter it as soon as it is complete. The program uses the "
+                + "sale proceeds and cost basis to compute this year's MAGI and taxes, and sizes the Roth conversion "
+                + "from them against the tax-bracket and IRMAA limits. Estimates can push the conversion over a "
+                + "limit or a cliff.</b></p>"
+                + "<p><b>What it is.</b> For shares sold outside this program in the plan's first year, with the "
+                + "cash moved into the money market. Two inputs on the Account Balances card: <i>Taxable Brokerage "
+                + "Sale Proceeds ($)</i>, the total the sale brought in (the brokerage site's realized gain/loss page, later Form "
+                + "1099-B box 1d), and <i>Cost Basis of Brokerage Shares Sold ($)</i>, what was paid for those shares (the "
+                + "same page, later box 1e). Both 0 means no sale. The sale is always in the plan's first year. At "
+                + "the next yearly run, enter 0 in both: the cash is then part of <i>Money Mkt (prior, $)</i>.</p>"
+                + "<p><b>What the program does with them, in the first year only.</b></p><ul>"
+                + "<li>The proceeds are added to <i>Money Mkt (total)</i>, in the table and on every fan path. "
+                + "They are not taxed.</li>"
+                + "<li>Gain = proceeds &minus; basis. <b>Every sale is treated as a long-term capital gain</b> "
+                + "(shares held more than a year).</li>"
+                + "<li>The gain counts in MAGI, so it can make more Social Security taxable, shrink the senior "
+                + "deduction, use up the IRMAA room in that year's Roth conversion, and raise IRMAA two years "
+                + "later.</li>"
+                + "<li>Federal tax: the gain is taxed at 0%, 15% or 20%, stacked on top of ordinary income (the IRS "
+                + "Qualified Dividends and Capital Gain Tax Worksheet). In 2026 a married couple pays 0% while "
+                + "taxable income stays under $98,900, 15% up to $613,700 and 20% above (single: $49,450 and "
+                + "$545,500); the bands grow with the brackets.</li>"
+                + "<li>Net Investment Income Tax: 3.8% on the smaller of the gain (plus that year's Money Mkt "
+                + "interest) and the part of MAGI above $250,000 joint / $200,000 single. The thresholds are not "
+                + "indexed. Charged in the sale year only.</li>"
+                + "<li>Arizona taxes the gain at 2.5% after subtracting 25% of it (A.R.S. 43-1022), which assumes "
+                + "the shares were bought after 2011. The other states tax it like other income.</li>"
+                + "<li>A loss (basis above proceeds): up to $3,000 comes off ordinary income that year. Nothing "
+                + "carries forward to later years.</li>"
+                + "<li>Roth conversion: the IRMAA ceiling counts the gain; the tax-bracket ceiling does not, "
+                + "because the gain is taxed above the brackets and uses none of that room. Conv Tax includes any "
+                + "part of the gain the conversion pushes from the 0% band into 15%, and any Net Investment Income "
+                + "Tax it adds.</li>"
+                + "<li>The gain's tax is part of that year's Tax (est), so it lowers Surplus/gap. If that makes the "
+                + "year short, <i>Money Mkt covers short years before the last 5</i> (Account Balances card) lets "
+                + "the sale's cash pay it.</li>"
+                + "<li>If the first year is before withdrawals start, the gain enters that year's MAGI for the "
+                + "IRMAA lookback and no tax is shown, as in every year before withdrawals (section 3). If "
+                + "withdrawals start after January that year, the year's tax, the sale's included, counts only "
+                + "the months from the start month, as all of that year's tax does.</li>"
+                + "</ul>"
+                + "<p><b>Not modeled.</b> A loss carryforward to later years, short-term gains, dividends, and any "
+                + "other part of a brokerage account (see 7b).</p>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                ;
+    }
+
     private JScrollPane buildAssumptionsPanel() {
         JEditorPane ep = new JEditorPane();
         ep.setContentType("text/html");
@@ -3776,6 +3905,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<li><a href='#sec6c' style='color:#264653; text-decoration:none;'>6c. Annual baseline &mdash; your yearly reference point</a></li>"   // v1 2026-10-23 (Q4)
                 + "<li><a href='#sec7' style='color:#264653; text-decoration:none;'>7. Spending, medical costs, and Roth conversions</a></li>"
                 + "<li><a href='#sec7a' style='color:#264653; text-decoration:none;'>7a. Spending curve &mdash; go-go, slow-go, no-go</a></li>"
+                + "<li><a href='#sec7b' style='color:#264653; text-decoration:none;'>7b. Who pays the Roth conversion tax</a></li>"   // v2 2026-11-02 (Q23)
+                + "<li><a href='#sec7c' style='color:#264653; text-decoration:none;'>7c. A sale of taxable shares this year</a></li>"   // v2 2026-11-02 (Q22)
                 + "<li><a href='#sec8' style='color:#264653; text-decoration:none;'>8. Why PoS is the primary method &mdash; the withdrawal-rate flaw</a></li>"
                 + "<li><a href='#sec9' style='color:#264653; text-decoration:none;'>9. RMDs, additional v9 stress inputs, and deliberately omitted features</a></li>"
                 + "<li><a href='#sec10' style='color:#264653; text-decoration:none;'>10. Caveats</a></li>"
@@ -4725,8 +4856,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<li><b>Flat $ amount:</b> a fixed conversion applied every drawing year.</li>"
                 + "<li><b>Fill to MAGI target:</b> each year converts the largest amount that keeps MAGI "
                 + "(including any extra taxable Social Security the conversion causes) under "
-                + "the binding ceiling &mdash; the lower of (a) the IRMAA Tier-0 cliff minus your buffer and "
-                + "(b) the 22%&rarr;24% bracket edge &mdash; then capped by the cap input. The IRMAA cliff grows "
+                + "the binding ceiling &mdash; the lower of (a) the selected IRMAA tier's cliff minus your buffer and "
+                + "(b) the selected tax-bracket top &mdash; then capped by the cap input. The IRMAA cliff grows "
                 + "per your threshold-growth mode and the bracket edge with the chained CPI, as the law indexes "
                 + "each. In 2025&ndash;2028 the bracket edge, stated in MAGI, also counts the OBBBA senior "
                 + "deduction left at that MAGI (section 4). "   // v1 2026-10-20 (SD1)
@@ -4819,6 +4950,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // concatenates at runtime instead. Keep future additions below this line, or
         // add a third part, rather than growing part one.
         String html2 = ""
+                + assumptions7b7c()   // v2 2026-11-02 (Q22, Q23): a call, so this part stays under the constant limit
                 + "<h3 style='color:#2a5d34;'><a name='sec8'></a>8. Why PoS is the primary method &mdash; the withdrawal-rate flaw</h3>"
                 + "<p><b>Guyton-Klinger faithfulness.</b> The GK tab implements the 2006 Guyton-Klinger decision "
                 + "rules (Journal of Financial Planning, \"Decision Rules and Maximum Initial Withdrawal Rates\"). "
@@ -7393,6 +7525,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 // v2 2026-11-01 (Q21): likewise mmCoversEarly joins only when ON (off = every
                 // earlier build), so existing batch files keep their fingerprints.
                 if (n.equals("mmCoversEarly") && Boolean.FALSE.equals(f.get(in))) continue;
+                // v2 2026-11-02 (Q22): the sale inputs join only when non-zero (0 = no sale,
+                // as every earlier build), so existing batch files keep their fingerprints.
+                if ((n.equals("saleProceeds") || n.equals("saleBasis"))
+                        && Integer.valueOf(0).equals(f.get(in))) continue;
                 sb.append(n).append('=').append(f.get(in)).append(';');
             }
         } catch (Exception ex) { return "nofp"; }
@@ -9215,7 +9351,22 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + " &minus; retirement excl. " + CURRENCY.format(Math.round(er.stExcl / d))
                 + "<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&minus; deductions/exemptions "
                 + CURRENCY.format(Math.round(er.stDed / d))
+                // v2 2026-11-02 (Q22): Arizona's subtraction of 25% of the sale's gain, when any
+                + (er.ltcgSub > 0 ? " &minus; capital-gain subtraction " + CURRENCY.format(Math.round(er.ltcgSub / d)) : "")
                 + " = state taxable " + CURRENCY.format(Math.round(er.stTaxable / d)) + senior + "</i><br>";
+    }
+
+    /** v2 2026-11-02 (Q22): the Tax (est) tooltip's line for the one-year sale, or "". */
+    private static String saleTaxLine(EnhRow er, double d) {
+        if (er.saleGain > 0)
+            return "&nbsp;&nbsp;Sale's long-term gain:&nbsp;" + CURRENCY.format(Math.round(er.saleGain / d))
+                    + "&nbsp;<i>(" + CURRENCY.format(Math.round(er.pref0 / d)) + " at 0%, "
+                    + CURRENCY.format(Math.round(er.pref15 / d)) + " at 15%, "
+                    + CURRENCY.format(Math.round(er.pref20 / d)) + " at 20%)</i><br>";
+        if (er.saleGain < 0)
+            return "&nbsp;&nbsp;Sale's loss taken against ordinary income:&nbsp;"
+                    + CURRENCY.format(Math.round(-er.saleGain / d)) + "<br>";
+        return "";
     }
 
     /** v1 2026-10-20 (SD1): the OBBBA senior-deduction line for the Pro PoS and GK
@@ -9825,6 +9976,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         props.setProperty("woman.trad401K",         String.valueOf(iv(spWomanTrad401K)));
         props.setProperty("mm.prior",               String.valueOf(iv(spMmPrior)));
         props.setProperty("mm.coversEarly",         String.valueOf(chkMmCoversEarly.isSelected()));  // v2 2026-11-01 (Q21)
+        props.setProperty("sale.proceeds",          String.valueOf(iv(spSaleProceeds)));   // v2 2026-11-02 (Q22)
+        props.setProperty("sale.basis",             String.valueOf(iv(spSaleBasis)));
         props.setProperty("market.nomReturn",       String.valueOf(dv(spNomReturn)));
         props.setProperty("market.stdDev",          String.valueOf(dv(spStdDev)));
         props.setProperty("market.inflation",       String.valueOf(dv(spInflation)));
@@ -10036,6 +10189,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         setSpinnerI(spMmPrior,            props, "mm.prior",                warnings);
         // v2 2026-11-01 (Q21): absent in older files -> off, which is how they always behaved.
         chkMmCoversEarly.setSelected(Boolean.parseBoolean(props.getProperty("mm.coversEarly", "false")));
+        // v2 2026-11-02 (Q22): absent in older files -> 0 (no sale), with no warning.
+        if (props.getProperty("sale.proceeds") != null) setSpinnerI(spSaleProceeds, props, "sale.proceeds", warnings);
+        else spSaleProceeds.setValue(0);
+        if (props.getProperty("sale.basis") != null) setSpinnerI(spSaleBasis, props, "sale.basis", warnings);
+        else spSaleBasis.setValue(0);
         setSpinnerD(spNomReturn,          props, "market.nomReturn",       warnings);
         setSpinnerD(spStdDev,             props, "market.stdDev",          warnings);
         setSpinnerD(spInflation,          props, "market.inflation",       warnings);
@@ -10789,6 +10947,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         i.womanTradIRA   = iv(spWomanTradIRA);
         i.womanTrad401K  = iv(spWomanTrad401K);
         i.mmPrior        = iv(spMmPrior);
+        i.saleProceeds   = iv(spSaleProceeds);   // v2 2026-11-02 (Q22)
+        i.saleBasis      = iv(spSaleBasis);
         i.manPlanAge     = iv(spManPlanAge);
         i.womanPlanAge   = iv(spWomanPlanAge);
 
@@ -11010,6 +11170,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                     mmIntPath = Math.max(0, g - mmPath);
                     mmPath    = g;
                 }
+                // v2 2026-11-02 (Q22): the one-year sale's proceeds, first year only.
+                if (y == 0 && inp.saleProceeds > 0) mmPath += inp.saleProceeds;
 
                 int wd = 0;
                 if (drawing && b > 0) {
@@ -11347,6 +11509,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 mmInterest   = Math.max(0, grown - mmReserveRun);
                 mmReserveRun = grown;
             }
+            // v2 2026-11-02 (Q22): the one-year sale's proceeds, first year only.
+            if (y == 0 && inp.saleProceeds > 0) mmReserveRun += inp.saleProceeds;
 
             // True 50th-percentile inflation factor and next-year balance,
             // consistent with the median balance above (all genuine medians).
@@ -11466,6 +11630,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             int    stStartInt = 0, stSubInt = 0, stExclInt = 0, stDedInt = 0, stTaxableInt = 0;
             boolean stParts = false;  // v12 2026-10-05: framework-state breakdown present
             int    seniorDedInt = 0, seniorCountInt = 0, convSeniorLostInt = 0;   // v1 2026-10-20 (SD1)
+            // v2 2026-11-02 (Q22): the sale's figures for the Tax (est) and MAGI tooltips
+            double saleAgiRow = 0, niitRow = 0, pref0Row = 0, pref15Row = 0, pref20Row = 0, ltcgSubRow = 0;
             String bracketStr = "--";
             boolean convByIrmaa = false;
             if (drawing && inp.computedTax) {
@@ -11490,6 +11656,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 // federal and state base, provisional income (SS taxability) and
                 // MAGI -- so it also counts toward the Fill target below.
                 double ordinaryBeforeConv = tradDraw + annTaxable + mmInterest;
+                // v2 2026-11-02 (Q22): the one-year sale, first year only. Its gain (or the
+                // part of a loss allowed) counts in AGI -- MAGI, provisional income and the
+                // fill all see it; compute() taxes the gain at 0/15/20% above ordinary income.
+                TaxEngine.Sale sale = saleFor(inp, y, mmInterest);
+                if (sale != TaxEngine.Sale.NONE) ordinaryBeforeConv += sale.agiPart();
 
                 // MAGI (before conversion) drives the fill; taxable SS depends on
                 // the conversion is a SEPARATE Traditional distribution (see
@@ -11513,7 +11684,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, y),
                             fsYear,
                             inp.fillIrmaaTierIdx, inp.fillBracketIdx,
-                            calYear);   // v1 2026-10-20 (SD1): senior deduction years
+                            calYear,    // v1 2026-10-20 (SD1): senior deduction years
+                            sale.gain());   // v2 2026-11-02 (Q22): the bracket ceiling skips the gain
                     conv        = fill[0];
                     convCeilInt = (int) fill[1];
                     convByIrmaa = fill[2] == 1;
@@ -11584,7 +11756,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                         // Custom profile that also excludes retirement income cannot
                         // subtract the same dollars twice.
                         fsYear, stProfile, calYear, tradDraw,
-                        streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil), stCtx);
+                        streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil), stCtx,
+                        sale);                                       // v2 2026-11-02 (Q22)
 
                 tax          = tr.totalTax;                 // living-expenses tax
                 // v12 2026-10-03: the part of this year's Tax (est) the MM interest
@@ -11596,11 +11769,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             p65, womanAge >= 65, inflFactor, fedF, irmaaTF,
                             irmaaFs, irmaaPeople,                    // v1 2026-10-14
                             fsYear, stProfile, calYear, tradDraw,
-                            streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil), stCtx);
+                            streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil), stCtx,
+                            sale.withInterest(0));                   // v2 2026-11-02 (Q22)
                     mmIntTaxInt = (int) Math.max(0, tr.totalTax - trNoInt.totalTax);
                 }
                 taxableSSInt = (int) tr.taxableSS;
-                ordTaxInt    = (int) tr.ordinaryOther;      // living ordinary only
+                ordTaxInt    = (int) (tr.ordinaryOther - sale.agiPart());   // living ordinary only (Q22: less the sale)
                 seniorDedInt   = (int) tr.seniorDed;        // v1 2026-10-20 (SD1)
                 seniorCountInt = tr.seniorCount;
                 irmaaInt     = (int) tr.irmaaCost;
@@ -11616,6 +11790,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                     stDedInt     = (int) tr.stateParts.ded;
                     stTaxableInt = (int) tr.stateParts.taxable;
                     stParts      = true;
+                }
+                if (sale != TaxEngine.Sale.NONE) {   // v2 2026-11-02 (Q22): for the tooltips
+                    saleAgiRow = sale.agiPart(); niitRow = tr.niit;
+                    pref0Row = tr.pref0; pref15Row = tr.pref15; pref20Row = tr.pref20;
+                    ltcgSubRow = (tr.stateParts != null) ? tr.stateParts.ltcgSub : 0;
                 }
 
                 // ---- Conversion tax: stacked marginal on top of living taxable
@@ -11651,6 +11830,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                     double grossSS = manSS + womanSS;
                     double ordPre  = combRmd + streamsTaxable(inp, calYear, ssInflNow, fAnn, fPen, fMil)
                             + mmInterest;
+                    TaxEngine.Sale saleP = saleFor(inp, y, mmInterest);   // v2 2026-11-02 (Q22)
+                    if (saleP != TaxEngine.Sale.NONE) ordPre += saleP.agiPart();
                     double magiPre = TaxEngine.taxableSocialSecurity(grossSS, ordPre, inflFactor, fsYear) + ordPre;
                     magiInt        = (int) magiPre;
                     magiHistory[y] = magiPre;
@@ -11680,6 +11861,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 fedInt      = (int) (fedInt      * startPror);
                 stateInt    = (int) (stateInt    * startPror);
                 mmIntTaxInt = (int) (mmIntTaxInt * startPror);
+                niitRow    *= startPror;   // v2 2026-11-02 (Q22)
             }
             double totalSpend = drawing ? living + medical + tax : 0;
             // v2 2026-11-01 (Q21): before the top-up window, with "Money Mkt covers short
@@ -11779,6 +11961,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             // v12: interest only counts when the computed tax engine taxed it.
             row.mmInterest    = (drawing && inp.computedTax) ? (int) mmInterest : 0;
             row.mmInterestTax = mmIntTaxInt;
+            row.saleGain      = (int) Math.round(saleAgiRow);   // v2 2026-11-02 (Q22)
+            row.niit = niitRow; row.pref0 = pref0Row; row.pref15 = pref15Row; row.pref20 = pref20Row;
+            row.ltcgSub = ltcgSubRow;
             row.fedTax        = fedInt;
             row.stateTax      = stateInt;
             row.stParts       = stParts;          // v12 2026-10-05
@@ -13146,6 +13331,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         double pWomanSS = womanSSSurv(inp, y, iNow, pManStartInfl, pWomanStartInfl);
         double grossSS  = pManSS + pWomanSS;
         double ordinary = tradDraw + streamsTaxable(inp, calYear, iNow, fA, fP, fM) + mmIntPath;
+        TaxEngine.Sale sale = saleFor(inp, y, mmIntPath);   // v2 2026-11-02 (Q22): first year only
+        if (sale != TaxEngine.Sale.NONE) ordinary += sale.agiPart();
         TaxEngine.FilingStatus fsP = filingFor(inp, calYear);
         double taxP = 0;
         if (drawing && inp.computedTax) {
@@ -13164,7 +13351,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                     streamsStateExempt(inp, calYear, iNow, fA, fP, fM),
                     stateCtx(inp, calYear, manAge, womanAge, pManSS, pWomanSS, tradDraw,
                             nonExemptTaxable(inp.pensionStream, inp, calYear, iNow, fP),
-                            nonExemptTaxable(inp.annuityStream, inp, calYear, iNow, fA)));
+                            nonExemptTaxable(inp.annuityStream, inp, calYear, iNow, fA)), sale);
             taxP = trP.totalTax;
             magi = trP.magi + conv + convSSInd;
         } else if (inp.computedTax) {
@@ -13252,7 +13439,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     }
 
     // Gross Roth conversion for the fan path, matching the display-loop policy:
-    // fill-to-ceiling (below IRMAA Tier-0 / 22%->24% edge) or flat $, using the
+    // fill-to-ceiling (below the selected IRMAA cliff / tax-bracket top) or flat $, using the
     // per-year filing status. Sized on pre-conversion MAGI built from this
     // year's ordinary income + annuity + survivor-aware SS.
     // v1 2026-10-12: `tradDraw` is the year's ACTUAL Traditional draw -- the RMD
@@ -13290,6 +13477,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // understated income and over-converted.
         // v12 2026-10-03: + this path's money-market interest, as in the display loop.
         double ordinaryBeforeConv = tradDraw + ann + mmInterest;   // v1 2026-10-12
+        TaxEngine.Sale sale = saleFor(inp, y, mmInterest);   // v2 2026-11-02 (Q22): first year only
+        if (sale != TaxEngine.Sale.NONE) ordinaryBeforeConv += sale.agiPart();
         double taxSSpre = TaxEngine.taxableSocialSecurity(grossSS, ordinaryBeforeConv, inflFactor, fs);
         double magiBeforeConv = taxSSpre + ordinaryBeforeConv;
         if (!inp.convEnabled) return 0;   // v12: conversions off
@@ -13299,7 +13488,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                     inflFactor, TaxEngine.fedIndexFactor(inflFactor, y),            // v12 2026-10-07
                     TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, y), fs,
                     inp.fillIrmaaTierIdx, inp.fillBracketIdx,
-                    calYear);   // v1 2026-10-20 (SD1)
+                    calYear, sale.gain());   // v1 2026-10-20 (SD1); v2 2026-11-02 (Q22): the gain
             // v12 2026-10-11: torpedo-aware, as in the display loop.
             return TaxEngine.torpedoFill(fill[0], grossSS, ordinaryBeforeConv,
                     magiBeforeConv, fill[1], inp.convCap, inflFactor, fs);
@@ -13329,6 +13518,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         double ann     = streamsTaxable(inp, calYear, iNow, fA, fP, fM);   // v11
         double ordinaryBeforeConv = tradDraw + ann   // v1 2026-10-12: actual Traditional draw
                 + mmInterest;   // v12: interest raises the base the conversion stacks on
+        TaxEngine.Sale sale = saleFor(inp, y, mmInterest);   // v2 2026-11-02 (Q22): first year only
+        if (sale != TaxEngine.Sale.NONE) ordinaryBeforeConv += sale.agiPart();
         TaxEngine.StateTaxProfile stProfile = TaxEngine.stateProfile(inp.stateCode);
         // v12 2026-10-05: a framework state sees the actual Traditional portion of
         // the draw (RMD floor), as the display loop does. v1 2026-10-12: so does
@@ -13349,7 +13540,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 // v11: retirementOrdinary is the Traditional draw ONLY; the stream
                 // exemption travels in its own parameter (see stateTaxLiving).
                 fs, stProfile, calYear, tradDraw,
-                streamsStateExempt(inp, calYear, iNow, fA, fP, fM), stCtx);
+                streamsStateExempt(inp, calYear, iNow, fA, fP, fM), stCtx, sale);   // v2 2026-11-02 (Q22)
         // v12 2026-10-11: include the tax on the Social Security the conversion
         // makes taxable (tax torpedo), as in the display loop.
         double convSSInd = TaxEngine.convInducedTaxableSS(grossSS, ordinaryBeforeConv,
@@ -13358,6 +13549,17 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 inflFactor, fs, stProfile, calYear, tradDraw);
         return convGross - ctax[0];
     }
+    /** v2 2026-11-02 (Q22): the one-year sale (Account Balances card) in sim year y -- the
+     *  plan's first year only, else Sale.NONE. interest = that year's Money Mkt interest
+     *  (for the NIIT). A loss offsets at most $3,000 of ordinary income; nothing carries. */
+    static TaxEngine.Sale saleFor(SimInputs inp, int y, double interest) {
+        if (y != 0 || (inp.saleProceeds <= 0 && inp.saleBasis <= 0)) return TaxEngine.Sale.NONE;
+        double g = (double) inp.saleProceeds - inp.saleBasis;
+        double gain = Math.max(0, g);
+        double lossDed = (g < 0) ? Math.min(-g, TaxEngine.CAP_LOSS_ORDINARY_LIMIT) : 0;
+        return new TaxEngine.Sale(gain, lossDed, Math.max(0, interest));
+    }
+
     private static double magiBeforeForConv(double grossSS, double ordinaryOther,
                                             double inflFactor, TaxEngine.FilingStatus fs) {
         return TaxEngine.taxableSocialSecurity(grossSS, ordinaryOther, inflFactor, fs) + ordinaryOther;
@@ -15013,6 +15215,67 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         static final double ADD_STD_DED_65_EACH_2026   = 1_650.0;  // per spouse (MFJ)
         static final double ADD_STD_DED_65_SINGLE_2026 = 2_050.0;  // single filer
 
+        // v2 2026-11-02 (Q22): long-term capital gain rate bands for the one-year sale --
+        // 2026 TAXABLE-income tops of the 0% and 15% bands (IRS 2026 adjustments, as
+        // reported by Kiplinger), indexed with the brackets (chained factor).
+        static final double LTCG_0_TOP_MFJ_2026     =  98_900.0;
+        static final double LTCG_0_TOP_SINGLE_2026  =  49_450.0;
+        static final double LTCG_15_TOP_MFJ_2026    = 613_700.0;
+        static final double LTCG_15_TOP_SINGLE_2026 = 545_500.0;
+        // Net Investment Income Tax (IRC 1411): 3.8% over a MAGI threshold that is NOT
+        // indexed (IRS NIIT Q&A). Charged in the sale year only (Bob, Nov 2, 2026).
+        static final double NIIT_RATE          = 0.038;
+        static final double NIIT_THRESH_MFJ    = 250_000.0;
+        static final double NIIT_THRESH_SINGLE = 200_000.0;
+        // A net capital loss offsets at most this much ordinary income (IRC 1211(b)).
+        // The rest would carry forward; the program does not carry it (Bob, Nov 2, 2026).
+        static final double CAP_LOSS_ORDINARY_LIMIT = 3_000.0;
+
+        /**
+         * v2 2026-11-02 (Q22): the one-year sale (Account Balances card), in the plan's
+         * first year only. gain = the long-term gain (>= 0); lossDed = the part of a loss
+         * taken against ordinary income (at most $3,000); interest = that year's Money
+         * Mkt interest (for the NIIT only). CALLERS ADD agiPart() TO THE ORDINARY INCOME
+         * THEY PASS, so provisional income, MAGI and every fill see it; compute() uses
+         * this record only for the 0/15/20% split, the NIIT and Arizona's subtraction.
+         */
+        record Sale(double gain, double lossDed, double interest) {
+            static final Sale NONE = new Sale(0, 0, 0);
+            double agiPart() { return gain - lossDed; }
+            Sale withInterest(double i) {
+                return (this == NONE) ? NONE : new Sale(gain, lossDed, Math.max(0, i));
+            }
+        }
+
+        /** v2 2026-11-02 (Q22): federal tax with a long-term gain taxed at 0/15/20% on
+         *  top of ordinary income -- the IRS Qualified Dividends and Capital Gain Tax
+         *  Worksheet, never more than the regular tax on the same taxable income.
+         *  bandsOut (may be null) receives the gain in the 0%, 15% and 20% bands. */
+        static double fedTaxPref(double taxable, double pref, double fedFactor, FilingStatus fs,
+                                 double[] bandsOut) {
+            if (pref <= 0 || taxable <= 0) {
+                if (bandsOut != null) { bandsOut[0] = 0; bandsOut[1] = 0; bandsOut[2] = 0; }
+                return fedTax(taxable, fedFactor, fs);
+            }
+            double pr = Math.min(pref, taxable), o = taxable - pr;
+            boolean single = fs == FilingStatus.SINGLE;
+            double t0  = infl(single ? LTCG_0_TOP_SINGLE_2026  : LTCG_0_TOP_MFJ_2026,  fedFactor);
+            double t15 = infl(single ? LTCG_15_TOP_SINGLE_2026 : LTCG_15_TOP_MFJ_2026, fedFactor);
+            double z = Math.min(pr, Math.max(0, t0 - o));                    // in the 0% band
+            double f = Math.min(pr - z, Math.max(0, t15 - Math.max(o, t0)));  // in the 15% band
+            double t = pr - z - f;                                            // in the 20% band
+            if (bandsOut != null) { bandsOut[0] = z; bandsOut[1] = f; bandsOut[2] = t; }
+            double ws = fedTax(o, fedFactor, fs) + 0.15 * f + 0.20 * t;
+            return Math.min(ws, fedTax(taxable, fedFactor, fs));
+        }
+
+        /** v2 2026-11-02 (Q22): Net Investment Income Tax on this MAGI. */
+        static double niit(double nii, double magi, FilingStatus fs) {
+            if (nii <= 0) return 0;
+            double thr = (fs == FilingStatus.SINGLE) ? NIIT_THRESH_SINGLE : NIIT_THRESH_MFJ;
+            return NIIT_RATE * Math.min(nii, Math.max(0, magi - thr));
+        }
+
         // IRMAA (Medicare Part B + D combined surcharge). Tier assessed on MAGI
         // from 2 years prior. 2026 base thresholds and annual surcharges, per
         // CMS 2026 tables. Six tiers (index 0 = no surcharge). The threshold
@@ -15137,6 +15400,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 bracketsMfj = mfj; bracketsSingle = single; bracketsIndexed = indexed; return this;
             }
             StateRules seniorPassThrough(boolean b)         { seniorPassThrough = b; return this; }
+            // v2 2026-11-02 (Q22): share of the one-year sale's long-term gain the state
+            // subtracts (Arizona 25%, A.R.S. 43-1022, assets acquired after 2011). Not in
+            // signature(): it acts only when a sale is entered, and the sale inputs join
+            // the fingerprint themselves -- a later change to this rate needs a SCORER bump.
+            double  ltcgSubtractPct;
+            StateRules ltcgSubtract(double pct)             { ltcgSubtractPct = pct; return this; }
             StateRules verified(String v)                   { verified = v; return this; }
             StateRules unverified(String u)                 { unverified = u; return this; }
 
@@ -15259,6 +15528,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             .start(StateStart.FED_AGI).ded(StateDed.FEDERAL_BASIC)
                             .age65Exempt(2_100).ss(StateSS.EXEMPT).flat(0.025)
                             .seniorPassThrough(true)
+                            .ltcgSubtract(0.25)   // v2 2026-11-02 (Q22): A.R.S. 43-1022
                             .verified("Verified Oct 2026: ARS 43-1041, 43-1023, 43-1022; 2025 Form 140."),
                             "Arizona flat 2.5% on federal AGI less Social Security, the federal basic "
                                     + "standard deduction and $2,100 per taxpayer 65+.")));
@@ -15384,11 +15654,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             double  pensionTaxable;          // pension stream, taxable and NOT state-exempt
             double  annuityTaxable;          // annuity stream, taxable and NOT state-exempt
             boolean annuityInIra;            // v12 2026-10-06: Taxable portion 100%, no switch year
+            double  saleGain;                // v2 2026-11-02 (Q22): the sale's long-term gain (set by compute)
         }
 
         /** v12: the components behind one state figure, for the Tax (est) tooltip. */
         static final class StateParts {
             double start, ssSub, excl, ded, taxable, tax;
+            double ltcgSub;   // v2 2026-11-02 (Q22): the sale's long-term gain subtraction (Arizona)
         }
 
         /** State tax on the living-expenses base for one sim year, honoring the
@@ -15531,7 +15803,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             ded += R.age65ExemptEach * over65 + R.personalExemptEach * present;
             if (R.start == StateStart.FED_AGI) ded += senior;   // v1 2026-10-20 (SD1): AZ, ID
 
-            double taxable = Math.max(0, start - ssM - ssW - streamExempt - excl - ded);
+            double taxBase = start - ssM - ssW - streamExempt - excl - ded;
+            // v2 2026-11-02 (Q22): Arizona subtracts 25% of the sale's long-term gain.
+            double ltcgSub = (R.ltcgSubtractPct > 0 && c.saleGain > 0) ? R.ltcgSubtractPct * c.saleGain : 0;
+            if (ltcgSub > 0) taxBase -= ltcgSub;
+            double taxable = Math.max(0, taxBase);
             double tax;
             if (R.bracketsMfj == null) {
                 tax = taxable * R.flatRate;
@@ -15542,6 +15818,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             if (out != null) {
                 out.start = start; out.ssSub = ssM + ssW + streamExempt; out.excl = excl;
                 out.ded = ded; out.taxable = taxable; out.tax = tax;
+                out.ltcgSub = ltcgSub;
             }
             return tax;
         }
@@ -15620,6 +15897,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             double  fedFactor;     // v12 2026-10-07: chained factor the federal figures used
             StateCtx   stateCtx;   // null on the legacy (Custom) path
             StateParts stateParts; // null on the legacy (Custom) path
+            // v2 2026-11-02 (Q22): the one-year sale behind this result (Sale.NONE outside
+            // the sale year), its gain in the 0/15/20% bands, and the NIIT.
+            Sale   sale = Sale.NONE;
+            double pref0, pref15, pref20, niit;
         }
 
         /** Scale a base-year (2026) dollar boundary to simulation-year nominal
@@ -15930,7 +16211,26 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                  double retirementOrdinary,
                                  double streamStateExempt,
                                  StateCtx stateCtx) {
+            return compute(grossSS, ordinaryOther, magiTwoYrPrior, man65, woman65, inflFactor,
+                    fedFactor, irmaaThreshFactor, irmaaFs, irmaaEnrollees, fs, stateProfile,
+                    simYear, retirementOrdinary, streamStateExempt, stateCtx, Sale.NONE);
+        }
+
+        /** v2 2026-11-02 (Q22): as above, in the plan's first year with the one-year sale.
+         *  The caller has already added sale.agiPart() to ordinaryOther. */
+        static TaxResult compute(double grossSS, double ordinaryOther,
+                                 double magiTwoYrPrior,
+                                 boolean man65, boolean woman65,
+                                 double inflFactor, double fedFactor,
+                                 double irmaaThreshFactor,
+                                 FilingStatus irmaaFs, int irmaaEnrollees,
+                                 FilingStatus fs,
+                                 StateTaxProfile stateProfile, int simYear,
+                                 double retirementOrdinary,
+                                 double streamStateExempt,
+                                 StateCtx stateCtx, Sale sale) {
             TaxResult r = new TaxResult();
+            r.sale = sale;
             r.man65 = man65; r.woman65 = woman65;
             r.streamStateExempt = streamStateExempt;
             r.fedFactor = fedFactor;   // v12 2026-10-07
@@ -15946,7 +16246,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             r.seniorCount   = seniorCount(man65, woman65, fs);
             r.seniorDed     = seniorDeduction(r.magi, r.seniorCount, fs, simYear);
             r.taxableIncome = Math.max(0, r.magi - ded - r.seniorDed);
-            r.fedTax        = fedTax(r.taxableIncome, fedFactor, fs);
+            double gain     = sale.gain();   // v2 2026-11-02 (Q22): 0 outside the sale year
+            if (gain > 0) {
+                double[] bands = new double[3];
+                r.fedTax = fedTaxPref(r.taxableIncome, gain, fedFactor, fs, bands);
+                r.pref0 = bands[0]; r.pref15 = bands[1]; r.pref20 = bands[2];
+            } else {
+                r.fedTax = fedTax(r.taxableIncome, fedFactor, fs);
+            }
+            if (stateCtx != null) stateCtx.saleGain = gain;
             // State tax via the selected profile's rules for this year. v12: a
             // framework state (rules != null) runs its own law through
             // stateTaxRules(); Custom keeps the legacy calculation unchanged.
@@ -15977,15 +16285,22 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             r.irmaaCost = IRMAA_PER_PERSON_YR_2026[Math.min(r.irmaaTier,
                     IRMAA_PER_PERSON_YR_2026.length - 1)] * irmaaEnrollees * inflFactor;
 
-            r.topBracket = topBracket(r.taxableIncome, fedFactor, fs);
+            // v2 2026-11-02 (Q22): the top ORDINARY bracket -- the gain sits above the brackets.
+            r.topBracket = topBracket((gain > 0) ? Math.max(0, r.taxableIncome - gain) : r.taxableIncome,
+                    fedFactor, fs);
             r.totalTax   = r.fedTax + r.stateTax + r.irmaaCost;
+            // v2 2026-11-02 (Q22): the NIIT, in the sale year only.
+            if (sale != Sale.NONE) {
+                r.niit = niit(gain + sale.interest(), r.magi, fs);
+                if (r.niit > 0) r.totalTax += r.niit;
+            }
             return r;
         }
 
         /**
          * Size a Roth conversion under the binding ceiling. Returns the largest
-         * conversion that keeps MAGI at or below the lower of (a) the IRMAA
-         * Tier-0 ceiling minus buffer and (b) the 22%->24% bracket MAGI edge.
+         * conversion that keeps MAGI at or below the lower of (a) the selected IRMAA
+         * tier's ceiling minus buffer and (b) the selected tax-bracket top, in MAGI.
          * Both ceilings inflation-indexed. Returned value floored at 0 and
          * capped at userCap (0 = no user cap).
          *
@@ -16009,6 +16324,20 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                        FilingStatus fs,
                                        int irmaaTierIdx, int bracketCeilIdx,
                                        int simYear) {
+            return fillConversion(magiBeforeConv, buffer, man65, woman65, userCap, inflFactor,
+                    fedFactor, irmaaFillFactor, fs, irmaaTierIdx, bracketCeilIdx, simYear, 0);
+        }
+
+        /** v2 2026-11-02 (Q22): as above; pref = the sale's long-term gain in MAGI. The
+         *  IRMAA ceiling counts it (full MAGI); the tax-bracket ceiling does not -- the
+         *  gain is taxed above the brackets -- so that ceiling rises by it. */
+        static double[] fillConversion(double magiBeforeConv, double buffer,
+                                       boolean man65, boolean woman65,
+                                       double userCap, double inflFactor,
+                                       double fedFactor, double irmaaFillFactor,
+                                       FilingStatus fs,
+                                       int irmaaTierIdx, int bracketCeilIdx,
+                                       int simYear, double pref) {
             double[] thr = irmaaThresh(fs);
             int ti = Math.max(0, Math.min(irmaaTierIdx, thr.length - 1));
             // v12 2026-10-03: the buffer is entered in 2026 dollars and is now
@@ -16030,6 +16359,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             // brackets(fs)[bi][1] is the UPPER edge (taxable) of bracket bi.
             double bracketCeilTaxable = brk[bi][1];
             double bracketCeil = infl(bracketCeilTaxable, fedFactor) + ded;      // v12: chained
+            if (pref > 0) bracketCeil += pref;                                   // v2 2026-11-02 (Q22)
             // v1 2026-10-20 (SD1): in 2025-2028 the senior deduction also sits between
             // MAGI and taxable income, and it shrinks as MAGI rises: the ceiling is the
             // MAGI at which taxable income reaches the bracket top.
@@ -16137,6 +16467,27 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             return new double[]{ fedConv + stConv, fedConv, stConv };
         }
 
+        /** v2 2026-11-02 (Q22): the federal tax a conversion adds on top of living income.
+         *  withTaxable = taxable income with the conversion, summed by the caller in the
+         *  order it always was; addMagi = what the conversion adds to MAGI. Without a sale
+         *  this is exactly the stacked-bracket figure it replaced. In the sale year the
+         *  gain is re-taxed on the higher base (pushed from the 0% band into 15%), and any
+         *  Net Investment Income Tax the conversion adds is included. */
+        static double fedConvDelta(TaxResult living, double base, double withTaxable,
+                                   double addMagi, FilingStatus fs) {
+            if (living.sale == Sale.NONE)
+                return Math.max(0, fedTax(withTaxable, living.fedFactor, fs)
+                        - fedTax(base, living.fedFactor, fs));
+            double g = living.sale.gain();
+            double fed = (g > 0)
+                    ? Math.max(0, fedTaxPref(withTaxable, g, living.fedFactor, fs, null)
+                    - fedTaxPref(base, g, living.fedFactor, fs, null))
+                    : Math.max(0, fedTax(withTaxable, living.fedFactor, fs)
+                    - fedTax(base, living.fedFactor, fs));
+            fed += Math.max(0, niit(g + living.sale.interest(), living.magi + addMagi, fs) - living.niit);
+            return fed;
+        }
+
         /**
          * v12 2026-10-05: conversion tax stacked on a living-expenses TaxResult.
          * Federal is unchanged (stacked marginal). For a framework state the state
@@ -16166,8 +16517,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             double base = Math.max(0, living.taxableIncome);
             // v1 2026-10-20 (SD1): + the senior deduction the conversion phases out.
             double lost = seniorLost(living, conversion, inducedSS, fs, simYear);
-            double fedConv = Math.max(0, fedTax(base + conversion + inducedSS + lost, living.fedFactor, fs)
-                    - fedTax(base, living.fedFactor, fs));
+            double fedConv = fedConvDelta(living, base, base + conversion + inducedSS + lost,
+                    conversion + inducedSS, fs);   // v2 2026-11-02 (Q22)
             double stConv;
             if (sty.rules == null || living.stateCtx == null) {
                 double legacy = stateTaxConversion(sty, conversion, retirementOrdinary, inflFactor);
@@ -16200,10 +16551,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             if (sty.rules == null || living.stateCtx == null) {
                 double[] plain = conversionTax(living.taxableIncome, conversion, inflFactor,
                         living.fedFactor, fs, stateProfile, simYear, retirementOrdinary);
-                if (lost <= 0) return plain;
+                boolean sold = living.sale != Sale.NONE;   // v2 2026-11-02 (Q22)
+                if (lost <= 0 && !sold) return plain;
                 double b0 = Math.max(0, living.taxableIncome);
-                double fed = Math.max(0, fedTax(b0 + conversion + lost, living.fedFactor, fs)
-                        - fedTax(b0, living.fedFactor, fs));
+                double fed = fedConvDelta(living, b0, b0 + conversion + lost, conversion, fs);
+                if (lost <= 0) return new double[]{ fed + plain[2], fed, plain[2] };
                 // Custom starts from federal taxable income: the lost deduction raises it.
                 double st = plain[2] + Math.max(0,
                         stateTaxLiving(sty, b0 + lost, living.taxableSS, retirementOrdinary,
@@ -16213,8 +16565,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 return new double[]{ fed + st, fed, st };
             }
             double base = Math.max(0, living.taxableIncome);
-            double fedConv = Math.max(0, fedTax(base + conversion + lost, living.fedFactor, fs)
-                    - fedTax(base, living.fedFactor, fs));
+            double fedConv = fedConvDelta(living, base, base + conversion + lost, conversion, fs);   // v2 2026-11-02 (Q22)
             double stWith = stateTaxRules(sty.rules, living.magi, living.taxableSS,
                     living.streamStateExempt, conversion, living.stateCtx,
                     living.man65, living.woman65, inflFactor, living.fedFactor, fs, simYear, null);
@@ -16293,6 +16644,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // Portfolio = Traditional + Roth only; ACTUAL total = Portfolio
         // + Money Mkt (total)).
         int mmPrior;
+        // v2 2026-11-02 (Q22): a sale of taxable shares done outside the program in the
+        // plan's FIRST year (Account Balances card): the proceeds go into the Money Mkt,
+        // proceeds - basis is a long-term gain (a loss: up to $3,000 off ordinary income).
+        // Both 0 = no sale. Join the fingerprint only when non-zero.
+        int saleProceeds, saleBasis;
         int manPlanAge, womanPlanAge;
         double nomReturn, stdDev, inflation, inflationStdDev;
         // v1 2026-10-12: cached shifted mean for the floored inflation draws
@@ -16448,6 +16804,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         double baseRate, yr1Rate, rateVsYr1;
         int  tradBal, rothBal;         // v6: median Traditional / Roth bucket balances
         int  mmBal;                    // v6: median Money Market (taxable) bucket
+        int  saleGain;                 // v2 2026-11-02 (Q22): the sale's gain (or -loss taken) in MAGI
+        double niit, pref0, pref15, pref20, ltcgSub;   // v2 2026-11-02 (Q22): Tax (est) tooltip
         boolean survivorYear;          // v6: true once the death event has fired
         String topBracket = "--";
         boolean convBoundByIrmaa;
