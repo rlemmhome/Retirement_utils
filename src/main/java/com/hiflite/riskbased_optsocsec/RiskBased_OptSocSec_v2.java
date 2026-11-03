@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Monday, November 02, 2026 at 03:14 PM MST (UTC-7)
+// Last modified: Monday, November 02, 2026 at 08:48 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Monday, November 02, 2026 at 03:14 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Monday, November 02, 2026 at 08:48 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1762,7 +1762,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "from the two tax years BEFORE the simulation starts -- income the plan<br>"
                 + "cannot see. Enter the actual figure from that year's return, in that<br>"
                 + "year's dollars: Form 1040 line 11 (AGI) plus line 2a (tax-exempt interest).<br><br>"
-                + "<b>0 = use the estimate</b> (that simulation year's own MAGI, as before).<br>"
+                + "<b>0 = use the estimate</b> (that simulation year's own MAGI, as before; in the<br>"
+                + "first year it leaves out any Taxable Brokerage Sale -- see Assumptions 7c).<br>"
                 + "If you expect Social Security to reduce the surcharge on Form SSA-44<br>"
                 + "(for example, after stopping work), leave 0.</html>";
         spPriorMagi2.setToolTipText("<html><b>MAGI 2 years before sim start ($)</b><br>"
@@ -3820,7 +3821,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "(shares held more than a year).</li>"
                 + "<li>The gain counts in MAGI, so it can make more Social Security taxable, shrink the senior "
                 + "deduction, use up the IRMAA room in that year's Roth conversion, and raise IRMAA two years "
-                + "later.</li>"
+                + "later. When <i>MAGI 2 years before sim start</i> (Roth Conversion &amp; IRMAA Surcharge card) is "
+                + "left at 0, the sale year's own IRMAA estimate leaves the sale out: the real surcharge that year "
+                + "is set by a return from two years earlier, which has no sale.</li>"   // Q25b
                 + "<li>Federal tax: the gain is taxed at 0%, 15% or 20%, stacked on top of ordinary income (the IRS "
                 + "Qualified Dividends and Capital Gain Tax Worksheet). In 2026 a married couple pays 0% while "
                 + "taxable income stays under $98,900, 15% up to $613,700 and 20% above (single: $49,450 and "
@@ -3841,8 +3844,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "the sale's cash pay it.</li>"
                 + "<li>If the first year is before withdrawals start, the gain enters that year's MAGI for the "
                 + "IRMAA lookback and no tax is shown, as in every year before withdrawals (section 3). If "
-                + "withdrawals start after January that year, the year's tax, the sale's included, counts only "
-                + "the months from the start month, as all of that year's tax does.</li>"
+                + "withdrawals start after January that year, the rest of that year's tax counts only the "
+                + "months from the start month, as before, but the sale's tax counts in full -- federal, NIIT, "
+                + "state and its knock-on effects -- because the whole gain is realized that year.</li>"
                 + "</ul>"
                 + "<p><b>Not modeled.</b> A loss carryforward to later years, short-term gains, dividends, and any "
                 + "other part of a brokerage account (see 7b).</p>"
@@ -11229,7 +11233,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             pManStartInfl, pWomanStartInfl, pMagi,
                             Math.max(rmd, Math.min(d, tr0)), wdActual, ssBridge[yy],
                             d - base - unfunded,   // v2 2026-10-30 (Q19): income = the draw paid
-                            mmI, 0)[0]);
+                            mmI, 0, Double.MAX_VALUE)[0]);   // Q25b: never the sale year
                     topUpX  = t[0] - base;
                     mmDrawX = t[1];
                     emptied = topUpX > 0 && t[0] >= cap;
@@ -11309,7 +11313,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             startPror, res.fanInflFactors[p], pManStartInfl, pWomanStartInfl,
                             pMagi, tradDraw, wdActual, ssBridge[y],
                             topUpX - unfunded,   // v2 2026-10-30 (Q19): income = the draw paid
-                            mmIntPath, fpConv[p][y]);
+                            mmIntPath, fpConv[p][y],
+                            trad + fpConv[p][y]);   // v2 2026-11-02 (Q25b): Traditional before the conversion
                     if (!Double.isNaN(yg[1])) pMagi[y] = yg[1];
                     // v2 2026-11-01 (Q21): before the top-up window, with "Money Mkt covers
                     // short years before the last 5" on, this path's Money Mkt pays the gap
@@ -11632,6 +11637,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             int    seniorDedInt = 0, seniorCountInt = 0, convSeniorLostInt = 0;   // v1 2026-10-20 (SD1)
             // v2 2026-11-02 (Q22): the sale's figures for the Tax (est) and MAGI tooltips
             double saleAgiRow = 0, niitRow = 0, pref0Row = 0, pref15Row = 0, pref20Row = 0, ltcgSubRow = 0;
+            // v2 2026-11-02 (Q25a): the sale's share of this year's tax, kept whole by PR-2
+            double saleTaxRow = 0, saleFedRow = 0, saleStateRow = 0, saleIrmaaRow = 0;
             String bracketStr = "--";
             boolean convByIrmaa = false;
             if (drawing && inp.computedTax) {
@@ -11724,6 +11731,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 int priorEntered = (y == 0) ? inp.priorMagi2 : (y == 1) ? inp.priorMagi1 : 0;
                 double magiTwoYrPrior = (y >= 2) ? magiHistory[y - 2]
                         : (priorEntered > 0) ? priorEntered
+                        // v2 2026-11-02 (Q25b): the sale year's stand-in leaves the sale out
+                        : (sale != TaxEngine.Sale.NONE)
+                        ? saleFreeStandIn(inp, y, calYear, manAge, womanAge, grossSS, ordinaryBeforeConv,
+                        sale, inflFactor, fsYear, Math.max(0, medTrad - tradDraw))
                         : (magiBeforeConv + conv + convSSInd);   // v12 2026-10-11
                 irmaaSrcInt = (y >= 2) ? 0 : (priorEntered > 0) ? 1 : 2;
                 // v1 2026-10-14 (S1): IRMAA thresholds are those of the PREMIUM year
@@ -11760,6 +11771,28 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                         sale);                                       // v2 2026-11-02 (Q22)
 
                 tax          = tr.totalTax;                 // living-expenses tax
+                // v2 2026-11-02 (Q25a): a first withdrawal year that starts after January has
+                // its tax scaled to the months drawn (PR-2, below) -- but the sale's tax is
+                // owed in full, since the whole gain is realized this year. Its share is this
+                // year's tax with the sale minus the same tax without it: federal at 0/15/20%,
+                // NIIT, state, and the knock-on effects (taxable Social Security, the senior
+                // deduction). A fresh state context, so tr's (which carries the gain) is untouched.
+                if (sale != TaxEngine.Sale.NONE
+                        && calYear == inp.withdrawStartYear && inp.withdrawStartMonth > 1) {
+                    TaxEngine.TaxResult trNoSale = TaxEngine.compute(
+                            grossSS, ordinaryBeforeConv - sale.agiPart(), magiTwoYrPrior,
+                            p65, womanAge >= 65, inflFactor, fedF, irmaaTF,
+                            irmaaFs, irmaaPeople,
+                            fsYear, stProfile, calYear, tradDraw,
+                            streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil),
+                            stateCtx(inp, calYear, manAge, womanAge, manSS, womanSS, tradDraw,
+                                    nonExemptTaxable(inp.pensionStream, inp, calYear, ssInflNow, fPen),
+                                    nonExemptTaxable(inp.annuityStream, inp, calYear, ssInflNow, fAnn)));
+                    saleTaxRow   = tr.totalTax  - trNoSale.totalTax;
+                    saleFedRow   = tr.fedTax    - trNoSale.fedTax;
+                    saleStateRow = tr.stateTax  - trNoSale.stateTax;
+                    saleIrmaaRow = tr.irmaaCost - trNoSale.irmaaCost;
+                }
                 // v12 2026-10-03: the part of this year's Tax (est) the MM interest
                 // caused, for the Surplus/gap tooltip. Display only: the same
                 // computation re-run without the interest; nothing feeds back.
@@ -11856,12 +11889,21 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 guaranteed = manSS + womanSS + ann;
                 living  *= startPror;
                 medical *= startPror;
-                tax     *= startPror;
-                irmaaInt    = (int) (irmaaInt    * startPror);
-                fedInt      = (int) (fedInt      * startPror);
-                stateInt    = (int) (stateInt    * startPror);
+                if (saleTaxRow != 0) {
+                    // v2 2026-11-02 (Q25a): the sale's tax stays whole; only the rest scales.
+                    // The NIIT is the sale's alone, so it is not scaled either.
+                    tax      = (tax - saleTaxRow) * startPror + saleTaxRow;
+                    irmaaInt = (int) ((irmaaInt - saleIrmaaRow) * startPror + saleIrmaaRow);
+                    fedInt   = (int) ((fedInt   - saleFedRow)   * startPror + saleFedRow);
+                    stateInt = (int) ((stateInt - saleStateRow) * startPror + saleStateRow);
+                } else {
+                    tax     *= startPror;
+                    irmaaInt    = (int) (irmaaInt    * startPror);
+                    fedInt      = (int) (fedInt      * startPror);
+                    stateInt    = (int) (stateInt    * startPror);
+                    niitRow    *= startPror;   // v2 2026-11-02 (Q22)
+                }
                 mmIntTaxInt = (int) (mmIntTaxInt * startPror);
-                niitRow    *= startPror;   // v2 2026-11-02 (Q22)
             }
             double totalSpend = drawing ? living + medical + tax : 0;
             // v2 2026-11-01 (Q21): before the top-up window, with "Money Mkt covers short
@@ -13321,7 +13363,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                 boolean drawing, double startPror, double[] pInfl,
                                 double pManStartInfl, double pWomanStartInfl, double[] pMagi,
                                 double tradDraw, int wdActual, double bridge, double extra,
-                                double mmIntPath, double conv) {
+                                double mmIntPath, double conv,
+                                double tradAvail) {   // v2 2026-11-02 (Q25b): Traditional before the conversion
         double gap = Double.NaN, magi = Double.NaN;
         double iNow = pInfl[y];
         double fA = inflAt(pInfl, inp.baseYear, inp.annuityStream.startYear());
@@ -13335,13 +13378,19 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         if (sale != TaxEngine.Sale.NONE) ordinary += sale.agiPart();
         TaxEngine.FilingStatus fsP = filingFor(inp, calYear);
         double taxP = 0;
+        double saleTaxP = 0;   // v2 2026-11-02 (Q25a): the sale's share of taxP, kept whole by PR-2
         if (drawing && inp.computedTax) {
             double magiPre = TaxEngine.taxableSocialSecurity(grossSS, ordinary, iNow, fsP) + ordinary;
             double convSSInd = (conv > 0)
                     ? TaxEngine.convInducedTaxableSS(grossSS, ordinary, conv, iNow, fsP) : 0;
             int priorEntered = (y == 0) ? inp.priorMagi2 : (y == 1) ? inp.priorMagi1 : 0;
             double magi2 = (y >= 2) ? pMagi[y - 2]
-                    : (priorEntered > 0) ? priorEntered : (magiPre + conv + convSSInd);
+                    : (priorEntered > 0) ? priorEntered
+                    // v2 2026-11-02 (Q25b): the sale year's stand-in leaves the sale out
+                    : (sale != TaxEngine.Sale.NONE)
+                    ? saleFreeStandIn(inp, y, calYear, manAge, womanAge, grossSS, ordinary, sale,
+                    iNow, fsP, tradAvail)
+                    : (magiPre + conv + convSSInd);
             TaxEngine.TaxResult trP = TaxEngine.compute(grossSS, ordinary, magi2,
                     primary65(inp, calYear, manAge, womanAge), womanAge >= 65, iNow,
                     TaxEngine.fedIndexFactor(iNow, y),
@@ -13353,6 +13402,22 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             nonExemptTaxable(inp.pensionStream, inp, calYear, iNow, fP),
                             nonExemptTaxable(inp.annuityStream, inp, calYear, iNow, fA)), sale);
             taxP = trP.totalTax;
+            // v2 2026-11-02 (Q25a): as in the table -- the sale's tax stays whole in a first
+            // withdrawal year that starts after January.
+            if (sale != TaxEngine.Sale.NONE
+                    && calYear == inp.withdrawStartYear && inp.withdrawStartMonth > 1) {
+                TaxEngine.TaxResult trNS = TaxEngine.compute(grossSS, ordinary - sale.agiPart(), magi2,
+                        primary65(inp, calYear, manAge, womanAge), womanAge >= 65, iNow,
+                        TaxEngine.fedIndexFactor(iNow, y),
+                        TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, iNow, y),
+                        filingFor(inp, calYear - 2), irmaaEnrollees(inp, calYear, manAge, womanAge),
+                        fsP, TaxEngine.stateProfile(inp.stateCode), calYear, tradDraw,
+                        streamsStateExempt(inp, calYear, iNow, fA, fP, fM),
+                        stateCtx(inp, calYear, manAge, womanAge, pManSS, pWomanSS, tradDraw,
+                                nonExemptTaxable(inp.pensionStream, inp, calYear, iNow, fP),
+                                nonExemptTaxable(inp.annuityStream, inp, calYear, iNow, fA)));
+                saleTaxP = taxP - trNS.totalTax;
+            }
             magi = trP.magi + conv + convSSInd;
         } else if (inp.computedTax) {
             // a year before withdrawals: MAGI only, for the lookback (as P2)
@@ -13378,7 +13443,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 annP *= fromStartShare(streamFirstMonth(inp.annuityStream,  calYear), sm);
                 penP *= fromStartShare(streamFirstMonth(inp.pensionStream,  calYear), sm);
                 milP *= fromStartShare(streamFirstMonth(inp.militaryStream, calYear), sm);
-                spend *= startPror;
+                if (saleTaxP != 0) spend = (spend - saleTaxP) * startPror + saleTaxP;   // Q25a
+                else spend *= startPror;
             }
             double income = pManSS + pWomanSS + annP + penP + milP + wdActual + bridge + extra;
             gap = spend - income;
@@ -13549,6 +13615,36 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 inflFactor, fs, stProfile, calYear, tradDraw);
         return convGross - ctax[0];
     }
+    /**
+     * v2 2026-11-02 (Q25b): the sale year's IRMAA stand-in when the MAGI of two years before is
+     * not entered -- this year's MAGI as it would be WITHOUT the one-year sale: income less the
+     * sale's gain (or loss taken), plus the conversion that income would have had (same fill,
+     * flat amount or none, capped at `tradAvail`). The real surcharge that year is set by a
+     * return two years earlier, which has no sale.
+     */
+    private double saleFreeStandIn(SimInputs inp, int y, int calYear, int manAge, int womanAge,
+                                   double grossSS, double ordinaryWithSale, TaxEngine.Sale sale,
+                                   double inflFactor, TaxEngine.FilingStatus fs, double tradAvail) {
+        double ord = ordinaryWithSale - sale.agiPart();
+        double magiPre = TaxEngine.taxableSocialSecurity(grossSS, ord, inflFactor, fs) + ord;
+        double conv = 0;
+        if (inp.convEnabled) {
+            if (inp.convFillMode) {
+                double[] fill = TaxEngine.fillConversion(magiPre, inp.convBuffer,
+                        primary65(inp, calYear, manAge, womanAge), womanAge >= 65, inp.convCap,
+                        inflFactor, TaxEngine.fedIndexFactor(inflFactor, y),
+                        TaxEngine.irmaaThreshFactor(inp.irmaaThreshMode, inflFactor, y), fs,
+                        inp.fillIrmaaTierIdx, inp.fillBracketIdx, calYear);
+                conv = TaxEngine.torpedoFill(fill[0], grossSS, ord, magiPre, fill[1], inp.convCap,
+                        inflFactor, fs);
+            } else {
+                conv = inp.convFlat;
+            }
+        }
+        conv = Math.max(0, Math.min(conv, Math.max(0, tradAvail)));
+        return magiPre + conv + TaxEngine.convInducedTaxableSS(grossSS, ord, conv, inflFactor, fs);
+    }
+
     /** v2 2026-11-02 (Q22): the one-year sale (Account Balances card) in sim year y -- the
      *  plan's first year only, else Sale.NONE. interest = that year's Money Mkt interest
      *  (for the NIIT). A loss offsets at most $3,000 of ordinary income; nothing carries. */
