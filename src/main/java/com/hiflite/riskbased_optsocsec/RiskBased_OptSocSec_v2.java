@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Saturday, November 14, 2026 at 02:16 PM MST (UTC-7)
+// Last modified: Saturday, November 14, 2026 at 03:54 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Saturday, November 14, 2026 at 02:16 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, November 14, 2026 at 03:54 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -514,6 +514,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private double  lastRunGoGoMult = 1.0;
     private boolean lastRunValid = false;
     private JLabel            lblActualPoS, lblMedianFinal, lblYr10Wd, lblInitRate;
+    // v2 2026-11-14 (Q29): the Roth conversion tax effect box -- its figure and lines, the
+    // run they describe and its conversions-off twin, and the comparison's generation.
+    private JLabel            lblConvEffect, lblConvEffectSub;
+    private String            convEffectSubText;
+    private int               convEffectSubWrapW = -1;
+    private transient ProResults convEffectFor, convEffectNoConv;
+    private String            convEffectError;
+    private int               convEffectGen;
     private JLabel            lblActualPoSSub;   // v1 2026-10-17 (PD1): paths that ran out
     private String            actualPoSSubText;  // v2 2026-10-30 (Q18): its paragraph before wrapping
     private int               actualPoSSubWrapW; // v2 2026-10-30 (Q18): the width it was wrapped to
@@ -1338,7 +1346,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // == Social Security ===============================================
         spManPIA           = spinI(3_788, 0, 6_000, 50, "#,###");
         spManPIA.setToolTipText("<html><b>User's Primary Insurance Amount (PIA)</b><br>"
-                + "Monthly SS benefit payable at Full Retirement Age (FRA).<br>"
+                // v2 2026-11-14 (Q27)
+                + "Your PIA is the monthly benefit you would get by claiming at Full<br>"
+                + "Retirement Age -- the month you turn 67 if born 1960 or later (66 to<br>"
+                + "66 and 10 months if born 1943-1959).<br>"
                 + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
                 + "Enter it in the dollars of the <b>PIA as-of year</b> below -- the year<br>"
                 + "of the statement. SSA raises the PIA by every COLA from age 62<br>"
@@ -1347,12 +1358,16 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "Refresh it (and the as-of year) each January.<br><br>"
                 + "Reduced if claiming before FRA; increased if after FRA.<br>"
                 + "FRA = 67 for those born 1960 or later.</html>");
-        spManSSStartYear   = spinI(2027,  2020, 2040, 1, "#");
+        // v2 2026-11-14 (Q27): from 1990, so a claim already made before 2020 can be entered.
+        spManSSStartYear   = spinI(2027,  1990, 2040, 1, "#");
         spManSSStartMonth  = spinI(1,     1,    12,   1, "#");
         spManSSStartYear.setToolTipText(ssStartTip("User"));   // v1 2026-10-16 (V1, V6, V10)
         spWomanPIA         = spinI(3_897, 0, 6_000, 50, "#,###");
         spWomanPIA.setToolTipText("<html><b>Spouse's Primary Insurance Amount (PIA)</b><br>"
-                + "Monthly SS benefit payable at Full Retirement Age (FRA).<br>"
+                // v2 2026-11-14 (Q27)
+                + "Your PIA is the monthly benefit you would get by claiming at Full<br>"
+                + "Retirement Age -- the month you turn 67 if born 1960 or later (66 to<br>"
+                + "66 and 10 months if born 1943-1959).<br>"
                 + "Found on your SSA statement at ssa.gov/myaccount.<br><br>"
                 + "Enter it in the dollars of the <b>PIA as-of year</b> below -- the year<br>"
                 + "of the statement. SSA raises the PIA by every COLA from age 62<br>"
@@ -1361,7 +1376,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "Refresh it (and the as-of year) each January.<br><br>"
                 + "Reduced if claiming before FRA; increased if after FRA.<br>"
                 + "FRA = 67 for those born 1960 or later.</html>");
-        spWomanSSStartYear = spinI(2027,  2020, 2040, 1, "#");
+        spWomanSSStartYear = spinI(2027,  1990, 2040, 1, "#");   // v2 2026-11-14 (Q27): from 1990
         spWomanSSStartMonth= spinI(12,    1,    12,   1, "#");
         spWomanSSStartYear.setToolTipText(ssStartTip("Spouse"));   // v1 2026-10-16 (V1, V6, V10)
         cmbBridgeMode = new JComboBox<>(BRIDGE_MODE_LABELS);
@@ -1439,7 +1454,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v12 2026-10-10: PIA as-of year. Default is the current calendar year, which
         // is the year of any statement downloaded today. Clamped at use, never here,
         // so a scenario saved with a later sim start still loads its stored value.
-        spPiaAsOfYear      = spinI(LocalDate.now().getYear(), 2020, 2040, 1, "#");
+        spPiaAsOfYear      = spinI(LocalDate.now().getYear(), 1990, 2040, 1, "#");   // v2 2026-11-14 (Q27): from 1990
         spPiaAsOfYear.setToolTipText("<html><b>PIA as-of year (both PIAs)</b><br>"
                 + "The calendar year the two PIAs above are dated -- the year of the<br>"
                 + "SSA statement they came from (a statement shows the PIA with every<br>"
@@ -1455,7 +1470,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         lblSSBenefitNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblSSBenefitNote.setForeground(new Color(80, 100, 60));
 
-        ChangeListener ssListener = e -> updateSSBenefitNote();
+        ChangeListener ssListener = e -> { updateSSBenefitNote(); refreshOptRunButton(); };   // Q27: + the button
         for (JSpinner sp : new JSpinner[]{
                 spManPIA, spManBirthYear, spManBirthMonth, spManSSStartYear, spManSSStartMonth,
                 spWomanPIA, spWomanBirthYear, spWomanBirthMonth, spWomanSSStartYear, spWomanSSStartMonth,
@@ -1498,27 +1513,50 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
 
         // == Market Assumptions ============================================
         spNomReturn       = spinD(5.5,  0.0, 20.0, 0.01, "0.00#");
+        // v2 2026-11-14 (Q28): leads with "this is your choice"; the fee note is general.
         spNomReturn.setToolTipText("<html><b>Expected NOMINAL return (%/yr)</b><br>"
+                + "<b>This is your choice: enter your own researched figure.</b> Forecasts from<br>"
+                + "investment firms are informed estimates, not facts; they disagree and change<br>"
+                + "every year. Use a return after your advisory and fund fees, for the same<br>"
+                + "stock/bond mix as the deviation below. The 5.5% default is a deliberately<br>"
+                + "conservative pick from 2026 forecasts; it may be too low or too high for<br>"
+                + "your mix.<br><br>"
                 + "A forward-looking <b>nominal</b> return -- BEFORE removing inflation. The<br>"
                 + "engine applies inflation separately (to spending), so feed a nominal number<br>"
                 + "here, not a real one.<br><br>"
-                + "The 5.5% default reflects 2026 forward-looking capital market assumptions<br>"
-                + "from J.P. Morgan (October 2025) and Vanguard (December 2025 VCMM run). Both<br>"
-                + "houses forecast muted near-term returns driven by elevated large-cap<br>"
-                + "valuations: Vanguard projects ~3.9-5.9% annualized U.S. equities over 10<br>"
-                + "years; J.P. Morgan projects ~6.4% for a 60/40 over 10-15 years. Historical<br>"
-                + "nominal S&amp;P CAGR of ~10.5% is well above forward consensus.<br><br>"
-                + "See Assumptions &amp; Methods section 2 for the full CMA basis and the<br>"
-                + "corresponding EDJ-managed net series.<br><br>"
+                + "The forecasts behind the default: J.P. Morgan (October 2025) and Vanguard<br>"
+                + "(December 2025 VCMM run) both forecast muted near-term returns driven by<br>"
+                + "elevated large-cap valuations: Vanguard projects ~3.9-5.9% annualized U.S.<br>"
+                + "equities over 10 years; J.P. Morgan projects ~6.4% for a 60/40 over 10-15<br>"
+                + "years. Historical nominal S&amp;P CAGR of ~10.5% is well above forward<br>"
+                + "consensus.<br><br>"
+                + "See Assumptions &amp; Methods section 2 for the forecast basis, and enter a<br>"
+                + "return net of advisory and fund fees.<br><br>"
                 + "<b>Nominal vs real:</b> real (inflation-adjusted) return &asymp; this figure minus<br>"
                 + "your inflation assumption. At 5.5% nominal - 2.3% inflation that is ~3.2%<br>"
                 + "real. Do NOT enter a real number here or inflation gets removed twice.<br>"
                 + "Update at least annually as new forward estimates publish.</html>");
         spStdDev          = spinD(10.79, 0.0, 40.0, 0.01, "0.00#");
+        // v2 2026-11-14 (Q28): the default is the 1961-2024 deviation of a 60/40 mix; a table of
+        // mixes so a different mix can pick its own.
         spStdDev.setToolTipText("<html><b>Return standard deviation (%/yr)</b><br>"
-                + "Annual volatility of returns, from the 1961-2024 historical S&amp;P 500 series.<br>"
+                + "How far a year's return typically lands from the expected return. Use the<br>"
+                + "deviation of the same stock/bond mix as the expected return above.<br>"
                 + "Volatility -- not average return -- is the dominant driver of sequence-of-<br>"
-                + "returns risk and thus the sustainable withdrawal. Default 10.79%.</html>");
+                + "returns risk and thus the sustainable withdrawal.<br><br>"
+                + "<b>Default 10.79%:</b> the 1961-2024 deviation of a 60/40 mix -- S&amp;P 500 /<br>"
+                + "10-year Treasury, rebalanced yearly -- the same mix the 5.5% return assumes.<br><br>"
+                + "<table cellspacing=0 cellpadding=2>"
+                + "<tr><th align=left>Mix (S&amp;P 500 / 10-yr Treasury)</th>"
+                + "<th align=right>Std deviation</th><th align=right>CAGR</th></tr>"
+                + "<tr><td>100 / 0</td><td align=right>16.55%</td><td align=right>10.54%</td></tr>"
+                + "<tr><td>65 / 35</td><td align=right>11.42%</td><td align=right>9.15%</td></tr>"
+                + "<tr><td>60 / 40</td><td align=right>10.80%</td><td align=right>8.92%</td></tr>"
+                + "<tr><td>50 / 50</td><td align=right>9.72%</td><td align=right>8.42%</td></tr>"
+                + "</table>"
+                + "1961-2024, rebalanced yearly. Data: Damodaran (NYU Stern), annual returns.<br>"
+                + "The CAGR column is history, for comparison only -- the expected return above<br>"
+                + "is a forecast. The default 10.79% is the 60/40 row (10.80% in the current data).</html>");
         spInflation       = spinD(2.3,   0.0, 15.0, 0.01, "0.00#");
         spInflation.setToolTipText("<html><b>General spending Mean inflation (%/yr)</b><br>"
                 + "Applied to living expenses and Roth-conversion tax growth.<br>"
@@ -1548,9 +1586,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "2.3% / 2.73%). At these settings about 1 year in 4 lands on 0%. The 2.73%<br>"
                 + "comes from years that averaged 3.79% inflation, so a lower forward SD is a<br>"
                 + "reasonable input choice. See Assumptions &amp; Methods section 2.</html>");
-        inner.add(card("Market Assumptions (1961-2024 Historical)", new Object[]{
+        // v2 2026-11-14 (Q28): the two means are forecasts; only the two deviations are historical.
+        inner.add(card("Market Assumptions (Forecasts; 1961-2024 Deviations)", new Object[]{
                 "Expected nominal return (%)",  spNomReturn,
-                "Return std deviation (%)",     spStdDev,
+                "Return std deviation (%)  [60/40 mix, 1961-2024]",     spStdDev,
                 "General spending Mean inflation (%/yr)",        spInflation,
                 "Inflation std deviation (%)",  spInflationStdDev,
         }));
@@ -2473,12 +2512,20 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         answerBox.add(aSouth,   BorderLayout.SOUTH);
 
         // == Metrics row ==================================================
-        JPanel metricsRow = new JPanel(new GridLayout(1, 4, 8, 0));
+        // v2 2026-11-14 (Q29): two boxes, so the row is shorter and the yearly table shows more
+        // rows -- Actual PoS on 75% of the width, carrying the other three figures on its figure
+        // line (their old sub-lines are their tooltips), and the Roth conversion tax effect.
+        JPanel metricsRow = new JPanel(new RatioRowLayout(0.75, 8));
         metricsRow.setBackground(new Color(245, 245, 242));
         lblActualPoS   = mkMetricLabel();
-        lblMedianFinal = mkMetricLabel();
-        lblYr10Wd      = mkMetricLabel();
-        lblInitRate    = mkMetricLabel();
+        lblMedianFinal = mkFigureLabel("True median final balance",
+                "<html>The 50th percentile of the fan paths' balances at the plan's end.</html>");
+        lblYr10Wd      = mkFigureLabel("Yr 10 withdrawal (median)",
+                "<html>The median table's withdrawal in the plan's 10th year.<br>"
+                        + "Follows the Real/Nominal toggle.</html>");
+        lblInitRate    = mkFigureLabel("Initial withdrawal rate",
+                "<html>The first withdrawal year's draw as a % of that year's median portfolio --<br>"
+                        + "the same figure as the \"% of portfolio\" in the box above.</html>");
         // v1 2026-10-17 (PD1): the line under Actual PoS reports the paths that ran out.
         lblActualPoSSub = new JLabel("from fan simulation");
         // v2 2026-10-30 (Q18): the paragraph also reports what the Money Mkt reserve did.
@@ -2513,14 +2560,51 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "always counts. Whatever the Money Mkt paid comes off a shortfall first.<br>"   // v2 2026-11-01 (Q21)
                 + "Actual PoS can be 100%<br>"
                 + "while this count is not zero: the money lasted, but some years came up short.</html>");
-        metricsRow.add(wrapMetric(lblActualPoS,   "Actual PoS",                lblActualPoSSub));
+        // v2 2026-11-14 (Q29): the Actual PoS box's figure line -- Actual PoS, then the other three
+        // in the smaller font. It wraps to a second line rather than cut off in a narrow window.
+        JPanel posFigures = new JPanel(new WrapFlowLayout(FlowLayout.LEFT, 0, 0));
+        ((FlowLayout) posFigures.getLayout()).setAlignOnBaseline(true);
+        posFigures.setOpaque(false);
+        posFigures.add(lblActualPoS);
+        posFigures.add(lblMedianFinal);
+        posFigures.add(lblInitRate);
+        posFigures.add(lblYr10Wd);
+        posFigures.putClientProperty("ex.figures", Boolean.TRUE);   // export: one line per figure
+        metricsRow.add(wrapMetricBox(posFigures, "Actual PoS", lblActualPoSSub));
         // v2 2026-10-30 (Q18): re-wrap the paragraph to the box's width whenever it changes.
         lblActualPoSSub.getParent().addComponentListener(new java.awt.event.ComponentAdapter() {
-            @Override public void componentResized(java.awt.event.ComponentEvent e) { wrapActualPoSSub(); }
+            @Override public void componentResized(java.awt.event.ComponentEvent e) {
+                wrapActualPoSSub();
+                posFigures.revalidate();   // v2 2026-11-14 (Q29): the figure line may wrap differently
+            }
         });
-        metricsRow.add(wrapMetric(lblMedianFinal, "True median final balance", "50th pct of fan paths"));
-        metricsRow.add(wrapMetric(lblYr10Wd,      "Yr 10 withdrawal (median)", "see dollar toggle"));
-        metricsRow.add(wrapMetric(lblInitRate,    "Initial withdrawal rate",   "% of portfolio"));
+        // v2 2026-11-14 (Q29): Roth conversion tax effect.
+        lblConvEffect    = mkMetricLabel();
+        lblConvEffectSub = new JLabel(" ");
+        String convEffectTip = "<html><b>Roth conversion tax effect</b><br>"
+                + "After each run the program runs the same plan again with Roth conversions off --<br>"
+                + "the same random markets (same seed), every other input unchanged -- and compares<br>"
+                + "the lifetime taxes of the two median tables: <b>Tax (est) + Conv Tax</b> in every<br>"
+                + "withdrawal year, so federal, state, IRMAA and NIIT are all in. Each total adds up<br>"
+                + "the table's own cells.<br><br>"
+                + "<b>Saves</b> = lifetime tax without conversions minus with; <b>Costs</b> = the reverse.<br><br>"
+                + "<b>Weigh two things with it:</b><br>"
+                + "* <b>Traditional left at the plan's end.</b> Converting moves tax earlier. Without<br>"
+                + "&nbsp;&nbsp;&nbsp;conversions more Traditional is left, and it is taxed later -- to you or to<br>"
+                + "&nbsp;&nbsp;&nbsp;heirs. No heir tax rate is assumed; compare the two balances.<br>"
+                + "* <b>Withdrawals differ slightly between the two runs.</b> The PoS solver sizes each<br>"
+                + "&nbsp;&nbsp;&nbsp;year's draw from the balance it sees, and conversion tax lowers that balance,<br>"
+                + "&nbsp;&nbsp;&nbsp;so part of the difference comes from slightly different withdrawals.<br><br>"
+                + "Follows the Real/Nominal toggle (Real: each year in today's dollars). Reads<br>"
+                + "<i>Roth conversions are off</i> when <i>Perform Roth conversions</i> (Roth Conversion &amp;<br>"
+                + "IRMAA Surcharge card) or the computed tax engine is off. Run Simulation stays<br>"
+                + "greyed while the comparison runs. The SS Optimizer does not run it.</html>";
+        lblConvEffect.setToolTipText(convEffectTip);
+        lblConvEffectSub.setToolTipText(convEffectTip);
+        metricsRow.add(wrapMetric(lblConvEffect, "Roth conversion tax effect", lblConvEffectSub));
+        lblConvEffectSub.getParent().addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) { wrapConvEffectSub(); }
+        });
 
         // == Method badge =================================================
         JPanel badge = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 3));
@@ -4332,6 +4416,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "run used, and the countdown learns run times separately for each CPU count.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 + "<h3 style='color:#2a5d34;'><a name='sec2'></a>2. Market assumptions &mdash; forward capital-market basis (2026 CMAs)</h3>"
+                // v2 2026-11-14 (Q28)
+                + "<p><b>The expected return is your choice: enter your own researched figure.</b> Forecasts "
+                + "from investment firms are informed estimates, not facts; they disagree and change every year. "
+                + "Use a return after your advisory and fund fees, for the same stock/bond mix as the return "
+                + "standard deviation (below). The 5.5% default is a deliberately conservative pick from 2026 "
+                + "forecasts; it may be too low or too high for your mix.</p>"
                 + "<p>Prior versions used the 1961-2024 historical average as the primary basis. The current "
                 + "defaults are anchored to <b>forward-looking capital market assumptions</b> published in the "
                 + "second half of 2025 by major asset managers, which forecast materially lower near-term returns "
@@ -4355,33 +4445,28 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "(October 2025) and Vanguard (December 2025 VCMM run). Both houses forecast unusually muted "
                 + "near-term returns driven by elevated starting valuations in large-cap technology: Vanguard "
                 + "projects roughly 3.9%-5.9% annualized for U.S. equities over the next ten years, and J.P. "
-                + "Morgan projects a 6.4% return for a 60/40 portfolio over a 10-15 year horizon. Accordingly, "
-                + "this model uses ~4.5% for the first five years and ~4.9% at ten years, then reverts toward "
-                + "a long-run ~7.0% for years 15 through 30 as valuations are assumed to normalize. Figures "
-                + "beyond the sources' published 10-15 year horizons are interpolated toward historical norms "
-                + "and are not independently sourced; all figures are nominal and are deflated by the general-"
-                + "inflation series within the simulation. The current default value is <b>5.5%</b>.</p>"
+                + "Morgan projects a 6.4% return for a 60/40 portfolio over a 10-15 year horizon. The model "
+                + "uses <b>one return for every year</b> of the plan. The current default is <b>5.5%</b>, a "
+                + "deliberately conservative pick from these forecasts. It is nominal; the simulation applies "
+                + "inflation separately.</p>"
 
-                + "<p><b>EDJ (Edward Jones) CAGR.</b> The Edward Jones return series models a 65/35 stock-bond "
-                + "allocation held in the Advisory Solutions Fund Models program, stated net of all fees. Gross "
-                + "returns are built from the same 2026 J.P. Morgan and Vanguard building blocks used for the "
-                + "market-return series (near-term ~5.3%, rising toward ~7.0% long-run for a 65/35 mix). From "
-                + "this gross figure an all-in annual cost drag of approximately 1.7% is subtracted, comprising "
-                + "the Edward Jones Program Fee (beginning at 1.35% per the February 2025 schedule, before "
-                + "balance breakpoints), the added Platform Fee (~0.09%), and the embedded expense ratios of "
-                + "the underlying funds (~0.35-0.50%). The resulting net series runs ~3.6% at year five, ~4.2% "
-                + "at year ten, and ~5.3% for years 20 through 30. The near-term impact of fees is material "
-                + "&mdash; roughly a third of gross return in the early years &mdash; and a higher household-"
-                + "asset breakpoint would lower the program fee and raise these net figures by an estimated "
-                + "10-20 basis points. This series is nominal and is deflated by the general-inflation series "
-                + "within the simulation. <i>Reference documentation only &mdash; the model uses a single return "
-                + "input; to evaluate the EDJ-managed path, enter the corresponding net figure in the Expected "
-                + "nominal return field.</i></p>"
+                // v2 2026-11-14 (Q28): was a paragraph on one firm's managed-account series.
+                + "<p><b>Advisory and fund fees.</b> Enter a return net of advisory and fund fees. A managed "
+                + "account typically charges a program or advisory fee, sometimes a platform fee, plus the "
+                + "expense ratios of the underlying funds; together they can take a large share of the gross "
+                + "return when forecasts are low. <i>Example (made-up numbers):</i> a 6.0% gross forecast with "
+                + "1.5% of all-in fees is 4.5% net, so enter 4.5%. A larger household balance can reach a fee "
+                + "breakpoint that lowers the program fee. The model uses the one figure entered in the "
+                + "<i>Expected nominal return</i> field.</p>"
 
                 + "<p><b>Other market inputs.</b></p>"
                 + "<ul>"
-                + "<li>Return standard deviation: <b>10.79%</b> (1961-2024 historical S&amp;P 500). Long-run "
-                + "equity volatility is more stable than long-run mean return, so retaining the historical "
+                // v2 2026-11-14 (Q28)
+                + "<li>Return standard deviation: <b>10.79%</b>, the 1961-2024 deviation of a 60/40 mix (S&amp;P "
+                + "500 / 10-year Treasury, rebalanced yearly) &mdash; the same mix the 5.5% return assumes. Use "
+                + "the deviation of your own mix (1961-2024, rebalanced yearly; Damodaran data): 100% S&amp;P 500 "
+                + "16.55%, 65/35 11.42%, 60/40 10.80%, 50/50 9.72%. Long-run "
+                + "volatility is more stable than long-run mean return, so retaining the historical "
                 + "volatility while using a forward mean is standard practice. Volatility, not average return, "
                 + "dominates sequence-of-returns risk and the sustainable withdrawal. "
                 // v1 2026-10-17 (NB1)
@@ -4423,7 +4508,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<p>Sources: Social Security 2026 Trustees Report; Congressional Budget Office 2025 long-"
                 + "term projections; J.P. Morgan 2026 Long-Term Capital Market Assumptions (October 2025); "
                 + "Vanguard Capital Markets Model (December 2025 run); BLS CPI series through May 2026; "
-                + "Edward Jones Advisory Solutions Fund Models fee schedule (February 2025). Asset-allocation "
+                + "A. Damodaran, NYU Stern, historical annual returns on stocks and bonds (the return "
+                + "deviations, 1961-2024). Asset-allocation "   // v2 2026-11-14 (Q28)
                 + "glide path and mortality weighting are deliberately NOT modeled (see section 9).</p>"
 
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
@@ -6214,7 +6300,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
 
         chkOptimize.addActionListener(e -> {
             boolean opt = chkOptimize.isSelected();
-            btnRunOpt.setEnabled(opt);
+            refreshOptRunButton();   // v2 2026-11-14 (Q27): was setEnabled(opt); greyed when all claimed
             // Gray out IL SS spinners when in optimizer mode
             for (JSpinner sp : new JSpinner[]{
                     spManSSStartYear, spManSSStartMonth,
@@ -7081,6 +7167,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         if (!cfg.single)
             optRunNotes += lateClaimNote("Spouse", cfg.womanBY, cfg.womanBM, cfg.base.womanSSStartYear,
                     cfg.base.womanSSStartMonth, today.getYear(), today.getMonthValue());
+        // v2 2026-11-14 (Q27): someone who has already claimed is held at that date.
+        optRunNotes += claimedNote("User", cfg.base.manSSStartYear, cfg.base.manSSStartMonth,
+                today.getYear(), today.getMonthValue());
+        if (!cfg.single)
+            optRunNotes += claimedNote("Spouse", cfg.base.womanSSStartYear, cfg.base.womanSSStartMonth,
+                    today.getYear(), today.getMonthValue());
         SwingWorker<Void, String> worker = new SwingWorker<>() {
             @Override protected Void doInBackground() {
                 runSsOptimizerCore(cfg, this::publish);
@@ -7095,7 +7187,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             @Override protected void done() {
                 optProgressDone = true;    // v1 2026-10-20 (F3)
                 optBatchRunning = false;   // v1 2026-10-15 (FR)
-                btnRunOpt.setEnabled(true);
+                refreshOptRunButton();   // v2 2026-11-14 (Q27): was setEnabled(true)
                 btnCancelOpt.setEnabled(false);
                 // v1 2026-10-20 (F2): a batch that failed says so. The worker's error was
                 // never read, so a failure left "Building candidate grid..." on screen
@@ -7148,6 +7240,45 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v12 2026-10-05: name of the stress scenario the batch overrode, or null.
         String stressIgnored;
         int scenGen;   // v1 2026-10-20 (F1): optScenarioGen when Run was pressed
+    }
+
+    /** v2 2026-11-14 (Q27): an SS start date before this month -- that benefit has already
+     *  started, so the date is no longer a choice. */
+    static boolean ssClaimed(int claimY, int claimM, int todayY, int todayM) {
+        return claimY * 12 + claimM < todayY * 12 + todayM;
+    }
+
+    /** v2 2026-11-14 (Q27): status-line note for a person who has already claimed -- the
+     *  batch holds the date entered. "" otherwise. */
+    private static String claimedNote(String who, int claimY, int claimM, int todayY, int todayM) {
+        return ssClaimed(claimY, claimM, todayY, todayM)
+                ? String.format("   NOTE: %s already claimed (SS start %02d/%d); that date is held.",
+                who, claimM, claimY)
+                : "";
+    }
+
+    /**
+     * v2 2026-11-14 (Q27): the green Run SS Optimizer button is greyed out when everyone in
+     * the plan has already claimed -- each SS start date on the Social Security card is
+     * before this month -- since no claim date is left to choose. Detected automatically,
+     * and the tooltip says so. Only the button: the tab stays usable for saved results and
+     * Export.
+     */
+    private void refreshOptRunButton() {
+        if (btnRunOpt == null || chkOptimize == null || spManSSStartYear == null) return;
+        boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
+        java.time.LocalDate t = java.time.LocalDate.now();
+        boolean allClaimed = ssClaimed(iv(spManSSStartYear), iv(spManSSStartMonth), t.getYear(), t.getMonthValue())
+                && (single || ssClaimed(iv(spWomanSSStartYear), iv(spWomanSSStartMonth),
+                t.getYear(), t.getMonthValue()));
+        btnRunOpt.setEnabled(chkOptimize.isSelected() && !optBatchRunning && !allClaimed);
+        btnRunOpt.setToolTipText(!allClaimed ? null : single
+                ? "<html>The Social Security start date is before this month, so the benefit has<br>"
+                + "already started and there is nothing left to optimize. (Detected automatically<br>"
+                + "from the SS start date on the Social Security card.)</html>"
+                : "<html>Both Social Security start dates are before this month, so both benefits have<br>"
+                + "already started and there is nothing left to optimize. (Detected automatically<br>"
+                + "from the SS start dates on the Social Security card.)</html>");
     }
 
     /** v1 2026-10-20 (F2): status-line note for a person already past 70 -- scored at
@@ -7254,7 +7385,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // earliest month; birth day is not an input). It started at today, so anyone
         // under 62 was scored on claim dates SSA would not allow.
         int[] manFrom = firstScanMonth(c.manBY, c.manBM, sy, sm);
-        java.util.List<int[]> bobMonths = buildSsRangeStep(c.manBY, c.manBM, manFrom[0], manFrom[1], c.gridStepMo);
+        // v2 2026-11-14 (Q27): someone who has already claimed (SS start before this month) is
+        // held at that date, as someone past 70 is below.
+        java.util.List<int[]> bobMonths = ssClaimed(c.base.manSSStartYear, c.base.manSSStartMonth, sy, sm)
+                ? new java.util.ArrayList<>()
+                : buildSsRangeStep(c.manBY, c.manBM, manFrom[0], manFrom[1], c.gridStepMo);
         // v1 2026-10-20 (F2): someone already past 70 has no claim date left to choose
         // -- score them at the date entered on the Social Security card. If nobody has
         // a date left, the batch is the one combination.
@@ -7263,7 +7398,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         if (c.single) { joMonths = new java.util.ArrayList<>(); joMonths.add(new int[]{0,0}); }
         else {
             int[] womFrom = firstScanMonth(c.womanBY, c.womanBM, sy, sm);
-            joMonths = buildSsRangeStep(c.womanBY, c.womanBM, womFrom[0], womFrom[1], c.gridStepMo);
+            joMonths = ssClaimed(c.base.womanSSStartYear, c.base.womanSSStartMonth, sy, sm)   // Q27
+                    ? new java.util.ArrayList<>()
+                    : buildSsRangeStep(c.womanBY, c.womanBM, womFrom[0], womFrom[1], c.gridStepMo);
             if (joMonths.isEmpty()) joMonths.add(new int[]{c.base.womanSSStartYear, c.base.womanSSStartMonth});
         }
 
@@ -7718,6 +7855,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 // thresholds... -- appended only when they differ from 2026 (see
                 // thresholdSignature), so default plans keep their fingerprints.
                 .append(TaxEngine.thresholdSignature());
+        // v2 2026-11-14 (Q27): an already-claimed person's held claim date. The claim dates are
+        // otherwise left out -- they are what the batch varies -- so this is appended only when
+        // someone has claimed, and other plans keep their fingerprints.
+        java.time.LocalDate fpToday = java.time.LocalDate.now();
+        if (ssClaimed(in.manSSStartYear, in.manSSStartMonth, fpToday.getYear(), fpToday.getMonthValue()))
+            sb.append(";heldU=").append(in.manSSStartYear).append('-').append(in.manSSStartMonth);
+        if (!c.single && ssClaimed(in.womanSSStartYear, in.womanSSStartMonth,
+                fpToday.getYear(), fpToday.getMonthValue()))
+            sb.append(";heldS=").append(in.womanSSStartYear).append('-').append(in.womanSSStartMonth);
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
             byte[] d = md.digest(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -9653,6 +9799,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         }
         // Account-total label reflects filing status (spouse excluded in Single).
         updateAccountTotal();
+        refreshOptRunButton();   // v2 2026-11-14 (Q27): Single counts only the user's claim
     }
 
     /**
@@ -10013,10 +10160,23 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         if (c instanceof JComponent jc && Boolean.TRUE.equals(jc.getClientProperty("ex.metric"))
                 && jc.getLayout() instanceof BorderLayout bl) {
             String title = exLeafText(bl.getLayoutComponent(BorderLayout.NORTH));
-            String val   = exLeafText(bl.getLayoutComponent(BorderLayout.CENTER));
+            java.awt.Component cen = bl.getLayoutComponent(BorderLayout.CENTER);
+            String val   = exLeafText(cen);
+            // v2 2026-11-14 (Q29): a figure line -- its first label is the box's value, and each
+            // other figure goes on its own line after the box's.
+            java.util.List<String> more = new java.util.ArrayList<>();
+            if (cen instanceof JComponent cj && Boolean.TRUE.equals(cj.getClientProperty("ex.figures"))) {
+                java.awt.Component[] fs = cj.getComponents();
+                val = (fs.length > 0) ? exLeafText(fs[0]) : "";
+                for (int i = 1; i < fs.length; i++) {
+                    String t = fs[i].isVisible() ? exLeafText(fs[i]) : null;
+                    if (t != null && !t.isBlank()) more.add(t);
+                }
+            }
             String note  = exLeafText(bl.getLayoutComponent(BorderLayout.SOUTH));
             out.append(title).append(": ").append(val)
                     .append(note == null || note.isBlank() ? "" : " -- " + note.replace("\n", " . ")).append('\n');   // v1 2026-10-19: two-line notes
+            for (String t : more) out.append(t).append('\n');
             return;
         }
         String leaf = exLeafText(c);
@@ -11044,6 +11204,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             }
             @Override protected void done() {
                 progressScheduler.shutdownNow();
+                boolean comparing = false;   // v2 2026-11-14 (Q29)
                 try {
                     lastResults = get();
                     updateUI(lastResults);
@@ -11053,19 +11214,23 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             : (elapsed / 60000) + "m " + ((elapsed % 60000) / 1000) + "s";
                     progressBar.setValue(100);
                     // v12 2026-10-11: ACTUAL counts from this run, not an estimate.
-                    progressBar.setString(String.format(
+                    String doneMsg = String.format(
                             "Complete -- %s Monte Carlo paths (up to %s simulated years) . "
                                     + "%,d fan paths . %,d solve paths . %d iters . %s . %s",
                             fmtWork(simCount.get()), fmtWork(simPathYears.get()),
                             fanPaths, solvePaths, binIters, cpuWord(threads),   // v1 2026-10-25 (Q15)
-                            elapsedStr) + runNotes[0]);   // v1 2026-10-16 (V)
+                            elapsedStr) + runNotes[0];   // v1 2026-10-16 (V)
+                    progressBar.setString(doneMsg);
                     // Save calibration entry for future countdown estimates
                     saveCalibrationEntry(solvePaths, binIters, fanPaths, horizon, threads, elapsed);
+                    // v2 2026-11-14 (Q29): then the conversions-off run for the tax effect box.
+                    comparing = startConvEffect(lastResults, seed, solvePaths, fanPaths, binIters,
+                            threads, doneMsg);
                 } catch (Exception ex) {
                     progressBar.setString("Error: " + ex.getMessage());
                     ex.printStackTrace();
                 }
-                btnRun.setEnabled(true);
+                if (!comparing) btnRun.setEnabled(true);   // Q29: else the comparison enables it
             }
         };
         worker.execute();
@@ -11548,6 +11713,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         for (int p = 0; p < fanPaths; p++) finals[p] = res.fanBalances[p][inp.horizon];
         Arrays.sort(finals);
         res.medianFinalBalance = (int) finals[fanPaths / 2];
+        // v2 2026-11-14 (Q29): its Traditional part -- the median Traditional share at the plan's
+        // end, as the Trad Bal column takes it -- for the Roth conversion tax effect box.
+        double[] tfEnd = new double[fanPaths];
+        for (int p = 0; p < fanPaths; p++) {
+            double bp = res.fanBalances[p][inp.horizon];
+            if (bp > 1) tfEnd[p] = fpTrad[p][inp.horizon] / bp;
+        }
+        Arrays.sort(tfEnd);
+        res.medianFinalTrad = (int) (res.medianFinalBalance * Math.min(1.0, tfEnd[fanPaths / 2]));
 
         // == Step 3: Year-1 withdrawal =====================================
         // v1 2026-10-12: the headline is the FIRST DRAWING ROW's Pro PoS
@@ -12489,12 +12663,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
 
         lblActualPoS.setText(String.format("%.1f%%", res.actualPoS * 100));
         refreshActualPoSSub(res);   // v1 2026-10-17 (PD1); short years v1 2026-10-19 (SL1)
-        lblMedianFinal.setText(showRealDollars
+        // v2 2026-11-14 (Q29): figures on the Actual PoS box's figure line, "Title: value".
+        lblMedianFinal.setText(figureHtml("True median final balance", showRealDollars
                 ? formatMoney(Math.round(res.medianFinalBalance / dEnd)) + " (real)"
-                : formatMoney(res.medianFinalBalance) + " (nom.)");
-        lblYr10Wd.setText(showRealDollars
-                ? CURRENCY.format(Math.round(yr10wd / d10)) : CURRENCY.format(yr10wd));
-        lblInitRate.setText(String.format("%.2f%%", rate));
+                : formatMoney(res.medianFinalBalance) + " (nom.)"));
+        lblYr10Wd.setText(figureHtml("Yr 10 withdrawal (median)", showRealDollars
+                ? CURRENCY.format(Math.round(yr10wd / d10)) : CURRENCY.format(yr10wd)));
+        lblInitRate.setText(figureHtml("Initial withdrawal rate", String.format("%.2f%%", rate)));
+        refreshConvEffect();   // v2 2026-11-14 (Q29)
 
         // Populate table
         tblProModel.setRowCount(0);
@@ -17165,6 +17341,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         boolean[] fanUsedMM;
         double actualPoS;
         int medianFinalBalance, fanPathCount;
+        int medianFinalTrad;   // v2 2026-11-14 (Q29): Traditional part of medianFinalBalance
         GkResults gkResults;
         // v12 2026-10-06: the state this run was computed with -- its display name
         // and a COPY of its year->rules map (the Custom profile is rebuilt in place
@@ -17460,6 +17637,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
 
     // v1 2026-10-17 (PD1): the caller keeps the sub-label so it can update it.
     private JPanel wrapMetric(JLabel val, String title, JLabel s) {
+        return wrapMetricBox(val, title, s);
+    }
+
+    // v2 2026-11-14 (Q29): any component as the box's figure (the Actual PoS figure line).
+    private JPanel wrapMetricBox(JComponent val, String title, JLabel s) {
         JPanel p = new JPanel(new BorderLayout(2,2));
         p.setBackground(new Color(240,240,237));
         p.setBorder(BorderFactory.createCompoundBorder(
@@ -17470,6 +17652,198 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         p.add(t,BorderLayout.NORTH); p.add(val,BorderLayout.CENTER); p.add(s,BorderLayout.SOUTH);
         p.putClientProperty("ex.metric", Boolean.TRUE);   // v1 2026-10-18 (EX): exported as one line
         return p;
+    }
+
+    // v2 2026-11-14 (Q29): a figure on the Actual PoS box's figure line -- "Title: value" in the
+    // smaller font with the value bold; the tooltip is the figure's old sub-line.
+    private JLabel mkFigureLabel(String title, String tip) {
+        JLabel l = new JLabel(figureHtml(title, "--"));
+        l.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        l.setForeground(new Color(60, 60, 60));
+        l.setBorder(BorderFactory.createEmptyBorder(0, 22, 0, 0));
+        l.setToolTipText(tip);
+        return l;
+    }
+
+    private static String figureHtml(String title, String value) {
+        return "<html>" + title + ": <b>" + value + "</b></html>";
+    }
+
+    /** v2 2026-11-14 (Q29): two boxes side by side, the first on `share` of the width; the row
+     *  is as tall as the taller box needs. */
+    private static final class RatioRowLayout implements LayoutManager {
+        private final double share;
+        private final int gap;
+        RatioRowLayout(double share, int gap) { this.share = share; this.gap = gap; }
+        @Override public void addLayoutComponent(String name, Component c) { }
+        @Override public void removeLayoutComponent(Component c) { }
+        @Override public Dimension preferredLayoutSize(Container p) {
+            Insets in = p.getInsets();
+            int w = 0, h = 0;
+            for (Component c : p.getComponents()) {
+                Dimension d = c.getPreferredSize();
+                w += d.width; h = Math.max(h, d.height);
+            }
+            return new Dimension(w + gap * Math.max(0, p.getComponentCount() - 1) + in.left + in.right,
+                    h + in.top + in.bottom);
+        }
+        @Override public Dimension minimumLayoutSize(Container p) {
+            return new Dimension(0, preferredLayoutSize(p).height);
+        }
+        @Override public void layoutContainer(Container p) {
+            Insets in = p.getInsets();
+            Component[] cs = p.getComponents();
+            int w = p.getWidth() - in.left - in.right - (cs.length > 1 ? gap : 0);
+            int h = p.getHeight() - in.top - in.bottom;
+            int w0 = (cs.length > 1) ? (int) Math.round(w * share) : w;
+            if (cs.length > 0) cs[0].setBounds(in.left, in.top, w0, h);
+            if (cs.length > 1) cs[1].setBounds(in.left + w0 + gap, in.top, w - w0, h);
+        }
+    }
+
+    /** v2 2026-11-14 (Q29): a FlowLayout whose preferred size wraps at the container's width,
+     *  so a narrow box grows a line taller instead of cutting its figure line off. */
+    private static final class WrapFlowLayout extends FlowLayout {
+        private static final long serialVersionUID = 1L;
+        WrapFlowLayout(int align, int hgap, int vgap) { super(align, hgap, vgap); }
+        @Override public Dimension preferredLayoutSize(Container t) { return wrapSize(t, true); }
+        @Override public Dimension minimumLayoutSize(Container t) {
+            Dimension d = wrapSize(t, false);
+            return new Dimension(0, d.height);
+        }
+        private Dimension wrapSize(Container t, boolean pref) {
+            synchronized (t.getTreeLock()) {
+                Insets in = t.getInsets();
+                int hg = getHgap(), vg = getVgap();
+                int avail = (t.getWidth() > 0 ? t.getWidth() : Integer.MAX_VALUE / 4)
+                        - in.left - in.right - 2 * hg;
+                int w = 0, h = 0, rowW = 0, rowH = 0;
+                for (Component c : t.getComponents()) {
+                    if (!c.isVisible()) continue;
+                    Dimension d = pref ? c.getPreferredSize() : c.getMinimumSize();
+                    if (rowW > 0 && rowW + hg + d.width > avail) {
+                        w = Math.max(w, rowW); h += rowH + vg; rowW = 0; rowH = 0;
+                    }
+                    rowW += (rowW > 0 ? hg : 0) + d.width;
+                    rowH = Math.max(rowH, d.height);
+                }
+                w = Math.max(w, rowW); h += rowH;
+                return new Dimension(w + in.left + in.right + 2 * hg, h + in.top + in.bottom + 2 * vg);
+            }
+        }
+    }
+
+    /**
+     * v2 2026-11-14 (Q29): once a Run's results are on screen, the same plan again with Roth
+     * conversions off -- same seed and settings, every other input unchanged -- for the Roth
+     * conversion tax effect box. Run Simulation stays greyed until it finishes, so the two
+     * never share the CPUs. Returns false (nothing started) when conversions are off.
+     */
+    private boolean startConvEffect(ProResults res, long seed, int solvePaths, int fanPaths,
+                                    int binIters, int threads, String doneMsg) {
+        final int gen = ++convEffectGen;
+        convEffectFor    = res;
+        convEffectNoConv = null;
+        convEffectError  = null;
+        refreshConvEffect();
+        if (!res.inp.convEnabled || !res.inp.computedTax) return false;
+        final SimInputs off = res.inp.copy();
+        off.convEnabled = false;
+        progressBar.setString(doneMsg + "  .  comparing without Roth conversions...");
+        new SwingWorker<ProResults, Void>() {
+            @Override protected ProResults doInBackground() {
+                return simulatePro(off, seed, solvePaths, fanPaths, binIters, /*withGk=*/false, threads);
+            }
+            @Override protected void done() {
+                try {
+                    ProResults r = get();
+                    if (gen == convEffectGen) convEffectNoConv = r;
+                } catch (Exception ex) {
+                    Throwable t = (ex.getCause() != null) ? ex.getCause() : ex;
+                    if (gen == convEffectGen) convEffectError = String.valueOf(t);
+                }
+                if (gen == convEffectGen) {
+                    refreshConvEffect();
+                    progressBar.setString(doneMsg);
+                }
+                btnRun.setEnabled(true);
+            }
+        }.execute();
+        return true;
+    }
+
+    /** v2 2026-11-14 (Q29): the Roth conversion tax effect box for lastResults, in the
+     *  current Real/Nominal basis. */
+    private void refreshConvEffect() {
+        if (lblConvEffect == null) return;
+        ProResults res = lastResults;
+        if (res == null) { setConvEffect("--", " "); return; }
+        if (!res.inp.convEnabled || !res.inp.computedTax) { setConvEffect("Roth conversions are off", " "); return; }
+        if (convEffectFor != res || convEffectNoConv == null) {
+            if (convEffectFor == res && convEffectError != null)
+                setConvEffect("--", "The comparison run failed: " + convEffectError);
+            else
+                setConvEffect("computing...", "Running the plan again without Roth conversions.");
+            return;
+        }
+        long[] with = lifetimeTax(res), without = lifetimeTax(convEffectNoConv);
+        long save = without[0] - with[0];
+        String fig = (save >= 0 ? "Saves " : "Costs ") + CURRENCY.format(Math.abs(save));
+        String sub = "Lifetime tax with conversions <b>" + CURRENCY.format(with[0]) + "</b> (Conv Tax "
+                + CURRENCY.format(with[1]) + "); without, <b>" + CURRENCY.format(without[0]) + "</b>.<br>"
+                + "Traditional left at plan end: " + CURRENCY.format(finalTradShown(res)) + " with, "
+                + CURRENCY.format(finalTradShown(convEffectNoConv)) + " without. "
+                + (showRealDollars ? "Today's dollars." : "Nominal dollars.");
+        setConvEffect(fig, sub);
+    }
+
+    /** v2 2026-11-14 (Q29): {Tax (est) + Conv Tax, Conv Tax} over the withdrawal years -- the
+     *  sums of the table's own (rounded) cells, so they can be checked against it. */
+    private long[] lifetimeTax(ProResults r) {
+        long all = 0, conv = 0;
+        for (EnhRow row : r.medianRows) {
+            if (!row.drawing) continue;
+            double d = showRealDollars ? row.inflFactor : 1.0;
+            long t = Math.round(row.tax / d), c = (row.convTax > 0) ? Math.round(row.convTax / d) : 0;
+            all  += t + c;
+            conv += c;
+        }
+        return new long[]{ all, conv };
+    }
+
+    /** v2 2026-11-14 (Q29): the median Traditional balance at the plan's end, in the shown basis
+     *  (Real: deflated by the median end-of-plan price level, as the final balance is). */
+    private long finalTradShown(ProResults r) {
+        if (!showRealDollars || r.fanInflFactors == null || r.fanInflFactors.length == 0)
+            return r.medianFinalTrad;
+        double[] endInfl = new double[r.fanInflFactors.length];
+        for (int p = 0; p < endInfl.length; p++)
+            endInfl[p] = r.fanInflFactors[p][r.fanInflFactors[p].length - 1];
+        Arrays.sort(endInfl);
+        return Math.round(r.medianFinalTrad / endInfl[endInfl.length / 2]);
+    }
+
+    private void setConvEffect(String figure, String sub) {
+        lblConvEffect.setText(figure);
+        convEffectSubText  = sub;
+        convEffectSubWrapW = -1;
+        wrapConvEffectSub();
+    }
+
+    // v2 2026-11-14 (Q29): wraps the box's lines to its width, as wrapActualPoSSub does.
+    private void wrapConvEffectSub() {
+        if (lblConvEffectSub == null || convEffectSubText == null) return;
+        java.awt.Container box = lblConvEffectSub.getParent();
+        int w = 0;
+        if (box != null) {
+            java.awt.Insets in = box.getInsets();
+            w = box.getWidth() - in.left - in.right - 2;
+        }
+        if (w == convEffectSubWrapW) return;
+        convEffectSubWrapW = w;
+        Font f = lblConvEffectSub.getFont();
+        lblConvEffectSub.setText(wrapHtmlPx(convEffectSubText, lblConvEffectSub.getFontMetrics(f),
+                lblConvEffectSub.getFontMetrics(f.deriveFont(Font.BOLD)), w));
     }
 
     private static String formatMoney(long n) {
