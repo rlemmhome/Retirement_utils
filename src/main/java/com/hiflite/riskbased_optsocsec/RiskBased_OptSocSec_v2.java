@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Monday, November 02, 2026 at 08:48 PM MST (UTC-7)
+// Last modified: Saturday, November 14, 2026 at 02:16 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Monday, November 02, 2026 at 08:48 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, November 14, 2026 at 02:16 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -457,6 +457,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private JSpinner spWomanRoth401K, spWomanRothIRA, spWomanTradIRA, spWomanTrad401K;
     private JSpinner spMmPrior;
     private JSpinner spSaleProceeds, spSaleBasis;   // v2 2026-11-02 (Q22): one-year sale, plan's first year
+    // v2 2026-11-14 (Q26): Taxable Brokerage Account card -- Money Mkt from Brokerage Sales and
+    // its conversion-tax box; Account Balances card -- hide the 401K rows, and the note shown
+    // when a hidden 401K holds money.
+    private JSpinner  spMmbPrior;
+    private JCheckBox chkMmbPaysConvTax, chkHide401K;
+    private JLabel    lblHidden401K;
     private JLabel   lblAccountTotal;
     private JSpinner spManPlanAge, spWomanPlanAge;
     private JLabel   lblHorizonNote;
@@ -1177,16 +1183,23 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "each year at inflation (MM return ~= inflation, ~0% real) and adds<br>"
                 + "new RMD overage. The simulation spends it <b>only as a last resort</b>:<br>"
                 + "in the last 5 plan years, once the portfolio is empty, a short year<br>"
-                + "draws on Money Mkt (total) to bring Surplus/gap to $0 (v1 2026-10-29).<br>"
+                + "draws on it to bring Surplus/gap to $0 (v1 2026-10-29) -- before<br>"
+                + "<i>Money Mkt from Brokerage Sales</i> (Taxable Brokerage Account card).<br>"   // v2 2026-11-14 (Q26)
                 // v2 2026-11-01 (Q21)
                 + "With <i>Money Mkt covers short years before the last 5</i> checked (below),<br>"
                 + "it also pays short years earlier in the plan.<br><br>"
+                // v2 2026-11-14 (Q26)
+                + "<b>Set aside to protect against sequence-of-returns risk</b>, so it is not<br>"
+                + "automatically used to pay Roth conversion tax. To use some of it anyway,<br>"
+                + "move it by hand: lower this field, raise <i>Money Mkt from Brokerage Sales ($)</i><br>"
+                + "(Taxable Brokerage Account card) by the same amount, and run again.<br>"
+                + "See Assumptions 7b.<br><br>"
                 + "<b>Excluded from Portfolio balance</b> (Option A): the Portfolio column is<br>"
                 + "the money the sim actually draws on (Traditional + Roth).<br>"
                 + "Your ACTUAL total at the start of a year = that row's Portfolio balance<br>"
                 + "+ the PREVIOUS row's Money Mkt (total), an end-of-year figure. Because this<br>"
                 + "reserve is outside the normal draw, it is NOT added to the Account<br>"
-                + "total above and does NOT redistribute into the qualified accounts.</html>");
+                + "total below and does NOT redistribute into the qualified accounts.</html>");
         // v2 2026-11-02 (Q22): a sale of taxable shares done outside the program in the plan's
         // first year -- the two numbers needed for the Money Mkt, that year's taxes and MAGI.
         spSaleProceeds   = spinI(      0,  0, 20_000_000, 1_000, "#,###");
@@ -1195,13 +1208,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "For shares sold <b>outside</b> this program in the plan's first year, with the<br>"
                 + "cash moved into the money market. Enter the total the sale brought in: the<br>"
                 + "brokerage site's <i>realized gain/loss</i> page (\"proceeds\"), later Form 1099-B box 1d.<br>"
-                + "The program adds it to <b>Money Mkt (total)</b> in the first year. The proceeds are<br>"
-                + "not taxed -- only the gain is (proceeds minus <i>Cost Basis of Brokerage Shares<br>"
-                + "Sold</i>, below).<br><br>"
+                + "The program adds it to <b>Money Mkt from Brokerage Sales</b> (below) in the first<br>"   // v2 2026-11-14 (Q26)
+                + "year. The proceeds are not taxed -- only the gain is (proceeds minus <i>Cost<br>"
+                + "Basis of Brokerage Shares Sold</i>, below).<br><br>"
                 + "<b>Do the sale early in the year, and enter it here as soon as it is complete.</b><br><b>The program uses the sale proceeds and cost basis to compute this year's MAGI and</b><br><b>taxes, and sizes the Roth conversion from them against the tax-bracket and IRMAA</b><br><b>limits. Estimates can push the conversion over a limit or a cliff.</b><br><br>"
                 + "All sales are treated as long-term capital gains. Both 0 = no sale. At the next<br>"
-                + "yearly run enter 0 in both: the cash is then part of <i>Money Mkt (prior, $)</i>.<br>"
-                + "See Assumptions section 7c.</html>");
+                + "yearly run enter 0 in both: the cash is then part of <i>Money Mkt from Brokerage<br>"
+                + "Sales ($)</i>. See Assumptions section 7c.</html>");
         spSaleBasis.setToolTipText("<html><b>Cost Basis of Brokerage Shares Sold ($)</b> -- default 0<br>"
                 + "What was paid for the shares sold this year (plus any reinvested dividends) --<br>"
                 + "money already taxed. From the same <i>realized gain/loss</i> page (\"cost basis\"),<br>"
@@ -1228,6 +1241,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "less interest, and that interest is taxable, so later years' tax and Roth<br>"
                 + "conversions can shift a little -- and with them the portfolio balances, later<br>"
                 + "withdrawals and, occasionally, Actual PoS.<br><br>"
+                // v2 2026-11-14 (Q26)
+                + "<b>Order:</b> the regular Money Mkt pays first; Money Mkt from Brokerage Sales<br>"
+                + "(Taxable Brokerage Account card) pays only once it is empty.<br><br>"
                 + "<b>The tradeoff:</b> money spent on early short years is not there in the last<br>"
                 + "5 years. Fewer lifetimes may then be carried to the end by the reserve, so the<br>"
                 + "\"never ran out of money\" figure under Actual PoS can go down even as the<br>"
@@ -1238,6 +1254,49 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "that year's interest and any RMD overage).<br><br>"
                 + "Saved with the scenario. In the SS Optimizer a covered year is not red.<br>"
                 + "See Assumptions &amp; Methods section 1.</html>");
+        // v2 2026-11-14 (Q26): Money Mkt from Brokerage Sales -- cash from brokerage sales, kept
+        // apart from the regular Money Mkt -- and the box that lets it pay conversion tax.
+        spMmbPrior = spinI(0, 0, 20_000_000, 1_000, "#,###");
+        spMmbPrior.setToolTipText("<html><b>Money Mkt from Brokerage Sales ($)</b> -- default 0<br>"
+                + "Cash from brokerage sales, kept apart from the regular <i>Money Mkt (prior, $)</i><br>"
+                + "(Account Balances card). Enter what is left at each yearly run (the <b>Money Mkt<br>"
+                + "(total)</b> cell tooltip shows each of the two by year). This year's <i>Taxable<br>"
+                + "Brokerage Sale Proceeds</i> are added to it in the first year.<br><br>"
+                + "It grows with inflation and its interest is taxed, like the regular Money Mkt.<br>"
+                + "Short years and the final-years top-up use it only after the regular Money Mkt<br>"
+                + "is empty. With the box below checked, it also pays Roth conversion tax. It is<br>"
+                + "part of the <b>Money Mkt (total)</b> column, not of the Portfolio balance.<br><br>"
+                + "Saved with the scenario. See Assumptions sections 7b and 7c.</html>");
+        chkMmbPaysConvTax = new JCheckBox("Pay Roth conversion tax from this Money Mkt", false);
+        chkMmbPaysConvTax.setBackground(Color.WHITE);
+        chkMmbPaysConvTax.setToolTipText("<html><b>Pay Roth conversion tax from this Money Mkt</b> (Money Mkt from Brokerage Sales)<br>"
+                + "<b>Default: off.</b> Checked, each year's <b>Conv Tax</b> is paid from <i>Money Mkt from<br>"
+                + "Brokerage Sales</i> until it runs out. In that year it pays what is left and the<br>"
+                + "conversion pays the rest; after that, the conversion pays it all. The conversion's<br>"
+                + "size does not change -- more of it reaches the Roth.<br><br>"
+                + "Example (made-up numbers): a $40,000 conversion with $9,800 of tax. When Money Mkt<br>"
+                + "from Brokerage Sales can pay all of it, the whole $40,000 reaches the Roth. With<br>"
+                + "only $4,000 left, it pays $4,000, the conversion pays $5,800, and $34,200 reaches<br>"
+                + "the Roth. Unchecked, the conversion pays it all and $30,200 reaches the Roth.<br><br>"
+                + "<b>The regular Money Mkt is not used for this.</b> It is set aside to protect<br>"
+                + "against sequence-of-returns risk, so it is not automatically used to pay Roth<br>"
+                + "conversion tax. To use some of it anyway, move it by hand: lower <i>Money Mkt<br>"
+                + "(prior, $)</i> (Account Balances card), raise <i>Money Mkt from Brokerage Sales ($)</i><br>"
+                + "by the same amount, and run again.<br><br>"
+                + "Saved with the scenario. See Assumptions section 7b.</html>");
+        // v2 2026-11-14 (Q26): hide the four 401K rows (display only; their balances still count).
+        chkHide401K = new JCheckBox("Hide 401K accounts", false);
+        chkHide401K.setBackground(Color.WHITE);
+        chkHide401K.setToolTipText("<html><b>Hide 401K accounts</b> -- default off<br>"
+                + "Hides the four 401K rows on this card. Their balances still count in the<br>"
+                + "plan and in the account total; a note under this box shows when a hidden<br>"
+                + "401K still holds money. Saved with the scenario. Useful once the 401Ks<br>"
+                + "have been rolled into IRAs.</html>");
+        chkHide401K.addItemListener(e -> apply401KVisibility());
+        lblHidden401K = new JLabel(" ");
+        lblHidden401K.setFont(new Font("SansSerif", Font.ITALIC, 12));
+        lblHidden401K.setForeground(new Color(150, 95, 20));
+        lblHidden401K.setVisible(false);
         lblAccountTotal  = new JLabel("Account total: --");
         lblAccountTotal.setFont(new Font("SansSerif", Font.BOLD, 13));
         lblAccountTotal.setForeground(new Color(40, 80, 40));
@@ -1248,20 +1307,30 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             sp.addChangeListener(acctListener);
 
         // v1 2026-10-14 (F1): RMDs start at 73 or 75 depending on birth year.
+        // v2 2026-11-14 (Q26): spouse rows in the user's order; the hide-401K box and its note on
+        // top; the sale inputs moved to the Taxable Brokerage Account card below.
         inner.add(card("Account Balances (SECURE 2.0 RMDs)", new Object[]{
+                null,                                          chkHide401K,        // v2 2026-11-14 (Q26)
+                null,                                          lblHidden401K,
                 "User -- Traditional IRA ($)  [RMD at 73 or 75 by birth year]",    spManTradIRA,
                 "User -- Roth IRA ($)  [no RMD]",               spManRothIRA,
                 "User -- Traditional 401K ($)  [RMD at 73 or 75 by birth year]",   spManTrad401K,
                 "User -- Roth 401K ($)  [no RMD]",              spManRoth401K,
-                "Spouse -- Roth 401K ($)  [no RMD]",            spWomanRoth401K,
-                "Spouse -- Roth IRA ($)  [no RMD]",             spWomanRothIRA,
                 "Spouse -- Traditional IRA ($)  [RMD at 73 or 75 by birth year]",  spWomanTradIRA,
+                "Spouse -- Roth IRA ($)  [no RMD]",             spWomanRothIRA,
                 "Spouse -- Traditional 401K ($)  [RMD at 73 or 75 by birth year]", spWomanTrad401K,
+                "Spouse -- Roth 401K ($)  [no RMD]",            spWomanRoth401K,
                 "Money Mkt (prior, $)  [carry-in, backstop, not in Portfolio]", spMmPrior,   // v2 2026-11-01 (Q21): label
                 null,                                          chkMmCoversEarly,   // v2 2026-11-01 (Q21); Q24: right below Money Mkt (prior, $)
-                "Taxable Brokerage Sale Proceeds ($)  [this year, long-term gain, into Money Mkt]", spSaleProceeds,   // v2 2026-11-02 (Q22, Q24)
-                "Cost Basis of Brokerage Shares Sold ($)",     spSaleBasis,        // v2 2026-11-02 (Q22, Q24)
                 null,                                          lblAccountTotal,
+        }));
+        inner.add(Box.createVerticalStrut(4));
+        // v2 2026-11-14 (Q26): the brokerage inputs, collapsible like the other cards.
+        inner.add(card("Taxable Brokerage Account", new Object[]{
+                "Taxable Brokerage Sale Proceeds ($)  [this year, long-term gain]", spSaleProceeds,   // v2 2026-11-02 (Q22, Q24)
+                "Cost Basis of Brokerage Shares Sold ($)",     spSaleBasis,        // v2 2026-11-02 (Q22, Q24)
+                "Money Mkt from Brokerage Sales ($)  [carry-in; this year's proceeds added]", spMmbPrior,
+                null,                                          chkMmbPaysConvTax,
         }));
         inner.add(Box.createVerticalStrut(4));
         SwingUtilities.invokeLater(this::updateAccountTotal);
@@ -2420,7 +2489,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<i>first</i> and <i>median</i> are the calendar years those paths reached $0.<br><br>"
                 + "<b>Money Mkt reserve</b><br>"
                 + "In the last 5 plan years the final-years top-up covers a short year from the<br>"
-                + "portfolio, then from the Money Mkt reserve. A path whose portfolio reached $0<br>"
+                + "portfolio, then from the Money Mkt reserve -- both pools, the regular Money Mkt<br>"   // v2 2026-11-14 (Q26)
+                + "first, then Money Mkt from Brokerage Sales. A path whose portfolio reached $0<br>"
                 + "is <i>carried to the end by the reserve</i> when no year from then on was left short.<br>"
                 // v2 2026-11-01 (Q21)
                 + "With <i>Money Mkt covers short years before the last 5</i> checked (Account<br>"
@@ -2546,7 +2616,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                         // two counted that overage twice. The January reserve is the previous
                         // row's Money Mkt -- or, in the first row, the Money Mkt (prior) input.
                         double mmJan = row > 0 ? rows.get(row - 1).mmBal
-                                : Math.max(0, lastResults.inp.mmPrior);
+                                : Math.max(0, lastResults.inp.mmPrior)
+                                + Math.max(0, lastResults.inp.mmbPrior);   // v2 2026-11-14 (Q26)
                         long port   = Math.round(er.balance / d);
                         long mm     = Math.round(mmJan      / d);
                         long actual = port + mm;
@@ -3109,6 +3180,24 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                 CURRENCY.format(magiDisp),
                                 dollarBasisNote(er));
                     }
+                    // v2 2026-11-14 (Q26): the two cash pools behind Money Mkt (total). The regular
+                    // part is the total less the other, so the three figures always add up.
+                    case 29 -> {
+                        if (er.mmBal <= 0 && er.convTaxFromMmb <= 0) return null;
+                        double d = showRealDollars ? er.inflFactor : 1.0;
+                        long tot = Math.round(er.mmBal / d), mmb = Math.round(er.mmbBal / d);
+                        return "<html><b>Money Mkt (total) -- end of " + er.calYear + "</b><br>"
+                                + "&nbsp;&nbsp;Regular Money Mkt:&nbsp;" + CURRENCY.format(tot - mmb) + "<br>"
+                                + "&nbsp;&nbsp;+ Money Mkt from Brokerage Sales:&nbsp;" + CURRENCY.format(mmb) + "<br>"
+                                + "&nbsp;&nbsp;<b>= Money Mkt (total):&nbsp;" + CURRENCY.format(tot) + "</b>"
+                                + (showRealDollars ? " <i>(today's $)</i>" : "") + "<br>"
+                                + (er.convTaxFromMmb > 0
+                                ? "<br>This year Money Mkt from Brokerage Sales paid "
+                                + CURRENCY.format(Math.round(er.convTaxFromMmb / d)) + " of the<br>"
+                                + "Roth conversion tax (Conv Tax column).<br>"
+                                : "")
+                                + "<br>Short years draw the regular Money Mkt first. See Assumptions 7b.</html>";
+                    }
                     case COL_ROTH_CONV -> {
                         if (!er.drawing || er.conversion <= 0) return null;
                         double d = showRealDollars ? er.inflFactor : 1.0;
@@ -3118,30 +3207,50 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                 : (er.convBoundByIrmaa
                                 ? "selected IRMAA cliff (minus buffer)"
                                 : "selected tax-bracket top");
+                        // v2 2026-11-14 (Q26): who paid the Conv Tax, when the Taxable Brokerage
+                        // Account card's box is on.
+                        boolean mmbOn = lastResults.inp.mmbPaysConvTax;
+                        long ctD = Math.round(er.convTax / d), fromB = Math.round(er.convTaxFromMmb / d);
+                        String paidBy = mmbOn
+                                ? "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;paid from Money Mkt from Brokerage Sales:&nbsp;"
+                                + CURRENCY.format(fromB) + "<br>"
+                                + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;paid from the conversion:&nbsp;"
+                                + CURRENCY.format(ctD - fromB) + "<br>"
+                                : "";
                         return String.format(
                                 "<html><b>Roth conversion this year (gross)</b><br>"
                                         + "&nbsp;&nbsp;Gross conversion:&nbsp;<b>%s</b><br>"
                                         + "&nbsp;&nbsp;Conversion tax (see Conv Tax col):&nbsp;%s<br>"
-                                        + "&nbsp;&nbsp;Net landing in Roth IRAs:&nbsp;<b>%s</b><br>"
+                                        + "%s"
+                                        + "&nbsp;&nbsp;Net landing in Roth IRAs:&nbsp;<b>%s</b>%s<br>"
                                         + "&nbsp;&nbsp;Binding ceiling:&nbsp;%s (MAGI)<br>"
                                         + "&nbsp;&nbsp;Bound by:&nbsp;%s<br><br>"
                                         + "A separate Traditional distribution. The gross comes<br>"
                                         + "proportionally from the Traditional IRAs; the tax is paid<br>"
-                                        + "from the conversion and leaves your asset base; the net<br>"
-                                        + "(gross - tax) is split equally into the two Roth IRAs.<br>"
+                                        + "from the conversion (unless the Taxable Brokerage Account<br>"
+                                        + "card pays it) and leaves your asset base; the net -- gross<br>"
+                                        + "minus the tax the conversion paid -- is split equally into<br>"
+                                        + "the two Roth IRAs.<br>"
                                         + "The conversion raises MAGI (IRMAA-relevant) but is NOT in<br>"
                                         + "the living-expenses Tax column. See Assumptions &amp; Methods.</html>",
                                 CURRENCY.format(Math.round(er.conversion / d)),
-                                CURRENCY.format(Math.round(er.convTax / d)),
+                                CURRENCY.format(ctD),
+                                paidBy,
                                 CURRENCY.format(Math.round(er.convNetToRoth / d)),
+                                mmbOn ? " (gross minus the part<br>&nbsp;&nbsp;paid from the conversion)" : "",
                                 ceil, bind);
                     }
                     case COL_CONV_TAX -> {
                         if (!er.drawing || er.convTax <= 0) return null;
                         double d = showRealDollars ? er.inflFactor : 1.0;
+                        // v2 2026-11-14 (Q26): who paid it, when the Taxable Brokerage Account card's
+                        // box is on.
+                        boolean mmbOnCt = lastResults.inp.mmbPaysConvTax;
+                        long ctAll = Math.round(er.convTax / d), ctB = Math.round(er.convTaxFromMmb / d);
                         return String.format(
                                 "<html><b>Conversion tax -- stacked marginal (federal + state)</b><br>"
-                                        + "&nbsp;&nbsp;Tax on this year's Roth conversion:&nbsp;<b>%s</b><br><br>"
+                                        + "&nbsp;&nbsp;Tax on this year's Roth conversion:&nbsp;<b>%s</b><br>"
+                                        + "%s<br>"   // v2 2026-11-14 (Q26): who paid it
                                         + "Computed as the MARGINAL tax the conversion adds ON TOP of<br>"
                                         + "your living-expenses taxable income: tax(living + conversion)<br>"
                                         + "minus tax(living), plus the selected state's tax on the<br>"
@@ -3150,10 +3259,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                         + "your top bracket (typically 22%%).<br><br>"
                                         + "%s"   // v12 2026-10-11: torpedo note, when any
                                         + "%s"   // v1 2026-10-20 (SD1): senior-deduction phase-out note
-                                        + "This tax is paid FROM the conversion and leaves your asset<br>"
-                                        + "base -- the one real cost of converting. It is separate from<br>"
-                                        + "the living-expenses Tax column. See Assumptions &amp; Methods.</html>",
-                                CURRENCY.format(Math.round(er.convTax / d)),
+                                        + "%s",  // v2 2026-11-14 (Q26): who paid it, and where it comes from
+                                CURRENCY.format(ctAll),
+                                mmbOnCt
+                                        ? "&nbsp;&nbsp;Paid from Money Mkt from Brokerage Sales:&nbsp;" + CURRENCY.format(ctB) + "<br>"
+                                        + "&nbsp;&nbsp;Paid from the conversion:&nbsp;" + CURRENCY.format(ctAll - ctB) + "<br>"
+                                        : "",
                                 (er.convSSInduced > 0)
                                         ? "<b>Includes the tax torpedo:</b> this conversion also made<br>"
                                         + CURRENCY.format(Math.round(er.convSSInduced / d))
@@ -3165,7 +3276,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                         + "raised MAGI and cut the OBBBA senior deduction by "
                                         + CURRENCY.format(Math.round(er.convSeniorLost / d)) + ",<br>"
                                         + "and the tax on that is counted here too (2025-2028 only).<br><br>"
-                                        : "");
+                                        : "",
+                                mmbOnCt
+                                        ? "The part paid FROM the conversion leaves your asset base; the<br>"
+                                        + "part Money Mkt from Brokerage Sales paid comes out of that cash<br>"
+                                        + "instead (Taxable Brokerage Account card). Either way it is<br>"
+                                        + "separate from the living-expenses Tax column. See Assumptions 7b.</html>"
+                                        : "This tax is paid FROM the conversion and leaves your asset<br>"
+                                        + "base -- the one real cost of converting. It is separate from<br>"
+                                        + "the living-expenses Tax column. See Assumptions &amp; Methods.</html>");
                     }
                     default -> { return null; }
                 }
@@ -3381,7 +3500,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "Taken in late December, AFTER the year's RMD and January withdrawal<br>"
                             + "(an RMD can never be converted), and capped at the Traditional balance<br>"
                             + "left after that withdrawal. Hover a cell.<br>"
-                            + "Paid from the conversion; see Assumptions 7b.</html>";   // v2 2026-11-02 (Q23)
+                            + "Paid from the conversion, or from Money Mkt from Brokerage Sales when the<br>"
+                            + "Taxable Brokerage Account card says so; see Assumptions 7b.</html>";   // v2 2026-11-02 (Q23); Q26
                     // v1 2026-10-20 (CT1): the selected state's label, not a hardcoded "AZ 2.5%"
                     // (the state has been selectable since 2026-10-05). The state the displayed
                     // run used, or the dropdown before any run.
@@ -3394,7 +3514,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "the one real cost of converting. Separate from the living-expenses<br>"
                             + "Tax column. In 2025-2028 it also carries the tax on the OBBBA senior<br>"
                             + "deduction the conversion phases out. Hover a cell for detail.<br>"   // v1 2026-10-20 (SD1)
-                            + "Paid from the conversion; see Assumptions 7b.</html>";   // v2 2026-11-02 (Q23)
+                            + "Paid from the conversion, or from Money Mkt from Brokerage Sales when the<br>"
+                            + "Taxable Brokerage Account card says so; see Assumptions 7b.</html>";   // v2 2026-11-02 (Q23); Q26
                     case 27 -> "<html><b>Trad Bal (v6) -- combined Traditional balance, 50th pct</b><br>"
                             + "The median across fan paths of the combined Traditional bucket<br>"
                             + "(User + Spouse, IRA + 401k) at this year. Unlike v5, this balance<br>"
@@ -3444,10 +3565,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "taxed cash. Each year it (1) grows at that year's inflation rate,<br>"
                             + "then (2) adds that year's RMD overage (the -&gt; Money Mkt (year) value):<br>"
                             + "&nbsp;&nbsp;row 1 = <b>Money Mkt (prior, $)</b> input (carry-in from a past run)<br>"
+                            + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ <b>Money Mkt from Brokerage Sales ($)</b> (Taxable Brokerage Account card)<br>"   // v2 2026-11-14 (Q26)
                             + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ row 1's overage<br>"
-                            + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ any <b>Taxable Brokerage Sale Proceeds</b> (Account Balances card; first year only)<br>"   // v2 2026-11-02 (Q22)
+                            + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ any <b>Taxable Brokerage Sale Proceeds</b> (same card; first year only)<br>"   // v2 2026-11-02 (Q22); Q26
                             + "&nbsp;&nbsp;each year: balance x (1 + inflation) + overage - any top-up draw<br>"
-                            + "Each cell is the balance at the <b>END</b> of its year.<br><br>"
+                            + "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- any conversion tax Money Mkt from Brokerage Sales pays<br>"   // Q26
+                            + "Each cell is the balance at the <b>END</b> of its year; hover one for its two parts.<br><br>"
                             + "The inflation growth reflects the assumption that money-market<br>"
                             + "return roughly equals inflation (~0% real), so the reserve holds<br>"
                             + "its purchasing power rather than eroding. It rises every year unless<br>"
@@ -3458,6 +3581,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "<b>Spent by the sim only as a last resort:</b> in the last 5 plan years,<br>"
                             + "once the Portfolio balance is $0, a short year draws on it to bring<br>"
                             + "Surplus/gap to $0 (already-taxed cash, so the draw adds no tax).<br>"
+                            + "Draws take the regular Money Mkt first, then Money Mkt from Brokerage Sales.<br>"   // v2 2026-11-14 (Q26)
                             // v2 2026-11-01 (Q21)
                             + "With <i>Money Mkt covers short years before the last 5</i> checked<br>"
                             + "(Account Balances card), it also pays short years earlier in the plan.<br>"
@@ -3775,7 +3899,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private static String assumptions7b7c() {
         return ""
                 + "<h3 style='color:#2a5d34;'><a name='sec7b'></a>7b. Who pays the Roth conversion tax</h3>"
-                + "<p><b>This program pays every conversion's tax out of the conversion itself.</b> Each December "
+                + "<p><b>By default, this program pays every conversion's tax out of the conversion itself.</b> Each December "
                 + "the gross conversion leaves the Traditional IRAs. Its tax (the Conv Tax column, section 7) comes "
                 + "out of it, and only the rest reaches the Roth IRAs. That tax leaves the portfolio for good. This "
                 + "is the most conservative stance: it projects the smallest Roth balances and the lowest Portfolio "
@@ -3790,17 +3914,37 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<p><b>How to do it, and how to show it here.</b> Convert the full amount with no tax withheld, "
                 + "and pay the tax from the outside money through an estimated-tax payment or with the tax return. "
                 + "(Outside cash can't simply be deposited into a Roth IRA. That would be a regular contribution, "
-                + "which has a yearly limit and requires earned income.) The program doesn't project this. "
-                + "Instead, at the next yearly run, enter the real balances: the Roth IRAs include the whole "
-                + "conversion, and <i>Money Mkt (prior, $)</i> (Account Balances card) is lower by the tax paid.</p>"
-                + "<p><b>What this program does not do.</b> This is a spending and income simulator. It does not "
-                + "project any other way of paying conversion tax beyond the conservative approach above, and it "
-                + "never uses the Money Mkt reserve for it (section 7: the reserve is earmarked for "
-                + "sequence-of-returns protection). It also does not deal with the tangled lump of spaghetti "
-                + "involved in brokerage accounts: cost basis, dividends, gains, losses and their timing. Even the "
-                + "best-known planning programs simplify them. The one exception is a sale completed in the plan's "
-                + "first year and entered on the Account Balances card (section 7c). That entry only adds the cash "
-                + "to the Money Mkt and that year's gain to taxes and MAGI.</p>"
+                + "which has a yearly limit and requires earned income.) The program projects this only for "
+                + "<i>Money Mkt from Brokerage Sales</i> (below). Either way, at the next yearly run, enter the real "
+                + "balances: the Roth IRAs include the whole conversion, and the account that paid the tax is "
+                + "lower by that amount.</p>"
+                // v2 2026-11-14 (Q26)
+                + "<p><b>Paying it from Money Mkt from Brokerage Sales (since 2026-11-14).</b> The Taxable "
+                + "Brokerage Account card holds <i>Money Mkt from Brokerage Sales ($)</i>, cash from brokerage sales "
+                + "kept apart from the regular Money Mkt, and under it a box, <i>Pay Roth conversion tax from this "
+                + "Money Mkt</i>, <b>off by default</b>. Checked, each year's Conv Tax is paid from that cash "
+                + "until it runs out: in that year it pays what is left and the conversion pays the rest; after "
+                + "that, the conversion pays it all. The conversion's size does not change -- MAGI counts the whole "
+                + "conversion either way -- so only the amount reaching the Roth rises. <i>Example (made-up "
+                + "numbers):</i> a $40,000 conversion with $9,800 of tax. When the cash can pay all of it, the "
+                + "whole $40,000 reaches the Roth. With only $4,000 left, it pays $4,000, the conversion pays "
+                + "$5,800, and $34,200 reaches the Roth. With the box off, $30,200 does. Cash spent on the tax no "
+                + "longer earns (taxable) interest. The Conv Tax and Roth Conv cell tooltips show who paid each "
+                + "year, and the Money Mkt (total) cell tooltip shows what is left in each of the two.</p>"
+                + "<p><b>The regular Money Mkt is not used for this.</b> <i>Money Mkt (prior, $)</i> (Account "
+                + "Balances card) is set aside to protect against sequence-of-returns risk (section 7), so it is not "
+                + "automatically used to pay Roth conversion tax. A user who truly wants it to can move money by "
+                + "hand -- lower <i>Money Mkt (prior, $)</i>, raise <i>Money Mkt from Brokerage Sales ($)</i> by the "
+                + "same amount -- check the box, and run again.</p>"
+                + "<p><b>What this program does not do.</b> This is a spending and income simulator. Beyond the "
+                + "conservative approach above and the Money Mkt from Brokerage Sales option, it does not project "
+                + "any other way of paying conversion tax, and it never uses the regular Money Mkt for it. It also "
+                + "does not deal with the tangled lump of spaghetti involved in brokerage accounts: cost basis, "
+                + "dividends, gains, losses and their timing. Even the best-known planning programs simplify them. "
+                + "The Taxable Brokerage Account card is the one exception: a sale completed in the plan's first "
+                + "year (section 7c), which only adds the cash to Money Mkt from Brokerage Sales and that year's "
+                + "gain to taxes and MAGI, and that cash, which is spent only as this section and section 1 "
+                + "describe.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
 
                 + "<h3 style='color:#2a5d34;'><a name='sec7c'></a>7c. A sale of taxable shares this year (since 2026-11-02)</h3>"
@@ -3809,14 +3953,17 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "from them against the tax-bracket and IRMAA limits. Estimates can push the conversion over a "
                 + "limit or a cliff.</b></p>"
                 + "<p><b>What it is.</b> For shares sold outside this program in the plan's first year, with the "
-                + "cash moved into the money market. Two inputs on the Account Balances card: <i>Taxable Brokerage "
+                + "cash moved into the money market. Two inputs on the Taxable Brokerage Account card: <i>Taxable Brokerage "
                 + "Sale Proceeds ($)</i>, the total the sale brought in (the brokerage site's realized gain/loss page, later Form "
                 + "1099-B box 1d), and <i>Cost Basis of Brokerage Shares Sold ($)</i>, what was paid for those shares (the "
                 + "same page, later box 1e). Both 0 means no sale. The sale is always in the plan's first year. At "
-                + "the next yearly run, enter 0 in both: the cash is then part of <i>Money Mkt (prior, $)</i>.</p>"
+                + "the next yearly run, enter 0 in both: the cash is then part of <i>Money Mkt from Brokerage Sales "
+                + "($)</i> (same card).</p>"
                 + "<p><b>What the program does with them, in the first year only.</b></p><ul>"
-                + "<li>The proceeds are added to <i>Money Mkt (total)</i>, in the table and on every fan path. "
-                + "They are not taxed.</li>"
+                + "<li>The proceeds are added to <i>Money Mkt from Brokerage Sales</i>, part of <i>Money Mkt "
+                + "(total)</i>, in the table and on every fan path. They are not taxed. That cash is drawn for "
+                + "short years only after the regular Money Mkt, and pays Roth conversion tax only when its box "
+                + "is checked (section 7b).</li>"
                 + "<li>Gain = proceeds &minus; basis. <b>Every sale is treated as a long-term capital gain</b> "
                 + "(shares held more than a year).</li>"
                 + "<li>The gain counts in MAGI, so it can make more Social Security taxable, shrink the senior "
@@ -3841,7 +3988,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "Tax it adds.</li>"
                 + "<li>The gain's tax is part of that year's Tax (est), so it lowers Surplus/gap. If that makes the "
                 + "year short, <i>Money Mkt covers short years before the last 5</i> (Account Balances card) lets "
-                + "the sale's cash pay it.</li>"
+                + "the Money Mkt pay it -- the regular Money Mkt first, then the sale's cash.</li>"
                 + "<li>If the first year is before withdrawals start, the gain enters that year's MAGI for the "
                 + "IRMAA lookback and no tax is shown, as in every year before withdrawals (section 3). If "
                 + "withdrawals start after January that year, the rest of that year's tax counts only the "
@@ -4060,7 +4207,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "re-running it.</p>"
                 // v2 2026-10-30 (Q18)
                 + "<p><b>Money Mkt reserve (since 2026-10-30).</b> The paragraph under Actual PoS also says what "
-                + "the Money Mkt reserve did for the lifetimes whose portfolio reached $0. One is <i>carried to "
+                + "the Money Mkt reserve (both pools: the regular Money Mkt and Money Mkt from Brokerage Sales) "
+                + "did for the lifetimes whose portfolio reached $0. One is <i>carried to "
                 + "the end by the reserve</i> when no year from then on was left short; the rest are still "
                 + "short after the reserve. <i>Never ran out of money</i> counts every lifetime except those "
                 + "still short. For each still-short lifetime the program adds up its shortfalls from the year "
@@ -4074,7 +4222,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "income falls short of its spending is brought to a $0 Surplus/gap, in the fan paths and in "
                 + "the table alike. The extra comes first from the portfolio &mdash; Traditional first, grossed "
                 + "up for the tax those dollars carry (the year's Tax (est) rises with it), then Roth &mdash; "
-                + "and, once the portfolio is empty, from the Money Mkt (total) reserve, which is already-taxed "
+                + "and, once the portfolio is empty, from the Money Mkt (total) reserve (the regular Money Mkt "
+                + "first, then Money Mkt from Brokerage Sales), which is already-taxed "
                 + "cash, so that draw adds no tax. The Pro PoS solver is unchanged: its ceiling (22% of the "
                 + "balance) still sizes every planned draw, and the top-up is added after it, as the SS bridge "
                 + "is. Years before the window are unchanged, and a gap there still shows as a gap unless the "
@@ -4091,7 +4240,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<p><b>Money Mkt covers short years before the last 5 (since 2026-11-01).</b> A checkbox under "
                 + "<i>Money Mkt (prior, $)</i> on the <i>Account Balances</i> card, <b>off by default</b>. Checked, "
                 + "every withdrawal year before the last 5 whose Surplus/gap is negative is paid from Money Mkt "
-                + "(total), as far as it has money, in the fan paths and in the table alike; a part it cannot "
+                + "(total) -- the regular Money Mkt first, then Money Mkt from Brokerage Sales -- as far as it has "
+                + "money, in the fan paths and in the table alike; a part it cannot "
                 + "cover stays as a gap and counts as a short year. The money comes <b>only from the Money Mkt, "
                 + "never from the portfolio</b>, and the option never adds to a portfolio draw. The draw is "
                 + "already-taxed cash and adds no tax. A smaller reserve then earns less interest, and that "
@@ -4807,7 +4957,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "its results are conservative on this point. It draws the reserve in one case only: the "
                 + "final-years top-up (section 1), in the last 5 plan years, once the portfolio is empty. That "
                 + "draw is already-taxed cash, so it adds no tax, and the lower balance earns (and is taxed on) "
-                + "less interest from then on.</p>"
+                + "less interest from then on. The other cash pool, Money Mkt from Brokerage Sales (Taxable "
+                + "Brokerage Account card), is not earmarked: it can pay conversion tax when its box is checked "
+                + "(section 7b), and short years draw it only after this reserve.</p>"   // v2 2026-11-14 (Q26)
                 + "<p><b>Money-market interest is taxed.</b> The reserve's yearly growth is interest, and interest "
                 + "is ordinary income. Each year the interest &mdash; the reserve times that year's inflation rate, "
                 + "matching the MM-return-equals-inflation assumption &mdash; is added to ordinary income: it is "
@@ -7533,6 +7685,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 // as every earlier build), so existing batch files keep their fingerprints.
                 if ((n.equals("saleProceeds") || n.equals("saleBasis"))
                         && Integer.valueOf(0).equals(f.get(in))) continue;
+                // v2 2026-11-14 (Q26): Money Mkt from Brokerage Sales and its conversion-tax box
+                // join only when not the default (0 / off), so existing batch files keep theirs.
+                if (n.equals("mmbPrior") && Integer.valueOf(0).equals(f.get(in))) continue;
+                if (n.equals("mmbPaysConvTax") && Boolean.FALSE.equals(f.get(in))) continue;
                 sb.append(n).append('=').append(f.get(in)).append(';');
             }
         } catch (Exception ex) { return "nofp"; }
@@ -9982,6 +10138,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         props.setProperty("mm.coversEarly",         String.valueOf(chkMmCoversEarly.isSelected()));  // v2 2026-11-01 (Q21)
         props.setProperty("sale.proceeds",          String.valueOf(iv(spSaleProceeds)));   // v2 2026-11-02 (Q22)
         props.setProperty("sale.basis",             String.valueOf(iv(spSaleBasis)));
+        props.setProperty("mmb.prior",              String.valueOf(iv(spMmbPrior)));                   // v2 2026-11-14 (Q26)
+        props.setProperty("mmb.paysConvTax",        String.valueOf(chkMmbPaysConvTax.isSelected()));
+        props.setProperty("accounts.hide401K",      String.valueOf(chkHide401K.isSelected()));
         props.setProperty("market.nomReturn",       String.valueOf(dv(spNomReturn)));
         props.setProperty("market.stdDev",          String.valueOf(dv(spStdDev)));
         props.setProperty("market.inflation",       String.valueOf(dv(spInflation)));
@@ -10198,6 +10357,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         else spSaleProceeds.setValue(0);
         if (props.getProperty("sale.basis") != null) setSpinnerI(spSaleBasis, props, "sale.basis", warnings);
         else spSaleBasis.setValue(0);
+        // v2 2026-11-14 (Q26): absent in older files -> 0, off and shown, with no warning.
+        if (props.getProperty("mmb.prior") != null) setSpinnerI(spMmbPrior, props, "mmb.prior", warnings);
+        else spMmbPrior.setValue(0);
+        chkMmbPaysConvTax.setSelected(Boolean.parseBoolean(props.getProperty("mmb.paysConvTax", "false")));
+        chkHide401K.setSelected(Boolean.parseBoolean(props.getProperty("accounts.hide401K", "false")));
         setSpinnerD(spNomReturn,          props, "market.nomReturn",       warnings);
         setSpinnerD(spStdDev,             props, "market.stdDev",          warnings);
         setSpinnerD(spInflation,          props, "market.inflation",       warnings);
@@ -10953,6 +11117,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         i.mmPrior        = iv(spMmPrior);
         i.saleProceeds   = iv(spSaleProceeds);   // v2 2026-11-02 (Q22)
         i.saleBasis      = iv(spSaleBasis);
+        i.mmbPrior       = iv(spMmbPrior);        // v2 2026-11-14 (Q26)
+        i.mmbPaysConvTax = chkMmbPaysConvTax.isSelected();
         i.manPlanAge     = iv(spManPlanAge);
         i.womanPlanAge   = iv(spWomanPlanAge);
 
@@ -11140,6 +11306,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             // loop's does. It feeds the conversion sizing, and the final-years top-up
             // draws it once the portfolio is empty (v1 2026-10-29, TU1).
             double mmPath = Math.max(0, inp.mmPrior);
+            // v2 2026-11-14 (Q26): this path's Money Mkt from Brokerage Sales -- the second
+            // pool. Drawn only after mmPath is empty; it can pay conversion tax (mmbPaysConvTax).
+            double mmbPath = Math.max(0, inp.mmbPrior);
 
             res.fanBalances[p][0]    = b;
             res.fanInflFactors[p][0] = 1.0;
@@ -11173,9 +11342,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                     double g = mmPath * (res.fanInflFactors[p][y] / res.fanInflFactors[p][y - 1]);
                     mmIntPath = Math.max(0, g - mmPath);
                     mmPath    = g;
+                    // v2 2026-11-14 (Q26): the second pool grows, and earns taxable interest, alike.
+                    double gb = mmbPath * (res.fanInflFactors[p][y] / res.fanInflFactors[p][y - 1]);
+                    mmIntPath += Math.max(0, gb - mmbPath);
+                    mmbPath    = gb;
                 }
                 // v2 2026-11-02 (Q22): the one-year sale's proceeds, first year only.
-                if (y == 0 && inp.saleProceeds > 0) mmPath += inp.saleProceeds;
+                // v2 2026-11-14 (Q26): into Money Mkt from Brokerage Sales, not the regular pool.
+                if (y == 0 && inp.saleProceeds > 0) mmbPath += inp.saleProceeds;
 
                 int wd = 0;
                 if (drawing && b > 0) {
@@ -11224,11 +11398,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 // taxes it), then Roth -- and take any gap the emptied portfolio leaves
                 // from this path's Money Mkt reserve.
                 double topUpX = 0, mmDrawX = 0;
+                double mmDrawB = 0;   // v2 2026-11-14 (Q26): the part of mmDrawX from the second pool
                 boolean emptied = false;
                 if (drawing && inTopUpWindow(inp, y)) {
                     final double base = wdWithBridge, tr0 = Math.max(0, trad), mmI = mmIntPath;
                     final double cap = Math.max(base, tr0 + Math.max(0, roth));
-                    double[] t = topUp(base, cap, mmPath, d -> fanYearGap(inp, yy, calYear,
+                    double[] t = topUp(base, cap, mmPath + mmbPath, d -> fanYearGap(inp, yy, calYear,   // Q26: both pools
                             manAge, womanAge, true, startPror, res.fanInflFactors[p],
                             pManStartInfl, pWomanStartInfl, pMagi,
                             Math.max(rmd, Math.min(d, tr0)), wdActual, ssBridge[yy],
@@ -11236,6 +11411,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             mmI, 0, Double.MAX_VALUE)[0]);   // Q25b: never the sale year
                     topUpX  = t[0] - base;
                     mmDrawX = t[1];
+                    mmDrawB = Math.max(0, mmDrawX - Math.max(0, mmPath));   // Q26: the regular pool first
                     emptied = topUpX > 0 && t[0] >= cap;
                     wdWithBridge = t[0];
                     res.fanWithdrawals[p][y] += topUpX;
@@ -11255,7 +11431,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 // the reserve accumulates and is drawn only by the final-years
                 // top-up (TU1), once the portfolio is empty.
                 mmPath    += Math.max(0, tradDraw - wdWithBridge);   // v12: same overage
-                mmPath    -= mmDrawX;                                // v1 2026-10-29 (TU1)
+                mmPath    -= mmDrawX - mmDrawB;                      // v1 2026-10-29 (TU1); Q26: regular first
+                mmbPath   -= mmDrawB;                                // v2 2026-11-14 (Q26): then the second pool
                 double need = Math.max(0, wdWithBridge - tradDraw);
                 double rothDraw = Math.min(need, Math.max(0, roth));
                 roth = Math.max(0, roth - rothDraw);
@@ -11298,6 +11475,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                         trad -= convGross;              // gross leaves Traditional
                         roth += convGross;              // gross lands in Roth...
                         roth -= convTax;                // ...less the tax: net = gross - tax
+                        // v2 2026-11-14 (Q26): with the Taxable Brokerage Account card's box on,
+                        // Money Mkt from Brokerage Sales pays the tax as far as it has money, and
+                        // that much more of the conversion stays in Roth. The conversion's size is
+                        // unchanged (it was sized above, on the gross).
+                        if (inp.mmbPaysConvTax && convTax > 0 && mmbPath > 0) {
+                            double fromB = Math.min(convTax, mmbPath);
+                            mmbPath -= fromB;
+                            roth    += fromB;
+                        }
                         roth  = Math.max(0, roth);
                     }
                 }
@@ -11327,8 +11513,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                     // early draw sets it only once this path's portfolio is $0.
                     double mmEarlyX = 0;
                     if (drawing && inp.mmCoversEarly && !inTopUpWindow(inp, y) && yg[0] > 0.5) {
-                        mmEarlyX = Math.min(yg[0], Math.max(0, mmPath));
-                        mmPath  -= mmEarlyX;
+                        // v2 2026-11-14 (Q26): both pools, the regular Money Mkt first.
+                        mmEarlyX = Math.min(yg[0], Math.max(0, mmPath) + Math.max(0, mmbPath));
+                        double earlyB = Math.max(0, mmEarlyX - Math.max(0, mmPath));
+                        mmPath  -= mmEarlyX - earlyB;
+                        mmbPath -= earlyB;
                         if (mmEarlyX > 0 && trad + roth <= 0) res.fanUsedMM[p] = true;
                     }
                     if (drawing) res.fanShort[p][y] = Math.max(0, yg[0] - mmDrawX - mmEarlyX);
@@ -11445,6 +11634,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // once the median portfolio is spent (v1 2026-10-29, TU1); excluded from
         // the Portfolio balance column (Option A), added on top as ACTUAL total.
         double mmReserveRun = Math.max(0, inp.mmPrior);
+        // v2 2026-11-14 (Q26): Money Mkt from Brokerage Sales, run beside it the same way.
+        // Money Mkt (total) = mmReserveRun + mmbRun; draws take mmReserveRun first.
+        double mmbRun = Math.max(0, inp.mmbPrior);
         for (int y = 0; y < inp.horizon; y++) {
             int calYear  = inp.baseYear + y;
             int manAge   = calYear - inp.manBirthYear;
@@ -11513,9 +11705,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 double grown = mmReserveRun * (medInfl[y] / medInfl[y - 1]);
                 mmInterest   = Math.max(0, grown - mmReserveRun);
                 mmReserveRun = grown;
+                // v2 2026-11-14 (Q26): the second pool grows, and earns taxable interest, alike.
+                double grownB = mmbRun * (medInfl[y] / medInfl[y - 1]);
+                mmInterest   += Math.max(0, grownB - mmbRun);
+                mmbRun        = grownB;
             }
             // v2 2026-11-02 (Q22): the one-year sale's proceeds, first year only.
-            if (y == 0 && inp.saleProceeds > 0) mmReserveRun += inp.saleProceeds;
+            // v2 2026-11-14 (Q26): into Money Mkt from Brokerage Sales, not the regular pool.
+            if (y == 0 && inp.saleProceeds > 0) mmbRun += inp.saleProceeds;
 
             // True 50th-percentile inflation factor and next-year balance,
             // consistent with the median balance above (all genuine medians).
@@ -11596,14 +11793,17 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 final int yy = y, cap = Math.max(wdActual, medBal);
                 final double mI = mmInterest, mS = manSS, wS = womanSS,
                         aO = annOnly, pO = penOnly, mO = milOnly, lv = living, md = medical;
-                double[] t = topUp(wdActual, cap, mmReserveRun, w -> tableYearGap(inp, yy,
+                double[] t = topUp(wdActual, cap, mmReserveRun + mmbRun, w -> tableYearGap(inp, yy,   // Q26: both pools
                         calYear, manAge, womanAge, w, medTrad, combRmd, mI, mS, wS, aO, pO, mO,
                         lv, md, inflFactor, ssInflNow, fAnn, fPen, fMil, magiHistory, startPror));
                 int wNew  = (int) Math.min(cap, Math.ceil(t[0]));
                 topUpTbl  = wNew - wdActual;
                 wdActual  = wNew;
-                mmDrawTbl = (t[1] > 0) ? Math.min(mmReserveRun, Math.ceil(t[1])) : 0;
-                mmReserveRun -= mmDrawTbl;
+                mmDrawTbl = (t[1] > 0) ? Math.min(mmReserveRun + mmbRun, Math.ceil(t[1])) : 0;
+                // v2 2026-11-14 (Q26): the regular Money Mkt first, then Money Mkt from Brokerage Sales.
+                double drawB = Math.max(0, mmDrawTbl - Math.max(0, mmReserveRun));
+                mmReserveRun -= mmDrawTbl - drawB;
+                mmbRun       -= drawB;
             }
             // v1 2026-10-18 (P1): every year, not only drawing years. Before
             // withdrawals start, the fan paths already moved each RMD out of the
@@ -11639,6 +11839,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             double saleAgiRow = 0, niitRow = 0, pref0Row = 0, pref15Row = 0, pref20Row = 0, ltcgSubRow = 0;
             // v2 2026-11-02 (Q25a): the sale's share of this year's tax, kept whole by PR-2
             double saleTaxRow = 0, saleFedRow = 0, saleStateRow = 0, saleIrmaaRow = 0;
+            double convTaxFromMmbRow = 0;   // v2 2026-11-14 (Q26): Conv Tax paid by Money Mkt from Brokerage Sales
             String bracketStr = "--";
             boolean convByIrmaa = false;
             if (drawing && inp.computedTax) {
@@ -11838,6 +12039,16 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                         stProfile, calYear, tradDraw);
                 convTaxThisYear = (int) ctax[0];
                 convNetToRoth   = (int) (conv - ctax[0]);
+                // v2 2026-11-14 (Q26): with the Taxable Brokerage Account card's box on, Money
+                // Mkt from Brokerage Sales pays the tax as far as it has money, and that much
+                // more of the conversion reaches the Roth -- as on the fan paths, which set the
+                // table's balances. The conversion's size is unchanged.
+                if (inp.mmbPaysConvTax && ctax[0] > 0 && mmbRun > 0) {
+                    double fromB = Math.min(ctax[0], mmbRun);
+                    mmbRun           -= fromB;
+                    convTaxFromMmbRow = fromB;
+                    convNetToRoth     = (int) (conv - ctax[0] + fromB);
+                }
                 // v1 2026-10-20 (SD1): the senior deduction this conversion phased out
                 // (its tax is inside Conv Tax), for the tooltip.
                 convSeniorLostInt = (int) TaxEngine.seniorLost(tr, conv, convSSInd, fsYear, calYear);
@@ -11913,9 +12124,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             boolean mmEarlyRow = false;
             if (drawing && inp.mmCoversEarly && !inTopUpWindow(inp, y)) {
                 double gap0 = totalSpend - (guaranteed + wdActual);
-                if (gap0 > 0.5 && mmReserveRun > 0) {
-                    double mmEarly = Math.min(mmReserveRun, Math.ceil(gap0));
-                    mmReserveRun -= mmEarly;
+                // v2 2026-11-14 (Q26): both pools, the regular Money Mkt first.
+                if (gap0 > 0.5 && mmReserveRun + mmbRun > 0) {
+                    double mmEarly = Math.min(mmReserveRun + mmbRun, Math.ceil(gap0));
+                    double earlyB  = Math.max(0, mmEarly - Math.max(0, mmReserveRun));
+                    mmReserveRun -= mmEarly - earlyB;
+                    mmbRun       -= earlyB;
                     mmDrawTbl    += mmEarly;
                     mmEarlyRow    = true;
                 }
@@ -11995,7 +12209,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             row.rateVsYr1     = rowRateVsYr1;    // v6
             row.tradBal       = (int) medTrad;    // v6
             row.rothBal       = (int) medRoth;    // v6
-            row.mmBal         = (int) Math.min(Integer.MAX_VALUE, mmReserveRun); // v8 exact-tie-out
+            row.mmBal         = (int) Math.min(Integer.MAX_VALUE, mmReserveRun + mmbRun); // v8 exact-tie-out; Q26: both pools
+            row.mmbBal        = (int) Math.min(Integer.MAX_VALUE, mmbRun);         // v2 2026-11-14 (Q26)
+            row.convTaxFromMmb = (int) convTaxFromMmbRow;
             row.survivorYear  = survivor;         // v6
             row.magi          = magiInt;
             row.taxableSS     = taxableSSInt;
@@ -16744,7 +16960,18 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // plan's FIRST year (Account Balances card): the proceeds go into the Money Mkt,
         // proceeds - basis is a long-term gain (a loss: up to $3,000 off ordinary income).
         // Both 0 = no sale. Join the fingerprint only when non-zero.
+        // v2 2026-11-14 (Q26): on the Taxable Brokerage Account card now, and the proceeds
+        // go into Money Mkt from Brokerage Sales (mmbPrior's pool), not the regular one.
         int saleProceeds, saleBasis;
+        // v2 2026-11-14 (Q26): Money Mkt from Brokerage Sales (Taxable Brokerage Account
+        // card) -- a second already-taxed cash pool beside the regular Money Mkt. Seeded by
+        // this carry-in plus the first year's sale proceeds; grows with inflation and its
+        // interest is taxed, like the regular one; short years and the final-years top-up
+        // draw it only after the regular Money Mkt is empty. With mmbPaysConvTax on it also
+        // pays each year's Conv Tax until it runs out. Both join the fingerprint only when
+        // not the default (0 / off).
+        int mmbPrior;
+        boolean mmbPaysConvTax;
         int manPlanAge, womanPlanAge;
         double nomReturn, stdDev, inflation, inflationStdDev;
         // v1 2026-10-12: cached shifted mean for the floored inflation draws
@@ -16900,6 +17127,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         double baseRate, yr1Rate, rateVsYr1;
         int  tradBal, rothBal;         // v6: median Traditional / Roth bucket balances
         int  mmBal;                    // v6: median Money Market (taxable) bucket
+        // v2 2026-11-14 (Q26): the Money Mkt from Brokerage Sales part of mmBal (end of the
+        // year), and the part of convTax it paid (0 unless that box is on). Display only.
+        int  mmbBal, convTaxFromMmb;
         int  saleGain;                 // v2 2026-11-02 (Q22): the sale's gain (or -loss taken) in MAGI
         double niit, pref0, pref15, pref20, ltcgSub;   // v2 2026-11-02 (Q22): Tax (est) tooltip
         boolean survivorYear;          // v6: true once the death event has fired
@@ -17398,7 +17628,42 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 spPortfolio.setValue((int) shown);   // v1 2026-10-16 (PT1): no display cap
                 distributing = false;
             }
+            updateHidden401KNote();   // v2 2026-11-14 (Q26)
         } catch (Exception ignored) {}
+    }
+
+    // v2 2026-11-14 (Q26): show or hide the four 401K rows -- each row is the label card()
+    // adds and, right after it, the spinner's wrapper panel. Display only: the balances still
+    // count in the plan and the account total.
+    private void apply401KVisibility() {
+        if (chkHide401K == null) return;
+        boolean show = !chkHide401K.isSelected();
+        java.awt.Container body = null;
+        for (JSpinner sp : new JSpinner[]{ spManTrad401K, spManRoth401K, spWomanTrad401K, spWomanRoth401K }) {
+            java.awt.Container wrap = (sp != null) ? sp.getParent() : null;
+            if (wrap == null || wrap.getParent() == null) continue;
+            body = wrap.getParent();
+            int i = java.util.Arrays.asList(body.getComponents()).indexOf(wrap);
+            wrap.setVisible(show);
+            if (i > 0 && body.getComponent(i - 1) instanceof JLabel l) l.setVisible(show);
+        }
+        updateHidden401KNote();
+        if (body != null) { body.revalidate(); body.repaint(); }
+    }
+
+    // v2 2026-11-14 (Q26): the one-line note shown while the 401K rows are hidden and hold money.
+    private void updateHidden401KNote() {
+        if (lblHidden401K == null || chkHide401K == null) return;
+        long held = (long) iv(spManTrad401K) + iv(spManRoth401K) + iv(spWomanTrad401K) + iv(spWomanRoth401K);
+        boolean vis = chkHide401K.isSelected() && held > 0;
+        lblHidden401K.setText("Hidden 401K accounts hold " + CURRENCY.format(held));
+        if (lblHidden401K.isVisible() != vis) {
+            lblHidden401K.setVisible(vis);
+            if (lblHidden401K.getParent() != null) {
+                lblHidden401K.getParent().revalidate();
+                lblHidden401K.getParent().repaint();
+            }
+        }
     }
 
     private void distributePortfolioDelta() {
