@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Saturday, November 14, 2026 at 09:14 PM MST (UTC-7)
+// Last modified: Sunday, November 15, 2026 at 12:26 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Saturday, November 14, 2026 at 09:14 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, November 15, 2026 at 12:26 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -499,6 +499,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // == Output widgets =======================================================
     private JTabbedPane       mainTabs;  // direct ref for tab switching
     private JLabel            lblAnswer, lblSub, lblDetail;
+    // v2 2026-11-15 (Q34): the top box's question/value rows -- the question parts that carry the
+    // re-run/baseline tooltip, the two dark-blue Money Mkt phrases, the values, and row 1's question.
+    private JPanel            qaPanel;
+    private final transient java.util.List<JComponent> qaTipParts = new java.util.ArrayList<>();
+    private JLabel            qaBlue5a, qaBlue5b, qaQ1;
+    private JLabel[]          qaVal;
     private JLabel            lblBaseline;      // v6: trigger balance + baseline comparison
     private JButton           btnSetBaseline;   // v6: capture this run as the annual baseline
     private JSpinner          spMinChangePct;   // v6: minimum material change %
@@ -2451,7 +2457,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         tglDollars.setToolTipText("<html><b>Real vs nominal dollars</b><br>"
                 + "Converts <i>future-dated</i> figures between today's purchasing power<br>"
                 + "and future nominal dollars.<br><br>"
-                + "<b>Affects:</b> Portfolio bal, Yr 10 withdrawal, True median final<br>"
+                + "<b>Affects:</b> Portfolio bal, Yr 10 withdrawal, Median final portfolio<br>"   // Q33
                 + "balance, and every dollar column in the tables.<br><br>"
                 + "<b>Does NOT affect</b> the headline withdrawal or the re-run trigger<br>"
                 + "balance. Both are base-year figures where the inflation factor is<br>"
@@ -2504,9 +2510,55 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<i>no material change</i> so ordinary noise does not prompt action.<br><br>"
                 + "See section 6c of the Assumptions &amp; Methods tab.</html>");   // Q4
 
+        // v2 2026-11-15 (Q34): the questions a user asks, with this run's answers. lblDetail now
+        // carries only the stress-scenario marker; lblBaseline's re-run trigger and baseline
+        // comparison are in the rows' tooltip (refreshQaTips) instead of on screen.
+        qaPanel = new JPanel(new GridBagLayout());
+        qaPanel.setOpaque(false);
+        qaPanel.putClientProperty("ex.rows", Boolean.TRUE);   // export: one line per row
+        qaVal = new JLabel[6];
+        String[][] qa = {
+                { "How much am I withdrawing from investments in ---- (Actual wd)?" },
+                { "How much additional discretionary spending is available in year 1 (surplus column)?" },
+                { "What is my portfolio-only survival rate?" },
+                { "What percentage of paths avoid running out of combined resources "
+                        + "(portfolio+money market reserves)?" },
+                { "How often does at least one year fall short of spending needs, and ",
+                        "pulls funds from the money market reserve", "?" },
+                { "How often is at least one year left short of spending needs, even after any ",
+                        "Money Mkt draw", "?" } };
+        for (int i = 0; i < qa.length; i++) {
+            JPanel q = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+            ((FlowLayout) q.getLayout()).setAlignOnBaseline(true);
+            q.setOpaque(false);
+            q.putClientProperty("ex.text", String.join("", qa[i]));
+            for (int k = 0; k < qa[i].length; k++) {
+                JLabel part = new JLabel(qa[i][k]);
+                boolean blue = (k == 1);
+                part.setFont(new Font("SansSerif", blue ? Font.BOLD : Font.PLAIN, 13));
+                part.setForeground(blue ? new Color(15, 80, 150) : new Color(60, 60, 60));
+                q.add(part);
+                if (blue) { if (i == 4) qaBlue5a = part; else qaBlue5b = part; }
+                else qaTipParts.add(part);
+                if (i == 0) qaQ1 = part;
+            }
+            qaVal[i] = new JLabel("--");
+            qaVal[i].setFont(new Font("SansSerif", Font.BOLD, 13));
+            qaVal[i].setForeground(new Color(30, 30, 30));
+            qaTipParts.add(qaVal[i]);
+            GridBagConstraints gq = new GridBagConstraints();
+            gq.gridx = 0; gq.gridy = i; gq.anchor = GridBagConstraints.WEST; gq.insets = new Insets(1, 0, 1, 0);
+            qaPanel.add(q, gq);
+            GridBagConstraints gv = new GridBagConstraints();
+            gv.gridx = 1; gv.gridy = i; gv.anchor = GridBagConstraints.WEST; gv.weightx = 1.0;
+            gv.insets = new Insets(1, 14, 1, 0);
+            qaPanel.add(qaVal[i], gv);
+        }
+        lblDetail.setVisible(false);   // shown only for a stress scenario
+
         JPanel aSouth = new JPanel(new BorderLayout(2, 2)); aSouth.setOpaque(false);
         aSouth.add(lblDetail,   BorderLayout.NORTH);
-        aSouth.add(lblBaseline, BorderLayout.SOUTH);
+        aSouth.add(qaPanel,     BorderLayout.SOUTH);   // v2 2026-11-15 (Q34): was lblBaseline
         answerBox.add(aNorth,   BorderLayout.NORTH);
         answerBox.add(aMid,     BorderLayout.CENTER);
         answerBox.add(aSouth,   BorderLayout.SOUTH);
@@ -2518,7 +2570,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         JPanel metricsRow = new JPanel(new RatioRowLayout(0.60, 8));   // v2 2026-11-14 (Q31): was 0.75
         metricsRow.setBackground(new Color(245, 245, 242));
         lblActualPoS   = mkMetricLabel();
-        lblMedianFinal = mkFigureLabel("True median final balance",
+        // v2 2026-11-15 (Q33): renamed, and last on the figure line (its own line when it does not fit).
+        lblMedianFinal = mkFigureLabel("Median final portfolio balance &mdash; excludes external cash reserves",
                 "<html>The 50th percentile of the fan paths' balances at the plan's end.</html>");
         lblYr10Wd      = mkFigureLabel("Yr 10 withdrawal (median)",
                 "<html>The median table's withdrawal in the plan's 10th year.<br>"
@@ -2566,9 +2619,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         ((FlowLayout) posFigures.getLayout()).setAlignOnBaseline(true);
         posFigures.setOpaque(false);
         posFigures.add(lblActualPoS);
-        posFigures.add(lblMedianFinal);
         posFigures.add(lblInitRate);
         posFigures.add(lblYr10Wd);
+        posFigures.add(lblMedianFinal);   // v2 2026-11-15 (Q33): last, so it wraps to a line of its own
         posFigures.putClientProperty("ex.figures", Boolean.TRUE);   // export: one line per figure
         metricsRow.add(wrapMetricBox(posFigures, "Actual PoS", lblActualPoSSub));
         // v2 2026-10-30 (Q18): re-wrap the paragraph to the box's width whenever it changes.
@@ -2819,7 +2872,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                         + "higher safe rate -- so green appears from roughly year 6 onward in<br>"
                                         + "almost any plan. Judge a year against that trend.<br><br>"
                                         + "For decisions use the <b>re-run trigger balance</b> and the<br>"
-                                        + "<b>vs baseline</b> comparison under the headline figure.</html>",
+                                        + "<b>vs baseline</b> comparison (hover the question rows under the<br>"
+                                        + "headline figure).</html>",   // Q34
                                 er.baseRate * 100, er.yr1Rate * 100, er.rateVsYr1 * 100, up, dn, verdict);
                     }
                     case 4 -> {
@@ -3494,7 +3548,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "&nbsp;&nbsp;&nbsp;&nbsp;supports a higher safe rate, so '[^] above' becomes normal with<br>"
                             + "&nbsp;&nbsp;&nbsp;&nbsp;age rather than signalling anything wrong.<br><br>"
                             + "To decide whether to act, use the <b>re-run trigger balance</b> and the<br>"
-                            + "<b>vs baseline</b> comparison shown under the headline figure instead.</html>";
+                            + "<b>vs baseline</b> comparison instead (hover the question rows under the<br>"
+                            + "headline figure).</html>";   // Q34
                     case 5  -> "<html><b>Wd % -- effective withdrawal rate</b><br>"
                             + "<b>Colour = guardrail signal (v6).</b> <font color='#155E2D'><b>Deep green</b></font>"
                             + " means this year's base<br>"
@@ -3508,7 +3563,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "year 6 onward in almost every plan. Judge a year against that<br>"
                             + "trend, not against the colour alone.<br><br>"
                             + "For actual decisions use the <b>re-run trigger balance</b> and the<br>"
-                            + "<b>vs baseline</b> comparison under the headline figure.<br><br>"
+                            + "<b>vs baseline</b> comparison (hover the question rows under the<br>"
+                            + "headline figure).<br><br>"   // Q34
                             + "= Actual wd / portfolio balance.<br>"
                             + "Shows what percentage of the portfolio is being spent this year.<br>"
                             + "Hover individual cells for guardrail status.</html>";
@@ -4104,6 +4160,86 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 ;
     }
 
+    /** v2 2026-11-15 (Q32): Assumptions section 15 -- Bob's planning-philosophy paragraph
+     *  (verbatim), then the review clarifications, shown only when `open`. */
+    private static String planningReviewHtml(boolean open) {
+        String[][] items = {
+                { "1. Unused Annual Surplus &mdash; Accepted Design",
+                        "Unspent annual surplus is not accumulated or reinvested, potentially understating future wealth.",
+                        "Surplus is intentionally available for travel and discretionary spending excluded from baseline "
+                                + "living expenses. It is not automatically saved. Any amount deliberately retained will be manually "
+                                + "added to cash reserves during a future annual update." },
+                { "2. Survivor-Year Coverage &mdash; Already Stress-Tested",
+                        "The primary scenario includes only a short surviving-spouse period, potentially understating "
+                                + "survivor taxation and financial risks.",
+                        "Additional earlier-death scenarios have been tested. With Money Market funds covering annual gaps, "
+                                + "all tested scenarios survive." },
+                { "3. Initial Withdrawal and Social Security Bridge &mdash; Intentional",
+                        "The initial portfolio withdrawal substantially exceeds the headline base withdrawal rate, "
+                                + "increasing early sequence-of-returns exposure.",
+                        "The additional withdrawal is an intentional trade-off for delaying Social Security to optimized "
+                                + "claiming dates. The bridge amount and its financial consequences are understood and accepted." },
+                { "4. Portfolio PoS Versus Reserve-Supported Survival &mdash; Accepted Methodology",
+                        "Portfolio depletion was characterized as excessive shortfall risk despite the deliberate 80% PoS target.",
+                        "Portfolio-only Actual PoS deliberately excludes external reserves. In an example simulation "
+                                + "(made-up numbers), 120 of 600 paths exhausted the portfolio, producing <b>80.0% portfolio-only "
+                                + "success</b>. Money Market reserves carried another 90 paths to completion, producing <b>95.0% "
+                                + "combined-resource survival</b>. These metrics answer different questions. The 80% target governs "
+                                + "the fixed-withdrawal solver, not a guarantee of reserve-supported success." },
+                { "5. Medical Spending and Annual Updates &mdash; Accepted Planning Process",
+                        "First-year medical expenses may be underestimated, and the model does not explicitly represent "
+                                + "every transition in health insurance coverage.",
+                        "The simulator is intended to be rerun at least annually with refreshed account balances and "
+                                + "assumptions. Additional medical expenses may be paid from cash outside the modeled portfolio and "
+                                + "Money Market reserves. <b>The user is expected to recognize and account for these external "
+                                + "funding needs.</b>" },
+                { "6. Money Market Reserve Protection &mdash; Intentional",
+                        "The regular Money Market reserve is not automatically used to pay Roth-conversion taxes.",
+                        "The regular reserve primarily protects against sequence-of-returns risk. Users who wish to "
+                                + "allocate cash to conversion taxes can explicitly use the separate brokerage-funded Money Market "
+                                + "feature." },
+                { "7. Social Security PIA Year &mdash; Confirmed by User",
+                        "PIAs dated the coming year were questioned because the scenario was prepared during the current year.",
+                        "The entered PIAs were obtained from Social Security's online projections for the upcoming year." },
+                { "8. Longevity Beyond Planning Horizon &mdash; Sensitivity Testing",
+                        "A relatively modest ending portfolio could create financial exposure if either spouse substantially "
+                                + "exceeds the selected planning age.",
+                        "Planning ages are intentionally conservative relative to personal expectations. Some discretionary "
+                                + "surplus may also remain unspent and become additional savings. Longer-life scenarios will "
+                                + "nevertheless be tested as a precaution." },
+                { "9. Go-Go and Slow-Go Multipliers &mdash; Correctly Understood",
+                        "Increasing the go-go multiplier from 1.2 to 1.5 might appear to overstate intended spending.",
+                        "The multiplier applies to portfolio withdrawals, not total household income. Earlier multipliers "
+                                + "produced less than the intended 20%&ndash;30% increase in overall spendable income. The higher "
+                                + "multiplier was selected after examining the income composition and the tooltip examples." } };
+        StringBuilder h = new StringBuilder()
+                .append("<h3 style='color:#2a5d34;'><a name='sec15'></a>15. Planning Philosophy and Annual Review</h3>")
+                .append("<p>This simulator is designed for annual reassessment, not a permanently fixed retirement plan. "
+                        + "Account balances, spending assumptions, medical expenses, and Social Security information should "
+                        + "be updated regularly. Users are responsible for accounting for expenses funded outside the "
+                        + "simulation. Annual surplus represents discretionary spending capacity for travel and other "
+                        + "expenses not included in baseline spending; it is intentionally not accumulated. Money Market "
+                        + "reserves provide an additional financial backstop but are excluded from portfolio-only Actual "
+                        + "PoS. The 80% PoS target applies to the fixed-withdrawal solver, while annually adjusted portfolio "
+                        + "survival and reserve-supported survival are distinct measures. Social Security bridging, Roth "
+                        + "conversions, and go-go/slow-go multipliers reflect deliberate trade-offs among early-retirement "
+                        + "spending, taxes, and long-term sustainability. Users should evaluate survivor, market-stress, and "
+                        + "longevity scenarios rather than relying exclusively on the primary projection.</p>")
+                .append("<p><a href='#review-toggle' style='color:#264653; text-decoration:none;'><b>")
+                .append(open ? "&#9662; Planning Review Clarifications" : "&#9656; Planning Review Clarifications")
+                .append("</b></a> <i>(nine planning-review observations; click to ")
+                .append(open ? "close" : "open").append(")</i></p>");
+        if (open) {
+            for (String[] it : items)
+                h.append("<p style='margin-left:16px;'><b>").append(it[0]).append("</b><br>")
+                        .append("<b>Criticism:</b> ").append(it[1]).append("<br>")
+                        .append("<b>Clarification:</b> ").append(it[2]).append("</p>");
+        }
+        h.append("<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; "
+                + "text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>");
+        return h.toString();
+    }
+
     private JScrollPane buildAssumptionsPanel() {
         JEditorPane ep = new JEditorPane();
         ep.setContentType("text/html");
@@ -4114,10 +4250,19 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // section ends with a back-to-top link back to the TOC. JEditorPane does
         // not auto-scroll on anchor clicks; this listener catches ACTIVATED events
         // and calls scrollToReference() to jump to the fragment.
+        // v2 2026-11-15 (Q32): section 15's review block opens and closes on its link -- the
+        // page is set again with the block open or closed, then shown at section 15. It starts
+        // closed every time the program starts (not saved).
+        final String[] docHead = new String[1];
+        final boolean[] reviewOpen = { false };
         ep.addHyperlinkListener(e -> {
             if (e.getEventType() == javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) {
                 String desc = e.getDescription();
-                if (desc != null && desc.startsWith("#") && desc.length() > 1) {
+                if ("#review-toggle".equals(desc) && docHead[0] != null) {
+                    reviewOpen[0] = !reviewOpen[0];
+                    ep.setText(docHead[0] + planningReviewHtml(reviewOpen[0]) + "</body></html>");
+                    SwingUtilities.invokeLater(() -> ep.scrollToReference("sec15"));
+                } else if (desc != null && desc.startsWith("#") && desc.length() > 1) {
                     ep.scrollToReference(desc.substring(1));
                 }
             }
@@ -4169,6 +4314,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<li><a href='#sec12' style='color:#264653; text-decoration:none;'>12. Guaranteed income streams &mdash; annuity, pension, military retired pay</a></li>"
                 + "<li><a href='#sec13' style='color:#264653; text-decoration:none;'>13. Input checks and plan length</a></li>"
                 + "<li><a href='#sec14' style='color:#264653; text-decoration:none;'>14. Stress Test &mdash; living through history's worst markets</a></li>"   // v1 2026-10-23 (Q6)
+                + "<li><a href='#sec15' style='color:#264653; text-decoration:none;'>15. Planning Philosophy and Annual Review</a></li>"   // v2 2026-11-15 (Q32)
                 + "</ul></div>"
                 + "<h3 style='color:#2a5d34;'><a name='intro'></a>Three approaches to dynamic spending</h3>"
                 + "<p>This tool contains two spending engines, and it is worth understanding how each relates to "
@@ -4992,7 +5138,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<p><b>What it is.</b> Each run gives you a yearly amount you can safely take from your savings. "
                 + "The annual baseline is a bookmark: you pick one run and tell the program &ldquo;this is the number "
                 + "I am actually going to live on this year.&rdquo; From then on, every new run is compared with that "
-                + "bookmark, on the line at the top of the Pro PoS results.</p>"
+                + "bookmark. The comparison shows when you hover the question rows in the top box of the Pro PoS "
+                + "results (since 2026-11-15; it was a line in that box).</p>"
                 + "<p><b>Why it exists.</b> Without a bookmark, every run is just a new number, and you cannot tell "
                 + "whether it has really changed since you made your decision, whether the change is big enough to "
                 + "act on or just ordinary market wobble, or what caused it &mdash; the markets, your own changes to "
@@ -5026,7 +5173,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "from a real change. If the yearly amount moved by less than that, the line says <i>no material "
                 + "change</i> &mdash; keep spending as planned. If it moved by more, it is worth revisiting your "
                 + "spending.</p>"
-                + "<p><b>The line just above it.</b> &ldquo;Re-run if portfolio falls below $X&rdquo; is a check for "
+                + "<p><b>The line above it, in the same tooltip.</b> &ldquo;Re-run if portfolio falls below $X&rdquo; is a check for "
                 + "between reviews: if your real accounts drop below that figure before next year's review, run the "
                 + "plan again early (see 6b).</p>"
                 + "<p><b>Why it was built.</b> Retirement plans go wrong in two ways: reacting to every market wobble, "
@@ -6036,10 +6183,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "spending changes. The Stress Test turns &ldquo;80% chance of success&rdquo; into something "
                 + "concrete: in a 1929-style decade, your spending would drop this much for this many years. It "
                 + "follows the approach of Income Lab, whose tools stress-test guardrail plans the same way.</p>"
-                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
-                + "</body></html>";
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>";
 
-        ep.setText(html + htmlB + html2);
+        // v2 2026-11-15 (Q32): section 15 comes last, its review block closed.
+        docHead[0] = html + htmlB + html2;
+        ep.setText(docHead[0] + planningReviewHtml(false) + "</body></html>");
         ep.setCaretPosition(0);
         JScrollPane sp = new JScrollPane(ep);
         sp.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
@@ -10205,6 +10353,17 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             for (String t : more) out.append(t).append('\n');
             return;
         }
+        // v2 2026-11-15 (Q34): question/value rows -- "question  value" on one line each.
+        if (c instanceof JComponent jr && Boolean.TRUE.equals(jr.getClientProperty("ex.rows"))) {
+            java.awt.Component[] cs = jr.getComponents();
+            for (int i = 0; i + 1 < cs.length; i += 2) {
+                if (!cs[i].isVisible()) continue;
+                Object q = (cs[i] instanceof JComponent jq) ? jq.getClientProperty("ex.text") : null;
+                out.append(q instanceof String qs ? qs : exLeafText(cs[i])).append("  ")
+                        .append(exLeafText(cs[i + 1])).append('\n');
+            }
+            return;
+        }
         String leaf = exLeafText(c);
         if (leaf != null) { if (!leaf.isBlank()) out.append(leaf).append('\n'); return; }
         if (!(c instanceof java.awt.Container k)) return;
@@ -11457,6 +11616,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         res.fanWithdrawals = new double[fanPaths][inp.horizon];
         res.fanShort       = new double[fanPaths][inp.horizon];   // v1 2026-10-19 (SL1)
         res.fanUsedMM      = new boolean[fanPaths];               // v1 2026-10-29 (TU1)
+        res.fanDrewMM      = new boolean[fanPaths];               // v2 2026-11-15 (Q34)
         res.fanInflFactors = new double[fanPaths][inp.horizon + 1];
 
         // v6: two combined buckets that together ARE the portfolio b
@@ -11713,6 +11873,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                         if (mmEarlyX > 0 && trad + roth <= 0) res.fanUsedMM[p] = true;
                     }
                     if (drawing) res.fanShort[p][y] = Math.max(0, yg[0] - mmDrawX - mmEarlyX);
+                    if (drawing && (mmDrawX > 0 || mmEarlyX > 0)) res.fanDrewMM[p] = true;   // v2 2026-11-15 (Q34)
                 }
 
                 // --- b is the sum of the DRAWABLE components: the invariant, not
@@ -12652,16 +12813,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         lblSub.setText(String.format(
                 "  %.2f%% of portfolio  .  %.0f%% PoS target  .  %d-year horizon  .  true stochastic median",
                 rate, inp.targetPoS * 100, inp.horizon));
+        // v2 2026-11-15 (Q34): only the stress-scenario marker is left of this line; the ages,
+        // start date, return and inflation gave way to the question rows below it.
         String scenLabel = inp.scenarioIndex > 0
-                ? " . [Stress: " + HistoricalScenarios.SCENARIO_NAMES[inp.scenarioIndex].split(" \\(")[0]
+                ? "[Stress: " + HistoricalScenarios.SCENARIO_NAMES[inp.scenarioIndex].split(" \\(")[0]
                 + (inp.seqOffset > 0 ? ", +" + inp.seqOffset + " yr" : "") + "]"
                 : "";
-        lblDetail.setText(String.format(
-                "User (age %d) . Spouse (age %d) . Draws begin %02d/%d . "
-                        + "%.2f%% nom return / %.2f%% inflation%s",
-                inp.manAge, inp.womanAge,
-                inp.withdrawStartMonth, inp.withdrawStartYear,
-                inp.nomReturn * 100, inp.inflation * 100, scenLabel));
+        lblDetail.setText(scenLabel.isEmpty() ? " " : scenLabel);
+        lblDetail.setVisible(!scenLabel.isEmpty());
 
         // v1 2026-10-19 (FB1): the median final balance stands at the END of the
         // horizon, so it is deflated by the median END-of-horizon price level. It
@@ -12693,9 +12852,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         lblActualPoS.setText(String.format("%.1f%%", res.actualPoS * 100));
         refreshActualPoSSub(res);   // v1 2026-10-17 (PD1); short years v1 2026-10-19 (SL1)
         // v2 2026-11-14 (Q29): figures on the Actual PoS box's figure line, "Title: value".
-        lblMedianFinal.setText(figureHtml("True median final balance", showRealDollars
-                ? formatMoney(Math.round(res.medianFinalBalance / dEnd)) + " (real)"
-                : formatMoney(res.medianFinalBalance) + " (nom.)"));
+        lblMedianFinal.setText(figureHtml("Median final portfolio balance &mdash; excludes external cash reserves",   // Q33
+                showRealDollars
+                        ? formatMoney(Math.round(res.medianFinalBalance / dEnd)) + " (real)"
+                        : formatMoney(res.medianFinalBalance) + " (nom.)"));
         lblYr10Wd.setText(figureHtml("Yr 10 withdrawal (median)", showRealDollars
                 ? CURRENCY.format(Math.round(yr10wd / d10)) : CURRENCY.format(yr10wd)));
         lblInitRate.setText(figureHtml("Initial withdrawal rate", String.format("%.2f%%", rate)));
@@ -15143,6 +15303,68 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + (sn.isEmpty() ? "" : "<br>" + sn);
         actualPoSSubWrapW = -1;
         wrapActualPoSSub();
+        refreshQaRows(res);   // v2 2026-11-15 (Q34): the grace spinner moves row 6 too
+    }
+
+    // v2 2026-11-15 (Q34): the top box's answers, from this run (rows 1-2 follow Real/Nominal,
+    // as the table does; row 6 follows the shortfall grace, as the Actual PoS paragraph does).
+    private void refreshQaRows(ProResults res) {
+        if (qaVal == null || res == null) return;
+        EnhRow first = null;
+        for (EnhRow r : res.medianRows) if (r.drawing) { first = r; break; }
+        double d = (first != null && showRealDollars) ? first.inflFactor : 1.0;
+        qaQ1.setText("How much am I withdrawing from investments in "
+                + (first != null ? String.valueOf(first.calYear) : "the first year") + " (Actual wd)?");
+        ((JComponent) qaQ1.getParent()).putClientProperty("ex.text", qaQ1.getText());
+        qaVal[0].setText(first != null ? CURRENCY.format(Math.round(first.wdActual / d)) : "--");
+        qaVal[1].setText(first != null ? (first.surplus < 0 ? "-" : "")
+                + CURRENCY.format(Math.round(Math.abs(first.surplus) / d)) : "--");
+        qaVal[2].setText(String.format("%.1f%%", res.actualPoS * 100));
+        int n = (res.fanBalances != null) ? res.fanBalances.length : 0;
+        int grace = (spShortfallGrace != null) ? iv(spShortfallGrace) : 3;
+        int drew = 0;
+        if (res.fanDrewMM != null) for (boolean b : res.fanDrewMM) if (b) drew++;
+        qaVal[3].setText(n > 0 ? String.format("%.1f%%", 100.0 * (n - stillShortCount(res.fanBalances, res.fanShort)) / n) : "--");
+        qaVal[4].setText(n > 0 ? String.format("%.1f%% of paths", 100.0 * drew / n) : "--");
+        qaVal[5].setText(n > 0 ? String.format("%.1f%% of paths", 100.0 * shortPathCount(res.fanShort, res.fanBalances, grace) / n) : "--");
+        String mmTip = "<html><b>Money Mkt reserve and short years</b><br>"
+                + "The Money Mkt reserve pays for a short year in the last 5 plan years (the<br>"
+                + "final-years top-up). It pays for earlier short years only when <b>Money Mkt<br>"
+                + "covers short years before the last 5</b> is checked (Account Balances card,<br>"
+                + "under Money Mkt (prior, $)). That box is off by default; when it is off, an<br>"
+                + "earlier short year is left short.<br><br>"
+                + "This run: <b>" + (res.inp.mmCoversEarly ? "checked" : "not checked") + "</b>.</html>";
+        qaBlue5a.setToolTipText(mmTip);
+        qaBlue5b.setToolTipText(mmTip);
+        refreshQaTips();
+    }
+
+    // v2 2026-11-15 (Q34): the rows' tooltip -- the re-run trigger and baseline comparison that
+    // used to show under the headline (lblBaseline's text), then their explanation.
+    private void refreshQaTips() {
+        if (qaTipParts.isEmpty() || lblBaseline == null) return;
+        String live = lblBaseline.getText() == null ? "" : lblBaseline.getText().replace("<html>", "").replace("</html>", "").trim();
+        String expl = lblBaseline.getToolTipText() == null ? "" : lblBaseline.getToolTipText().replace("<html>", "").replace("</html>", "");
+        String tip = "<html>" + (live.isEmpty() ? "" : live + "<br><br>") + expl + "</html>";
+        for (JComponent c : qaTipParts) c.setToolTipText(tip);
+    }
+
+    /** v2 2026-11-15 (Q34): paths whose portfolio reached $0 and still came up short in a
+     *  later year -- the same count depletionNote() makes; "never ran out" = all paths less these. */
+    static int stillShortCount(double[][] fanBalances, double[][] fanShort) {
+        if (fanBalances == null) return 0;
+        int still = 0;
+        for (int p = 0; p < fanBalances.length; p++) {
+            double[] f = fanBalances[p];
+            int y0 = -1;
+            for (int i = 1; i < f.length; i++) if (f[i] <= 0) { y0 = i - 1; break; }
+            if (y0 < 0) continue;
+            boolean left = false;
+            if (fanShort != null && fanShort[p] != null)
+                for (int y = y0; y < fanShort[p].length; y++) if (fanShort[p][y] > 0.5) { left = true; break; }
+            if (left) still++;
+        }
+        return still;
     }
 
     // v2 2026-10-30 (Q18): wraps the paragraph to the box's inner width, measured
@@ -15207,6 +15429,16 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
      */
     static String shortfallNote(double[][] fanShort, double[][] fanBalances, int grace) {
         if (fanShort == null || fanShort.length == 0) return "";
+        int n = fanShort.length, shortPaths = shortPathCount(fanShort, fanBalances, grace);   // Q34
+        // v2 2026-11-15 (Q34): a full sentence, as the last line of the paragraph.
+        return (shortPaths == 0) ? "No path had a short year."
+                : shortPaths + " of " + n + " paths had at least one short year.";
+    }
+
+    /** v2 2026-11-15 (Q34): the count shortfallNote() reports (moved here unchanged, so the
+     *  top box's last row uses the same one). */
+    static int shortPathCount(double[][] fanShort, double[][] fanBalances, int grace) {
+        if (fanShort == null) return 0;
         int n = fanShort.length, shortPaths = 0;
         for (int p = 0; p < n; p++) {
             int h = fanShort[p].length;
@@ -15220,9 +15452,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 if (!graced) { shortPaths++; break; }
             }
         }
-        // v2 2026-10-30 (Q18): a full sentence, as the last line of the paragraph.
-        return (shortPaths == 0) ? "No path had a short year."
-                : shortPaths + " of " + n + " paths had at least one short year.";
+        return shortPaths;
     }
 
     // v1 2026-10-29 (TU1): + how many paths the final-years top-up carried on the
@@ -17372,6 +17602,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v1 2026-10-29 (TU1): per path, true when the final-years top-up drew on the
         // Money Mkt reserve (the portfolio was empty). Display only.
         boolean[] fanUsedMM;
+        // v2 2026-11-15 (Q34): paths where the Money Mkt paid for at least one short year
+        // (the final-years top-up or an early draw). Bookkeeping only.
+        boolean[] fanDrewMM;
         double actualPoS;
         int medianFinalBalance, fanPathCount;
         int medianFinalTrad;   // v2 2026-11-14 (Q29): Traditional part of medianFinalBalance
@@ -17575,7 +17808,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // dates, other inputs, program updates -- and is labeled "other changes".
     private void refreshBaselineLine() {
         if (lblBaseline == null) return;
-        if (!lastRunValid) { lblBaseline.setText(" "); return; }
+        if (!lastRunValid) { lblBaseline.setText(" "); refreshQaTips(); return; }   // Q34
         StringBuilder sb = new StringBuilder("<html>");
 
         double g = (spProPosUpperGuardrail != null) ? dv(spProPosUpperGuardrail) / 100.0 : 0.20;
@@ -17653,6 +17886,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         }
         sb.append("</html>");
         lblBaseline.setText(sb.toString());
+        refreshQaTips();   // v2 2026-11-15 (Q34): shown in the question rows' tooltip
     }
     private static String signed(double v) {
         return (v >= 0 ? "+" : "-") + CURRENCY.format((long) Math.abs(v));
