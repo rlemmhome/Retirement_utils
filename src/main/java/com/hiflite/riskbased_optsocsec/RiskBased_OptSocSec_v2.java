@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Sunday, November 15, 2026 at 12:26 AM MST (UTC-7)
+// Last modified: Sunday, November 15, 2026 at 2:24 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Sunday, November 15, 2026 at 12:26 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Sunday, November 15, 2026 at 2:24 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -499,11 +499,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // == Output widgets =======================================================
     private JTabbedPane       mainTabs;  // direct ref for tab switching
     private JLabel            lblAnswer, lblSub, lblDetail;
+    private String            subLineBase, subLineMult;   // v2 2026-11-15 (Q35): the sub-line, before fitting
     // v2 2026-11-15 (Q34): the top box's question/value rows -- the question parts that carry the
     // re-run/baseline tooltip, the two dark-blue Money Mkt phrases, the values, and row 1's question.
+    // v2 2026-11-15 (Q35): three dark-blue phrases (qaMmParts), the top-off line's ON/OFF (qaTopOff)
+    // and the last line's question start (qaQ7), which follow the run.
     private JPanel            qaPanel;
     private final transient java.util.List<JComponent> qaTipParts = new java.util.ArrayList<>();
-    private JLabel            qaBlue5a, qaBlue5b, qaQ1;
+    private final transient java.util.List<JComponent> qaMmParts  = new java.util.ArrayList<>();
+    private JLabel            qaQ1, qaTopOff, qaQ7;
     private JLabel[]          qaVal;
     private JLabel            lblBaseline;      // v6: trigger balance + baseline comparison
     private JButton           btnSetBaseline;   // v6: capture this run as the annual baseline
@@ -2486,6 +2490,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         JPanel aMid = new JPanel(new BorderLayout(2, 2)); aMid.setOpaque(false);
         aMid.add(lblAnswer, BorderLayout.CENTER);
         aMid.add(lblSub,    BorderLayout.SOUTH);
+        // v2 2026-11-15 (Q35): refit the sub-line whenever the box's width changes.
+        aMid.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) { fitSubLine(); }
+        });
         lblBaseline = new JLabel(" ");
         lblBaseline.setFont(new Font("SansSerif", Font.PLAIN, 13));
         lblBaseline.setForeground(new Color(70, 90, 120));
@@ -2516,17 +2524,20 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         qaPanel = new JPanel(new GridBagLayout());
         qaPanel.setOpaque(false);
         qaPanel.putClientProperty("ex.rows", Boolean.TRUE);   // export: one line per row
-        qaVal = new JLabel[6];
+        // v2 2026-11-15 (Q35): rows 3-4 reworded; rows 5a/5b gave way to the top-off line (no value)
+        // and two survival lines (Bob's wording). The second part of a row is the dark-blue phrase.
+        qaVal = new JLabel[7];
         String[][] qa = {
                 { "How much am I withdrawing from investments in ---- (Actual wd)?" },
                 { "How much additional discretionary spending is available in year 1 (surplus column)?" },
-                { "What is my portfolio-only survival rate?" },
-                { "What percentage of paths avoid running out of combined resources "
+                { "What is the survival rate of using portfolio-only?" },
+                { "What is the survival rate of using combined resources "
                         + "(portfolio+money market reserves)?" },
-                { "How often does at least one year fall short of spending needs, and ",
-                        "pulls funds from the money market reserve", "?" },
-                { "How often is at least one year left short of spending needs, even after any ",
-                        "Money Mkt draw", "?" } };
+                { "", "Money market top-off", ": --" },
+                { "How many survived in the last 5 years, either as-is, or with extra draws from the portfolio, or ",
+                        "money market rescue", "?" },
+                { "How many survived the first -- years with no negatives without ",
+                        "money market rescue", "?" } };
         for (int i = 0; i < qa.length; i++) {
             JPanel q = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
             ((FlowLayout) q.getLayout()).setAlignOnBaseline(true);
@@ -2538,9 +2549,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 part.setFont(new Font("SansSerif", blue ? Font.BOLD : Font.PLAIN, 13));
                 part.setForeground(blue ? new Color(15, 80, 150) : new Color(60, 60, 60));
                 q.add(part);
-                if (blue) { if (i == 4) qaBlue5a = part; else qaBlue5b = part; }
+                if (blue) qaMmParts.add(part);   // v2 2026-11-15 (Q35)
                 else qaTipParts.add(part);
                 if (i == 0) qaQ1 = part;
+                if (i == 4 && k == 2) { qaTopOff = part; part.setFont(new Font("SansSerif", Font.BOLD, 13)); }   // Q35
+                if (i == 6 && k == 0) qaQ7 = part;   // Q35
             }
             qaVal[i] = new JLabel("--");
             qaVal[i].setFont(new Font("SansSerif", Font.BOLD, 13));
@@ -2554,6 +2567,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             gv.insets = new Insets(1, 14, 1, 0);
             qaPanel.add(qaVal[i], gv);
         }
+        qaVal[4].setText("");          // v2 2026-11-15 (Q35): the top-off line has no value
         lblDetail.setVisible(false);   // shown only for a stress scenario
 
         JPanel aSouth = new JPanel(new BorderLayout(2, 2)); aSouth.setOpaque(false);
@@ -2575,10 +2589,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 "<html>The 50th percentile of the fan paths' balances at the plan's end.</html>");
         lblYr10Wd      = mkFigureLabel("Yr 10 withdrawal (median)",
                 "<html>The median table's withdrawal in the plan's 10th year.<br>"
-                        + "Follows the Real/Nominal toggle.</html>");
+                + "Follows the Real/Nominal toggle.</html>");
         lblInitRate    = mkFigureLabel("Initial withdrawal rate",
                 "<html>The first withdrawal year's draw as a % of that year's median portfolio --<br>"
-                        + "the same figure as the \"% of portfolio\" in the box above.</html>");
+                + "the same figure as the \"% of portfolio\" in the box above.</html>");
         // v1 2026-10-17 (PD1): the line under Actual PoS reports the paths that ran out.
         lblActualPoSSub = new JLabel("from fan simulation");
         // v2 2026-10-30 (Q18): the paragraph also reports what the Money Mkt reserve did.
@@ -3332,10 +3346,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                 + "&nbsp;&nbsp;<b>= Money Mkt (total):&nbsp;" + CURRENCY.format(tot) + "</b>"
                                 + (showRealDollars ? " <i>(today's $)</i>" : "") + "<br>"
                                 + (er.convTaxFromMmb > 0
-                                ? "<br>This year Money Mkt from Brokerage Sales paid "
-                                + CURRENCY.format(Math.round(er.convTaxFromMmb / d)) + " of the<br>"
-                                + "Roth conversion tax (Conv Tax column).<br>"
-                                : "")
+                                        ? "<br>This year Money Mkt from Brokerage Sales paid "
+                                        + CURRENCY.format(Math.round(er.convTaxFromMmb / d)) + " of the<br>"
+                                        + "Roth conversion tax (Conv Tax column).<br>"
+                                        : "")
                                 + "<br>Short years draw the regular Money Mkt first. See Assumptions 7b.</html>";
                     }
                     case COL_ROTH_CONV -> {
@@ -4164,76 +4178,76 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
      *  (verbatim), then the review clarifications, shown only when `open`. */
     private static String planningReviewHtml(boolean open) {
         String[][] items = {
-                { "1. Unused Annual Surplus &mdash; Accepted Design",
-                        "Unspent annual surplus is not accumulated or reinvested, potentially understating future wealth.",
-                        "Surplus is intentionally available for travel and discretionary spending excluded from baseline "
-                                + "living expenses. It is not automatically saved. Any amount deliberately retained will be manually "
-                                + "added to cash reserves during a future annual update." },
-                { "2. Survivor-Year Coverage &mdash; Already Stress-Tested",
-                        "The primary scenario includes only a short surviving-spouse period, potentially understating "
-                                + "survivor taxation and financial risks.",
-                        "Additional earlier-death scenarios have been tested. With Money Market funds covering annual gaps, "
-                                + "all tested scenarios survive." },
-                { "3. Initial Withdrawal and Social Security Bridge &mdash; Intentional",
-                        "The initial portfolio withdrawal substantially exceeds the headline base withdrawal rate, "
-                                + "increasing early sequence-of-returns exposure.",
-                        "The additional withdrawal is an intentional trade-off for delaying Social Security to optimized "
-                                + "claiming dates. The bridge amount and its financial consequences are understood and accepted." },
-                { "4. Portfolio PoS Versus Reserve-Supported Survival &mdash; Accepted Methodology",
-                        "Portfolio depletion was characterized as excessive shortfall risk despite the deliberate 80% PoS target.",
-                        "Portfolio-only Actual PoS deliberately excludes external reserves. In an example simulation "
-                                + "(made-up numbers), 120 of 600 paths exhausted the portfolio, producing <b>80.0% portfolio-only "
-                                + "success</b>. Money Market reserves carried another 90 paths to completion, producing <b>95.0% "
-                                + "combined-resource survival</b>. These metrics answer different questions. The 80% target governs "
-                                + "the fixed-withdrawal solver, not a guarantee of reserve-supported success." },
-                { "5. Medical Spending and Annual Updates &mdash; Accepted Planning Process",
-                        "First-year medical expenses may be underestimated, and the model does not explicitly represent "
-                                + "every transition in health insurance coverage.",
-                        "The simulator is intended to be rerun at least annually with refreshed account balances and "
-                                + "assumptions. Additional medical expenses may be paid from cash outside the modeled portfolio and "
-                                + "Money Market reserves. <b>The user is expected to recognize and account for these external "
-                                + "funding needs.</b>" },
-                { "6. Money Market Reserve Protection &mdash; Intentional",
-                        "The regular Money Market reserve is not automatically used to pay Roth-conversion taxes.",
-                        "The regular reserve primarily protects against sequence-of-returns risk. Users who wish to "
-                                + "allocate cash to conversion taxes can explicitly use the separate brokerage-funded Money Market "
-                                + "feature." },
-                { "7. Social Security PIA Year &mdash; Confirmed by User",
-                        "PIAs dated the coming year were questioned because the scenario was prepared during the current year.",
-                        "The entered PIAs were obtained from Social Security's online projections for the upcoming year." },
-                { "8. Longevity Beyond Planning Horizon &mdash; Sensitivity Testing",
-                        "A relatively modest ending portfolio could create financial exposure if either spouse substantially "
-                                + "exceeds the selected planning age.",
-                        "Planning ages are intentionally conservative relative to personal expectations. Some discretionary "
-                                + "surplus may also remain unspent and become additional savings. Longer-life scenarios will "
-                                + "nevertheless be tested as a precaution." },
-                { "9. Go-Go and Slow-Go Multipliers &mdash; Correctly Understood",
-                        "Increasing the go-go multiplier from 1.2 to 1.5 might appear to overstate intended spending.",
-                        "The multiplier applies to portfolio withdrawals, not total household income. Earlier multipliers "
-                                + "produced less than the intended 20%&ndash;30% increase in overall spendable income. The higher "
-                                + "multiplier was selected after examining the income composition and the tooltip examples." } };
+            { "1. Unused Annual Surplus &mdash; Accepted Design",
+              "Unspent annual surplus is not accumulated or reinvested, potentially understating future wealth.",
+              "Surplus is intentionally available for travel and discretionary spending excluded from baseline "
+              + "living expenses. It is not automatically saved. Any amount deliberately retained will be manually "
+              + "added to cash reserves during a future annual update." },
+            { "2. Survivor-Year Coverage &mdash; Already Stress-Tested",
+              "The primary scenario includes only a short surviving-spouse period, potentially understating "
+              + "survivor taxation and financial risks.",
+              "Additional earlier-death scenarios have been tested. With Money Market funds covering annual gaps, "
+              + "all tested scenarios survive." },
+            { "3. Initial Withdrawal and Social Security Bridge &mdash; Intentional",
+              "The initial portfolio withdrawal substantially exceeds the headline base withdrawal rate, "
+              + "increasing early sequence-of-returns exposure.",
+              "The additional withdrawal is an intentional trade-off for delaying Social Security to optimized "
+              + "claiming dates. The bridge amount and its financial consequences are understood and accepted." },
+            { "4. Portfolio PoS Versus Reserve-Supported Survival &mdash; Accepted Methodology",
+              "Portfolio depletion was characterized as excessive shortfall risk despite the deliberate 80% PoS target.",
+              "Portfolio-only Actual PoS deliberately excludes external reserves. In an example simulation "
+              + "(made-up numbers), 120 of 600 paths exhausted the portfolio, producing <b>80.0% portfolio-only "
+              + "success</b>. Money Market reserves carried another 90 paths to completion, producing <b>95.0% "
+              + "combined-resource survival</b>. These metrics answer different questions. The 80% target governs "
+              + "the fixed-withdrawal solver, not a guarantee of reserve-supported success." },
+            { "5. Medical Spending and Annual Updates &mdash; Accepted Planning Process",
+              "First-year medical expenses may be underestimated, and the model does not explicitly represent "
+              + "every transition in health insurance coverage.",
+              "The simulator is intended to be rerun at least annually with refreshed account balances and "
+              + "assumptions. Additional medical expenses may be paid from cash outside the modeled portfolio and "
+              + "Money Market reserves. <b>The user is expected to recognize and account for these external "
+              + "funding needs.</b>" },
+            { "6. Money Market Reserve Protection &mdash; Intentional",
+              "The regular Money Market reserve is not automatically used to pay Roth-conversion taxes.",
+              "The regular reserve primarily protects against sequence-of-returns risk. Users who wish to "
+              + "allocate cash to conversion taxes can explicitly use the separate brokerage-funded Money Market "
+              + "feature." },
+            { "7. Social Security PIA Year &mdash; Confirmed by User",
+              "PIAs dated the coming year were questioned because the scenario was prepared during the current year.",
+              "The entered PIAs were obtained from Social Security's online projections for the upcoming year." },
+            { "8. Longevity Beyond Planning Horizon &mdash; Sensitivity Testing",
+              "A relatively modest ending portfolio could create financial exposure if either spouse substantially "
+              + "exceeds the selected planning age.",
+              "Planning ages are intentionally conservative relative to personal expectations. Some discretionary "
+              + "surplus may also remain unspent and become additional savings. Longer-life scenarios will "
+              + "nevertheless be tested as a precaution." },
+            { "9. Go-Go and Slow-Go Multipliers &mdash; Correctly Understood",
+              "Increasing the go-go multiplier from 1.2 to 1.5 might appear to overstate intended spending.",
+              "The multiplier applies to portfolio withdrawals, not total household income. Earlier multipliers "
+              + "produced less than the intended 20%&ndash;30% increase in overall spendable income. The higher "
+              + "multiplier was selected after examining the income composition and the tooltip examples." } };
         StringBuilder h = new StringBuilder()
-                .append("<h3 style='color:#2a5d34;'><a name='sec15'></a>15. Planning Philosophy and Annual Review</h3>")
-                .append("<p>This simulator is designed for annual reassessment, not a permanently fixed retirement plan. "
-                        + "Account balances, spending assumptions, medical expenses, and Social Security information should "
-                        + "be updated regularly. Users are responsible for accounting for expenses funded outside the "
-                        + "simulation. Annual surplus represents discretionary spending capacity for travel and other "
-                        + "expenses not included in baseline spending; it is intentionally not accumulated. Money Market "
-                        + "reserves provide an additional financial backstop but are excluded from portfolio-only Actual "
-                        + "PoS. The 80% PoS target applies to the fixed-withdrawal solver, while annually adjusted portfolio "
-                        + "survival and reserve-supported survival are distinct measures. Social Security bridging, Roth "
-                        + "conversions, and go-go/slow-go multipliers reflect deliberate trade-offs among early-retirement "
-                        + "spending, taxes, and long-term sustainability. Users should evaluate survivor, market-stress, and "
-                        + "longevity scenarios rather than relying exclusively on the primary projection.</p>")
-                .append("<p><a href='#review-toggle' style='color:#264653; text-decoration:none;'><b>")
-                .append(open ? "&#9662; Planning Review Clarifications" : "&#9656; Planning Review Clarifications")
-                .append("</b></a> <i>(nine planning-review observations; click to ")
-                .append(open ? "close" : "open").append(")</i></p>");
+            .append("<h3 style='color:#2a5d34;'><a name='sec15'></a>15. Planning Philosophy and Annual Review</h3>")
+            .append("<p>This simulator is designed for annual reassessment, not a permanently fixed retirement plan. "
+                + "Account balances, spending assumptions, medical expenses, and Social Security information should "
+                + "be updated regularly. Users are responsible for accounting for expenses funded outside the "
+                + "simulation. Annual surplus represents discretionary spending capacity for travel and other "
+                + "expenses not included in baseline spending; it is intentionally not accumulated. Money Market "
+                + "reserves provide an additional financial backstop but are excluded from portfolio-only Actual "
+                + "PoS. The 80% PoS target applies to the fixed-withdrawal solver, while annually adjusted portfolio "
+                + "survival and reserve-supported survival are distinct measures. Social Security bridging, Roth "
+                + "conversions, and go-go/slow-go multipliers reflect deliberate trade-offs among early-retirement "
+                + "spending, taxes, and long-term sustainability. Users should evaluate survivor, market-stress, and "
+                + "longevity scenarios rather than relying exclusively on the primary projection.</p>")
+            .append("<p><a href='#review-toggle' style='color:#264653; text-decoration:none;'><b>")
+            .append(open ? "&#9662; Planning Review Clarifications" : "&#9656; Planning Review Clarifications")
+            .append("</b></a> <i>(nine planning-review observations; click to ")
+            .append(open ? "close" : "open").append(")</i></p>");
         if (open) {
             for (String[] it : items)
                 h.append("<p style='margin-left:16px;'><b>").append(it[0]).append("</b><br>")
-                        .append("<b>Criticism:</b> ").append(it[1]).append("<br>")
-                        .append("<b>Clarification:</b> ").append(it[2]).append("</p>");
+                 .append("<b>Criticism:</b> ").append(it[1]).append("<br>")
+                 .append("<b>Clarification:</b> ").append(it[2]).append("</p>");
         }
         h.append("<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; "
                 + "text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>");
@@ -7427,7 +7441,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private static String claimedNote(String who, int claimY, int claimM, int todayY, int todayM) {
         return ssClaimed(claimY, claimM, todayY, todayM)
                 ? String.format("   NOTE: %s already claimed (SS start %02d/%d); that date is held.",
-                who, claimM, claimY)
+                        who, claimM, claimY)
                 : "";
     }
 
@@ -7444,7 +7458,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         java.time.LocalDate t = java.time.LocalDate.now();
         boolean allClaimed = ssClaimed(iv(spManSSStartYear), iv(spManSSStartMonth), t.getYear(), t.getMonthValue())
                 && (single || ssClaimed(iv(spWomanSSStartYear), iv(spWomanSSStartMonth),
-                t.getYear(), t.getMonthValue()));
+                        t.getYear(), t.getMonthValue()));
         btnRunOpt.setEnabled(chkOptimize.isSelected() && !optBatchRunning && !allClaimed);
         btnRunOpt.setToolTipText(!allClaimed ? null : single
                 ? "<html>The Social Security start date is before this month, so the benefit has<br>"
@@ -10359,8 +10373,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             for (int i = 0; i + 1 < cs.length; i += 2) {
                 if (!cs[i].isVisible()) continue;
                 Object q = (cs[i] instanceof JComponent jq) ? jq.getClientProperty("ex.text") : null;
-                out.append(q instanceof String qs ? qs : exLeafText(cs[i])).append("  ")
-                        .append(exLeafText(cs[i + 1])).append('\n');
+                String v = exLeafText(cs[i + 1]);   // v2 2026-11-15 (Q35): the top-off line has none
+                out.append(q instanceof String qs ? qs : exLeafText(cs[i]))
+                        .append(v == null || v.isBlank() ? "" : "  " + v).append('\n');
             }
             return;
         }
@@ -11616,7 +11631,6 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         res.fanWithdrawals = new double[fanPaths][inp.horizon];
         res.fanShort       = new double[fanPaths][inp.horizon];   // v1 2026-10-19 (SL1)
         res.fanUsedMM      = new boolean[fanPaths];               // v1 2026-10-29 (TU1)
-        res.fanDrewMM      = new boolean[fanPaths];               // v2 2026-11-15 (Q34)
         res.fanInflFactors = new double[fanPaths][inp.horizon + 1];
 
         // v6: two combined buckets that together ARE the portfolio b
@@ -11873,7 +11887,6 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                         if (mmEarlyX > 0 && trad + roth <= 0) res.fanUsedMM[p] = true;
                     }
                     if (drawing) res.fanShort[p][y] = Math.max(0, yg[0] - mmDrawX - mmEarlyX);
-                    if (drawing && (mmDrawX > 0 || mmEarlyX > 0)) res.fanDrewMM[p] = true;   // v2 2026-11-15 (Q34)
                 }
 
                 // --- b is the sum of the DRAWABLE components: the invariant, not
@@ -12298,7 +12311,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                         // v2 2026-11-02 (Q25b): the sale year's stand-in leaves the sale out
                         : (sale != TaxEngine.Sale.NONE)
                         ? saleFreeStandIn(inp, y, calYear, manAge, womanAge, grossSS, ordinaryBeforeConv,
-                        sale, inflFactor, fsYear, Math.max(0, medTrad - tradDraw))
+                                sale, inflFactor, fsYear, Math.max(0, medTrad - tradDraw))
                         : (magiBeforeConv + conv + convSSInd);   // v12 2026-10-11
                 irmaaSrcInt = (y >= 2) ? 0 : (priorEntered > 0) ? 1 : 2;
                 // v1 2026-10-14 (S1): IRMAA thresholds are those of the PREMIUM year
@@ -12810,9 +12823,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // so it is identical under the real/nominal toggle. Label it so the user
         // is not left wondering why this number does not move when others do.
         lblAnswer.setText(CURRENCY.format(yr1) + " / yr (today's $)");
-        lblSub.setText(String.format(
+        // v2 2026-11-15 (Q35): + this run's Go-go and Slow-go multipliers (fitSubLine).
+        subLineBase = String.format(
                 "  %.2f%% of portfolio  .  %.0f%% PoS target  .  %d-year horizon  .  true stochastic median",
-                rate, inp.targetPoS * 100, inp.horizon));
+                rate, inp.targetPoS * 100, inp.horizon);
+        subLineMult = String.format("Go-go multiplier %.2f  .  Slow-go multiplier %.2f",
+                inp.goGoMultiplier, inp.slowGoMultiplier);
+        fitSubLine();
         // v2 2026-11-15 (Q34): only the stress-scenario marker is left of this line; the ages,
         // start date, return and inflation gave way to the question rows below it.
         String scenLabel = inp.scenarioIndex > 0
@@ -12854,8 +12871,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v2 2026-11-14 (Q29): figures on the Actual PoS box's figure line, "Title: value".
         lblMedianFinal.setText(figureHtml("Median final portfolio balance &mdash; excludes external cash reserves",   // Q33
                 showRealDollars
-                        ? formatMoney(Math.round(res.medianFinalBalance / dEnd)) + " (real)"
-                        : formatMoney(res.medianFinalBalance) + " (nom.)"));
+                ? formatMoney(Math.round(res.medianFinalBalance / dEnd)) + " (real)"
+                : formatMoney(res.medianFinalBalance) + " (nom.)"));
         lblYr10Wd.setText(figureHtml("Yr 10 withdrawal (median)", showRealDollars
                 ? CURRENCY.format(Math.round(yr10wd / d10)) : CURRENCY.format(yr10wd)));
         lblInitRate.setText(figureHtml("Initial withdrawal rate", String.format("%.2f%%", rate)));
@@ -13971,7 +13988,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                     // v2 2026-11-02 (Q25b): the sale year's stand-in leaves the sale out
                     : (sale != TaxEngine.Sale.NONE)
                     ? saleFreeStandIn(inp, y, calYear, manAge, womanAge, grossSS, ordinary, sale,
-                    iNow, fsP, tradAvail)
+                            iNow, fsP, tradAvail)
                     : (magiPre + conv + convSSInd);
             TaxEngine.TaxResult trP = TaxEngine.compute(grossSS, ordinary, magi2,
                     primary65(inp, calYear, manAge, womanAge), womanAge >= 65, iNow,
@@ -15303,11 +15320,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + (sn.isEmpty() ? "" : "<br>" + sn);
         actualPoSSubWrapW = -1;
         wrapActualPoSSub();
-        refreshQaRows(res);   // v2 2026-11-15 (Q34): the grace spinner moves row 6 too
+        refreshQaRows(res);   // v2 2026-11-15 (Q34): the grace spinner moves rows 6-7 too (Q35)
     }
 
     // v2 2026-11-15 (Q34): the top box's answers, from this run (rows 1-2 follow Real/Nominal,
-    // as the table does; row 6 follows the shortfall grace, as the Actual PoS paragraph does).
+    // as the table does; rows 6-7 follow the shortfall grace, as the Actual PoS paragraph does).
     private void refreshQaRows(ProResults res) {
         if (qaVal == null || res == null) return;
         EnhRow first = null;
@@ -15322,11 +15339,20 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         qaVal[2].setText(String.format("%.1f%%", res.actualPoS * 100));
         int n = (res.fanBalances != null) ? res.fanBalances.length : 0;
         int grace = (spShortfallGrace != null) ? iv(spShortfallGrace) : 3;
-        int drew = 0;
-        if (res.fanDrewMM != null) for (boolean b : res.fanDrewMM) if (b) drew++;
         qaVal[3].setText(n > 0 ? String.format("%.1f%%", 100.0 * (n - stillShortCount(res.fanBalances, res.fanShort)) / n) : "--");
-        qaVal[4].setText(n > 0 ? String.format("%.1f%% of paths", 100.0 * drew / n) : "--");
-        qaVal[5].setText(n > 0 ? String.format("%.1f%% of paths", 100.0 * shortPathCount(res.fanShort, res.fanBalances, grace) / n) : "--");
+        // v2 2026-11-15 (Q35): the top-off line follows this run's "Money Mkt covers short years
+        // before the last 5" box; then the paths with no short year in the last 5 plan years, and
+        // the paths with none in the years before them.
+        boolean on = res.inp.mmCoversEarly;
+        qaTopOff.setText(on ? ": ON" : ": OFF");
+        ((JComponent) qaTopOff.getParent()).putClientProperty("ex.text", "Money market top-off" + qaTopOff.getText());
+        qaVal[4].setText("");
+        qaQ7.setText("How many survived the first " + Math.max(0, res.inp.horizon - TOPUP_YEARS)
+                + " years with no negatives " + (on ? "with " : "without "));
+        ((JComponent) qaQ7.getParent()).putClientProperty("ex.text", qaQ7.getText() + "money market rescue?");
+        int[] split = shortSplitCount(res.fanShort, res.fanBalances, grace);
+        qaVal[5].setText(n > 0 ? String.format("%.1f%% of paths", 100.0 * (n - split[1]) / n) : "--");
+        qaVal[6].setText(n > 0 ? String.format("%.1f%% of paths", 100.0 * (n - split[0]) / n) : "--");
         String mmTip = "<html><b>Money Mkt reserve and short years</b><br>"
                 + "The Money Mkt reserve pays for a short year in the last 5 plan years (the<br>"
                 + "final-years top-up). It pays for earlier short years only when <b>Money Mkt<br>"
@@ -15334,8 +15360,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "under Money Mkt (prior, $)). That box is off by default; when it is off, an<br>"
                 + "earlier short year is left short.<br><br>"
                 + "This run: <b>" + (res.inp.mmCoversEarly ? "checked" : "not checked") + "</b>.</html>";
-        qaBlue5a.setToolTipText(mmTip);
-        qaBlue5b.setToolTipText(mmTip);
+        for (JComponent c : qaMmParts) c.setToolTipText(mmTip);   // v2 2026-11-15 (Q35)
         refreshQaTips();
     }
 
@@ -15365,6 +15390,23 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             if (left) still++;
         }
         return still;
+    }
+
+    // v2 2026-11-15 (Q35): the sub-line on one line when it fits the box; otherwise the Go-go and
+    // Slow-go part goes to a second line. Block <div>s, so the export still reads one line.
+    private void fitSubLine() {
+        if (lblSub == null || subLineBase == null) return;
+        java.awt.Container box = lblSub.getParent();
+        int w = 0;
+        if (box != null) {
+            java.awt.Insets in = box.getInsets();
+            w = box.getWidth() - in.left - in.right;
+        }
+        String one = subLineBase + "  .  " + subLineMult;
+        String t = (w <= 0 || lblSub.getFontMetrics(lblSub.getFont()).stringWidth(one) + 4 <= w) ? one
+                : "<html><div>" + subLineBase.replace("  ", "&nbsp;&nbsp;") + "&nbsp;&nbsp;. </div><div>&nbsp;&nbsp;"
+                + subLineMult.replace("  ", "&nbsp;&nbsp;") + "</div></html>";
+        if (!t.equals(lblSub.getText())) lblSub.setText(t);
     }
 
     // v2 2026-10-30 (Q18): wraps the paragraph to the box's inner width, measured
@@ -15435,8 +15477,30 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 : shortPaths + " of " + n + " paths had at least one short year.";
     }
 
-    /** v2 2026-11-15 (Q34): the count shortfallNote() reports (moved here unchanged, so the
-     *  top box's last row uses the same one). */
+    /** v2 2026-11-15 (Q35): shortPathCount()'s test, split at the last TOPUP_YEARS plan years:
+     *  { paths with a short year before them, paths with a short year inside them }. The grace
+     *  applies as there (never inside the last years). */
+    static int[] shortSplitCount(double[][] fanShort, double[][] fanBalances, int grace) {
+        int[] out = new int[2];
+        if (fanShort == null) return out;
+        for (int p = 0; p < fanShort.length; p++) {
+            int h = fanShort[p].length;
+            boolean early = false, late = false;
+            for (int y = 0; y < h; y++) {
+                double sf = fanShort[p][y];
+                if (sf <= 0.5) continue;                       // rounds to $0
+                boolean inLast = h - y <= TOPUP_YEARS;
+                if (y >= h - grace && !inLast && fanBalances[p][y] >= sf) continue;   // graced
+                if (inLast) late = true; else early = true;
+            }
+            if (early) out[0]++;
+            if (late) out[1]++;
+        }
+        return out;
+    }
+
+    /** v2 2026-11-15 (Q34): the count shortfallNote() reports (moved here unchanged; Q35's
+     *  shortSplitCount() splits the same test for the top box). */
     static int shortPathCount(double[][] fanShort, double[][] fanBalances, int grace) {
         if (fanShort == null) return 0;
         int n = fanShort.length, shortPaths = 0;
@@ -15493,13 +15557,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         StringBuilder s = new StringBuilder("This counts the portfolio only. ");
         if (before == 0) {
             s.append(out == 1 ? "The 1 path whose portfolio reached $0 did so in "
-                            : "All " + out + " paths whose portfolio reached $0 did so in ")
-                    .append(topUp).append(" (").append(when).append("), where the final-years top-up spends ")
-                    .append("the portfolio to cover shortfalls. ");
+                              : "All " + out + " paths whose portfolio reached $0 did so in ")
+             .append(topUp).append(" (").append(when).append("), where the final-years top-up spends ")
+             .append("the portfolio to cover shortfalls. ");
         } else {
             s.append(out).append(out == 1 ? " path" : " paths").append(" reached $0 (").append(when).append("): ")
-                    .append(out - before).append(" in ").append(topUp).append(", where the final-years top-up ")
-                    .append("spends the portfolio to cover shortfalls, and ").append(before).append(" earlier. ");
+             .append(out - before).append(" in ").append(topUp).append(", where the final-years top-up ")
+             .append("spends the portfolio to cover shortfalls, and ").append(before).append(" earlier. ");
         }
         if (carried > 0) s.append(carried).append(carried == 1 ? " was" : " were")
                 .append(" carried to the end by the Money Mkt reserve");
@@ -15515,7 +15579,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             else s.append(" The other ").append(still).append(still == 1 ? " still came up short; it needed"
                     : " still came up short; the largest needed");
             s.append(" about ").append(amt).append(" more in the reserve (").append(baseYear)
-                    .append(" dollars) to finish.");
+             .append(" dollars) to finish.");
         }
         return s.toString();
     }
@@ -17229,9 +17293,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             double g = living.sale.gain();
             double fed = (g > 0)
                     ? Math.max(0, fedTaxPref(withTaxable, g, living.fedFactor, fs, null)
-                    - fedTaxPref(base, g, living.fedFactor, fs, null))
+                            - fedTaxPref(base, g, living.fedFactor, fs, null))
                     : Math.max(0, fedTax(withTaxable, living.fedFactor, fs)
-                    - fedTax(base, living.fedFactor, fs));
+                            - fedTax(base, living.fedFactor, fs));
             fed += Math.max(0, niit(g + living.sale.interest(), living.magi + addMagi, fs) - living.niit);
             return fed;
         }
@@ -17602,9 +17666,6 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v1 2026-10-29 (TU1): per path, true when the final-years top-up drew on the
         // Money Mkt reserve (the portfolio was empty). Display only.
         boolean[] fanUsedMM;
-        // v2 2026-11-15 (Q34): paths where the Money Mkt paid for at least one short year
-        // (the final-years top-up or an early draw). Bookkeeping only.
-        boolean[] fanDrewMM;
         double actualPoS;
         int medianFinalBalance, fanPathCount;
         int medianFinalTrad;   // v2 2026-11-14 (Q29): Traditional part of medianFinalBalance
