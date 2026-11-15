@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Saturday, November 14, 2026 at 03:54 PM MST (UTC-7)
+// Last modified: Saturday, November 14, 2026 at 09:14 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Saturday, November 14, 2026 at 03:54 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, November 14, 2026 at 09:14 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -2515,7 +2515,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v2 2026-11-14 (Q29): two boxes, so the row is shorter and the yearly table shows more
         // rows -- Actual PoS on 75% of the width, carrying the other three figures on its figure
         // line (their old sub-lines are their tooltips), and the Roth conversion tax effect.
-        JPanel metricsRow = new JPanel(new RatioRowLayout(0.75, 8));
+        JPanel metricsRow = new JPanel(new RatioRowLayout(0.60, 8));   // v2 2026-11-14 (Q31): was 0.75
         metricsRow.setBackground(new Color(245, 245, 242));
         lblActualPoS   = mkMetricLabel();
         lblMedianFinal = mkFigureLabel("True median final balance",
@@ -3269,7 +3269,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                     case 29 -> {
                         if (er.mmBal <= 0 && er.convTaxFromMmb <= 0) return null;
                         double d = showRealDollars ? er.inflFactor : 1.0;
-                        long tot = Math.round(er.mmBal / d), mmb = Math.round(er.mmbBal / d);
+                        // v2 2026-11-14 (Q30): balances at the end-of-year price level, as the column.
+                        double dEnd = (showRealDollars && er.mmEndInfl > 0) ? er.mmEndInfl : 1.0;
+                        long tot = Math.round(er.mmBal / dEnd), mmb = Math.round(er.mmbBal / dEnd);
                         return "<html><b>Money Mkt (total) -- end of " + er.calYear + "</b><br>"
                                 + "&nbsp;&nbsp;Regular Money Mkt:&nbsp;" + CURRENCY.format(tot - mmb) + "<br>"
                                 + "&nbsp;&nbsp;+ Money Mkt from Brokerage Sales:&nbsp;" + CURRENCY.format(mmb) + "<br>"
@@ -4082,6 +4084,23 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<p><b>Not modeled.</b> A loss carryforward to later years, short-term gains, dividends, and any "
                 + "other part of a brokerage account (see 7b).</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
+                // v2 2026-11-14 (Q31)
+                + "<h3 style='color:#2a5d34;'><a name='sec7d'></a>7d. Roth conversion tax effect &mdash; what it measures (since 2026-11-14)</h3>"
+                + "<p>The <b>Roth conversion tax effect</b> box (Pro PoS tab) compares the cumulative modeled taxes "
+                + "over the retirement plan with and without Roth conversions, including federal and state taxes, "
+                + "IRMAA, NIIT, and conversion taxes. It is a comparison of total taxes paid during the simulated "
+                + "years, not a calculation of the overall financial benefit of converting.</p>"
+                + "<p>It does not account for the time value of money or taxes that may eventually be owed on "
+                + "Traditional balances remaining at the plan's end. A reported tax saving or cost should therefore "
+                + "be considered alongside the ending Traditional balance, not as the sole measure of whether "
+                + "conversions are beneficial.</p>"
+                + "<p><b>How it is computed.</b> After each run the program runs the same plan again with Roth "
+                + "conversions off &mdash; the same random markets (same seed), every other input unchanged &mdash; "
+                + "and adds up Tax (est) + Conv Tax over the withdrawal years of each median table. Years before "
+                + "withdrawals start show no tax in the table and are not counted. In Today's $ each year is "
+                + "adjusted for inflation, but not discounted. Withdrawals differ slightly between the two runs, "
+                + "because conversion tax lowers the balance each year's withdrawal is sized from.</p>"
+                + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 ;
     }
 
@@ -4142,6 +4161,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<li><a href='#sec7a' style='color:#264653; text-decoration:none;'>7a. Spending curve &mdash; go-go, slow-go, no-go</a></li>"
                 + "<li><a href='#sec7b' style='color:#264653; text-decoration:none;'>7b. Who pays the Roth conversion tax</a></li>"   // v2 2026-11-02 (Q23)
                 + "<li><a href='#sec7c' style='color:#264653; text-decoration:none;'>7c. A sale of taxable shares this year</a></li>"   // v2 2026-11-02 (Q22)
+                + "<li><a href='#sec7d' style='color:#264653; text-decoration:none;'>7d. Roth conversion tax effect &mdash; what it measures</a></li>"   // v2 2026-11-14 (Q31)
                 + "<li><a href='#sec8' style='color:#264653; text-decoration:none;'>8. Why PoS is the primary method &mdash; the withdrawal-rate flaw</a></li>"
                 + "<li><a href='#sec9' style='color:#264653; text-decoration:none;'>9. RMDs, additional v9 stress inputs, and deliberately omitted features</a></li>"
                 + "<li><a href='#sec10' style='color:#264653; text-decoration:none;'>10. Caveats</a></li>"
@@ -5053,8 +5073,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "taxability, and counts in MAGI for IRMAA. Its tax appears in the Tax (est) column and is paid "
                 + "from cash flow (it lowers Surplus/gap), so the reserve keeps its full real value. In Fill mode "
                 + "the interest also counts toward the MAGI target, so conversions shrink by the interest amount "
-                + "and the IRMAA cushion stays intact. The first simulated year carries no interest, matching the "
-                + "Money Mkt column, which starts growing in year two. The Surplus/gap tooltip shows each year's "
+                + "and the IRMAA cushion stays intact. Each year's interest is that year's inflation on the "
+                + "balance at the start of the year, the first year included (since 2026-11-14; before, each year "
+                + "used the previous year's inflation and the first year had none). A first-year sale's proceeds "
+                + "start earning the next year. In Today's $ the Money Mkt column, an end-of-year balance, is "
+                + "shown at the end-of-year price level, so it holds flat. The Surplus/gap tooltip shows each year's "
                 + "interest and the tax it added; the larger reserve can be tapped to make up that difference.</p>"
                 + "<p><b>Roth conversions are modeled as a SEPARATE Traditional distribution</b>, not folded "
                 + "into the living-expenses tax. Each conversion:</p>"
@@ -6193,8 +6216,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
      *                  and the year's income counted the unpaid part. The unpaid
      *                  part is now a gap. Rows where a bridge outran the portfolio
      *                  move; every batch re-runs.
+     *  25  2026-11-14  Money Mkt growth and interest use each year's own inflation,
+     *                  year 1 included (Q30); they lagged a year. Any plan with a
+     *                  Money Mkt balance moves; every batch re-runs.
      */
-    private static final int SCORER_VERSION = 24;
+    private static final int SCORER_VERSION = 25;
 
     private static final int OCOL_RANK      = 0;
     private static final int OCOL_USER      = 1;
@@ -11500,15 +11526,16 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 double ret   = ri1[0];
                 double infl  = ri1[1];
                 res.fanInflFactors[p][y + 1] = res.fanInflFactors[p][y] * (1 + infl);
-                // v12: this year's MM interest on this path (mirrors the display loop:
-                // year 0 has no prior year, so no growth and no interest).
+                // v12: this year's MM interest on this path (mirrors the display loop).
+                // v2 2026-11-14 (Q30): THIS year's inflation, [y+1]/[y], from year 1 on -- it was
+                // last year's, [y]/[y-1], so year 1 earned nothing and the balance ran a year behind.
                 double mmIntPath = 0;
-                if (y > 0 && res.fanInflFactors[p][y - 1] > 0) {
-                    double g = mmPath * (res.fanInflFactors[p][y] / res.fanInflFactors[p][y - 1]);
+                if (res.fanInflFactors[p][y] > 0) {
+                    double g = mmPath * (res.fanInflFactors[p][y + 1] / res.fanInflFactors[p][y]);
                     mmIntPath = Math.max(0, g - mmPath);
                     mmPath    = g;
                     // v2 2026-11-14 (Q26): the second pool grows, and earns taxable interest, alike.
-                    double gb = mmbPath * (res.fanInflFactors[p][y] / res.fanInflFactors[p][y - 1]);
+                    double gb = mmbPath * (res.fanInflFactors[p][y + 1] / res.fanInflFactors[p][y]);
                     mmIntPath += Math.max(0, gb - mmbPath);
                     mmbPath    = gb;
                 }
@@ -11866,21 +11893,22 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             // v8: (a) grow the reserve at THIS year's median inflation rate, then
             // (b) add this year's overage (below the final-years top-up, which can
             // spend part of it -- v1 2026-10-29, TU1). Growth uses the ratio of cumulative
-            // median inflation factors medInfl[y]/medInfl[y-1] (= 1 + this year's
-            // inflation). Year 0 has no prior year, so no growth is applied before
-            // the first overage. Bob's model: MM return ~= inflation (~0% real),
+            // median inflation factors medInfl[y+1]/medInfl[y] (= 1 + this year's
+            // inflation), year 1 included -- v2 2026-11-14 (Q30): it was medInfl[y]/
+            // medInfl[y-1], last year's, with none in year 1. A sale's proceeds land
+            // after this year's growth. Bob's model: MM return ~= inflation (~0% real),
             // so the nominal reserve holds real value flat rather than eroding.
             // v12 2026-10-03: that growth IS interest, and interest is taxable
             // ordinary income. It is captured here (before the overage lands) and
             // fed to the tax block below; the reserve itself still compounds at
             // the full inflation rate -- the tax is paid from cash flow.
             double mmInterest = 0;
-            if (y > 0 && medInfl[y - 1] > 0) {
-                double grown = mmReserveRun * (medInfl[y] / medInfl[y - 1]);
+            if (medInfl[y] > 0) {   // v2 2026-11-14 (Q30): this year's inflation, year 1 included
+                double grown = mmReserveRun * (medInfl[y + 1] / medInfl[y]);
                 mmInterest   = Math.max(0, grown - mmReserveRun);
                 mmReserveRun = grown;
                 // v2 2026-11-14 (Q26): the second pool grows, and earns taxable interest, alike.
-                double grownB = mmbRun * (medInfl[y] / medInfl[y - 1]);
+                double grownB = mmbRun * (medInfl[y + 1] / medInfl[y]);
                 mmInterest   += Math.max(0, grownB - mmbRun);
                 mmbRun        = grownB;
             }
@@ -12385,6 +12413,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             row.rothBal       = (int) medRoth;    // v6
             row.mmBal         = (int) Math.min(Integer.MAX_VALUE, mmReserveRun + mmbRun); // v8 exact-tie-out; Q26: both pools
             row.mmbBal        = (int) Math.min(Integer.MAX_VALUE, mmbRun);         // v2 2026-11-14 (Q26)
+            row.mmEndInfl     = medInfl[y + 1];   // v2 2026-11-14 (Q30): end-of-year price level
             row.convTaxFromMmb = (int) convTaxFromMmbRow;
             row.survivorYear  = survivor;         // v6
             row.magi          = magiInt;
@@ -12714,7 +12743,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             ? CURRENCY.format(Math.round(r.convTax / d)) : "--",               // 26 Conv Tax
                     r.tradBal > 0 ? CURRENCY.format(Math.round(r.tradBal / d)) : "--",          // 27 Trad Bal (v6)
                     r.rothBal > 0 ? CURRENCY.format(Math.round(r.rothBal / d)) : "--",          // 28 Roth Bal (v6)
-                    r.mmBal > 0 ? CURRENCY.format(Math.round(r.mmBal / d)) : "--",              // 29 Money Mkt (v6)
+                    r.mmBal > 0 ? CURRENCY.format(Math.round(r.mmBal                         // 29 Money Mkt (v6)
+                            / (showRealDollars && r.mmEndInfl > 0 ? r.mmEndInfl : 1.0))) : "--",   // Q30: end-of-year $
                     String.format("%.3fx", r.goGoMult),                                     // 30 Spend mult (v6)
                     r.ssBridge > 0 ? CURRENCY.format(Math.round(r.ssBridge / d)) : "--",        // 31 SS bridge (v6)
             });
@@ -17306,6 +17336,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v2 2026-11-14 (Q26): the Money Mkt from Brokerage Sales part of mmBal (end of the
         // year), and the part of convTax it paid (0 unless that box is on). Display only.
         int  mmbBal, convTaxFromMmb;
+        // v2 2026-11-14 (Q30): the median price level at the END of the year -- Real mode shows
+        // the Money Mkt, an end-of-year balance, at it, so 0% real reads flat. Display only.
+        double mmEndInfl;
         int  saleGain;                 // v2 2026-11-02 (Q22): the sale's gain (or -loss taken) in MAGI
         double niit, pref0, pref15, pref20, ltcgSub;   // v2 2026-11-02 (Q22): Tax (est) tooltip
         boolean survivorYear;          // v6: true once the death event has fired
@@ -17823,8 +17856,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         return Math.round(r.medianFinalTrad / endInfl[endInfl.length / 2]);
     }
 
+    // v2 2026-11-14 (Q31): what the figure measures, shown in the box under its lines.
+    private static final String CONV_EFFECT_MEASURES = "<b>What it measures:</b> cumulative modeled taxes "
+            + "over the plan, with and without Roth conversions: federal and state tax, IRMAA, NIIT and "
+            + "conversion tax. It compares total taxes paid during the simulated years. It does not measure "
+            + "the overall financial benefit of converting. See Assumptions 7d.";
+
     private void setConvEffect(String figure, String sub) {
         lblConvEffect.setText(figure);
+        sub = (sub == null || sub.isBlank()) ? CONV_EFFECT_MEASURES : sub + "<br>" + CONV_EFFECT_MEASURES;   // Q31
         convEffectSubText  = sub;
         convEffectSubWrapW = -1;
         wrapConvEffectSub();
