@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Sunday, November 15, 2026 at 2:24 PM MST (UTC-7)
+// Last modified: Tuesday, November 17, 2026 at 2:00 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Sunday, November 15, 2026 at 2:24 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, November 17, 2026 at 2:00 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1270,8 +1270,16 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "spending is $5,000 short. Checked, with $40,000 in the Money Mkt, the Money<br>"
                 + "Mkt pays $5,000, the year reads $0 and the Money Mkt ends near $35,000 (plus<br>"
                 + "that year's interest and any RMD overage).<br><br>"
-                + "Saved with the scenario. In the SS Optimizer a covered year is not red.<br>"
-                + "See Assumptions &amp; Methods section 1.</html>");
+                + "Saved with the scenario.<br><br>"
+                // v2 2026-11-17 (Q39)
+                + "<b>SS Optimizer: always off.</b> The SS Optimizer ignores this box and scores<br>"
+                + "every claim-date pair with it unchecked. A Social Security claim date is a<br>"
+                + "one-time, lifelong decision; it should stand on what the plan's withdrawals<br>"
+                + "and income pay for, not on the Money Mkt being spent down to cover short<br>"
+                + "years. Whether to use the Money Mkt is a decision to make when a short year<br>"
+                + "actually comes, not one to build into the spending plan the claim date is<br>"
+                + "chosen for.<br><br>"
+                + "See Assumptions &amp; Methods sections 1 and 11.</html>");
         // v2 2026-11-14 (Q26): Money Mkt from Brokerage Sales -- cash from brokerage sales, kept
         // apart from the regular Money Mkt -- and the box that lets it pay conversion tax.
         spMmbPrior = spinI(0, 0, 20_000_000, 1_000, "#,###");
@@ -1916,7 +1924,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 "Tier 1 (stay under Tier 2)",
                 "Tier 2 (stay under Tier 3)",
                 "Tier 3 (stay under Tier 4)",
-                "Tier 4 (stay under Tier 5)" });
+                "Tier 4 (stay under Tier 5)",
+                "Tier 5 (no IRMAA limit)" });   // v2 2026-11-17 (Q37): index 5 = past the last cliff
         cmbFillIrmaaTier.setSelectedIndex(0);
         cmbFillIrmaaTier.setToolTipText("<html><b>Fill-to-target: IRMAA tier ceiling</b><br>"
                 + "Used in <b>Fill to MAGI target</b> mode. The conversion is sized so MAGI<br>"
@@ -1924,18 +1933,27 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<b>Standard (default):</b> stay under the first cliff (2026 base $218,000<br>"
                 + "MFJ) -- zero Medicare surcharge. <b>Tier 1..4:</b> deliberately accept that<br>"
                 + "surcharge tier to convert more, e.g. to drain Traditional faster and<br>"
-                + "cut future RMDs / widow-year tax. The engine still takes the LOWER of<br>"
-                + "this ceiling and the tax-bracket ceiling below.</html>");
+                + "cut future RMDs / widow-year tax. <b>Tier 5 (no IRMAA limit):</b> no IRMAA<br>"   // Q37
+                + "ceiling at all; only the tax-bracket ceiling below limits the fill.<br><br>"
+                // v2 2026-11-17 (Q37): Bob asked for this warning in bold, normal colour.
+                + "<b>Tier 5 (no IRMAA limit) together with 37% (no bracket limit) removes the<br>"
+                + "fill ceiling: each year converts everything the Traditional balance allows,<br>"
+                + "limited only by the Fill cap, if set -- a dramatic setting.</b><br><br>"
+                + "The engine still takes the LOWER of this ceiling and the tax-bracket<br>"
+                + "ceiling below.</html>");
 
-        // v7: tax-bracket ceiling selector. Values map to indices into
-        // brackets(fs); label shows the 2026 MFJ taxable-income top for context.
-        // Bob's chosen set: top of 12 / 22 / 24 / 32.
+        // v7: tax-bracket ceiling selector.
+        // v2 2026-11-17 (Q37): every bracket. The dropdown index IS the brackets(fs) index
+        // (0 = top of 10% ... 5 = top of 35%, 6 = the 37% bracket, which has no top).
         cmbFillBracket = new JComboBox<>(new String[]{
+                "Top of 10% bracket",
                 "Top of 12% bracket",
                 "Top of 22% bracket",
                 "Top of 24% bracket",
-                "Top of 32% bracket" });
-        cmbFillBracket.setSelectedIndex(1); // default: top of 22% (pre-v7 behavior)
+                "Top of 32% bracket",
+                "Top of 35% bracket",
+                "37% (no bracket limit)" });
+        cmbFillBracket.setSelectedIndex(2); // default: top of 22% (pre-v7 behavior)
         cmbFillBracket.setToolTipText("<html><b>Fill-to-target: tax-bracket ceiling</b><br>"
                 + "Used in <b>Fill to MAGI target</b> mode. The conversion is also held so<br>"
                 + "taxable income does not exceed the TOP of the selected ordinary bracket.<br>"
@@ -1944,6 +1962,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 // v1 2026-10-20 (SD1)
                 + "In 2025-2028 the MAGI at the bracket top also counts the OBBBA senior<br>"
                 + "deduction left at that MAGI (it shrinks as MAGI rises).<br><br>"
+                + "<b>37% (no bracket limit):</b> no tax-bracket ceiling at all; only the<br>"   // Q37
+                + "IRMAA ceiling above limits the fill.<br><br>"
+                // v2 2026-11-17 (Q37): Bob asked for this warning in bold, normal colour.
+                + "<b>Tier 5 (no IRMAA limit) together with 37% (no bracket limit) removes the<br>"
+                + "fill ceiling: each year converts everything the Traditional balance allows,<br>"
+                + "limited only by the Fill cap, if set -- a dramatic setting.</b><br><br>"
                 + "The engine converts up to the LOWER of this and the IRMAA ceiling. With<br>"
                 + "Bob's default (IRMAA Standard + top of 22%), the $218k IRMAA cliff binds<br>"
                 + "first at ~$205k MAGI, filling all of 12% and most of 22% at zero surcharge.</html>");
@@ -2773,6 +2797,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                         long mm     = Math.round(mmJan      / d);
                         long actual = port + mm;
                         return "<html><b>Portfolio balance -- true 50th percentile</b><br>"
+                                // v2 2026-11-17 (Q36a)
+                                + "<b>Start of year (January 1)</b> (before this year's Roth conversion,<br>"
+                                + "withdrawal and market return are applied).<br>"
                                 + "The median of all " + lastResults.fanPathCount
                                 + " stochastic fan paths at the start of this year.<br>"
                                 + "More conservative and accurate than a mean-return path.<br><br>"
@@ -2789,8 +2816,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                 + "that year's RMD overage, so it pairs with the NEXT row's Portfolio<br>"
                                 + "balance, not this one.<br><br>"
                                 + "The Money Mkt reserve is real spendable money you manage by<br>"
-                                + "hand. The sim draws on it only in the last 5 plan years, once<br>"
-                                + "this column reaches $0 (final-years top-up).</html>"; }
+                                // v2 2026-11-17 (Q36c): "only in the last 5" was stale since Q21.
+                                + "hand. The sim draws on it in the last 5 plan years, once this<br>"
+                                + "column reaches $0 (final-years top-up) -- or earlier, when<br>"
+                                + "<i>Money Mkt covers short years before the last 5</i> is checked<br>"
+                                + "(Account Balances card).</html>"; }
                     case 3 -> { return "<html><b>Pro PoS withdrawal</b><br>"
                             + "For each displayed year, runs a Monte Carlo binary search<br>"
                             + "against the 50th-percentile balance and remaining horizon<br>"
@@ -3263,6 +3293,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                     which, CURRENCY.format(gap))
                                     : String.format("&nbsp;&nbsp;<font color=red>OVER %s by %s</font><br>",
                                     which, CURRENCY.format(-gap));
+                        } else if (er.convCeiling < 0) {   // v2 2026-11-17 (Q37)
+                            headroom = "&nbsp;&nbsp;<i>No fill ceiling: IRMAA Tier 5 and 37% (no limit) are selected.</i><br>";
                         } else {
                             headroom = "&nbsp;&nbsp;<i>No fill ceiling this row (flat or no conversion).</i><br>";
                         }
@@ -3356,8 +3388,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                         if (!er.drawing || er.conversion <= 0) return null;
                         double d = showRealDollars ? er.inflFactor : 1.0;
                         String ceil = er.convCeiling > 0
-                                ? CURRENCY.format(Math.round(er.convCeiling / d)) : "n/a";
-                        String bind = er.convCeiling <= 0 ? "flat amount (no fill ceiling)"
+                                ? CURRENCY.format(Math.round(er.convCeiling / d))
+                                : (er.convCeiling < 0 ? "none" : "n/a");   // v2 2026-11-17 (Q37)
+                        String bind = er.convCeiling < 0
+                                ? "no ceiling (IRMAA Tier 5 + 37%): all the Traditional balance allows, up to any Fill cap"
+                                : er.convCeiling == 0 ? "flat amount (no fill ceiling)"
                                 : (er.convBoundByIrmaa
                                 ? "selected IRMAA cliff (minus buffer)"
                                 : "selected tax-bracket top");
@@ -3673,6 +3708,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "Paid from the conversion, or from Money Mkt from Brokerage Sales when the<br>"
                             + "Taxable Brokerage Account card says so; see Assumptions 7b.</html>";   // v2 2026-11-02 (Q23); Q26
                     case 27 -> "<html><b>Trad Bal (v6) -- combined Traditional balance, 50th pct</b><br>"
+                            // v2 2026-11-17 (Q36a)
+                            + "<b>Start of year (January 1)</b> (before this year's Roth conversion,<br>"
+                            + "withdrawal and market return are applied). This year's Roth Conv<br>"
+                            + "first shows in the NEXT row.<br>"
                             + "The median across fan paths of the combined Traditional bucket<br>"
                             + "(User + Spouse, IRA + 401k) at this year. Unlike v5, this balance<br>"
                             + "is drawn down by spending (Traditional-FIRST) and by Roth<br>"
@@ -3745,8 +3784,17 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "Portfolio balance column. Your ACTUAL total at<br>"
                             + "the start of a year = that row's Portfolio balance + the PREVIOUS<br>"
                             + "row's Money Mkt (total) (see the Portfolio tooltip).<br><br>"
+                            // v2 2026-11-17 (Q36b)
+                            + "<b>This column follows the median path</b>, which rarely has a short<br>"
+                            + "year. So with <i>Money Mkt covers short years before the last 5</i><br>"
+                            + "checked, the reserve's draws happen on other fan paths: they show in<br>"
+                            + "the top box's survival rates and the Actual PoS paragraph, not here.<br><br>"
                             + "<b>Reads '--'</b> when it is zero: no prior carry-in and no overage yet.</html>";
                     case 28 -> "<html><b>Roth Bal (v6) -- combined Roth balance, 50th pct</b><br>"
+                            // v2 2026-11-17 (Q36a)
+                            + "<b>Start of year (January 1)</b> (before this year's Roth conversion,<br>"
+                            + "withdrawal and market return are applied). This year's Roth Conv<br>"
+                            + "first shows in the NEXT row.<br>"
                             + "The median combined Roth bucket (User + Spouse, IRA + 401k).<br>"
                             + "Grows by market return and by the NET of each Roth conversion<br>"
                             + "(gross minus conversion tax); drawn only after Traditional is<br>"
@@ -5293,7 +5341,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "nominal dollars, as before v12, a $13,000 "
                 + "buffer eroded to about $8,400 of real cushion by 2044 and the target crept upward.) In "
                 + "practice the IRMAA cliff usually binds first; the table reports which ceiling bound the "
-                + "conversion each year.</li>"
+                + "conversion each year. "
+                // v2 2026-11-17 (Q37)
+                + "<b>Every tier and bracket (since 2026-11-17):</b> the IRMAA choice runs from Standard to "
+                + "<i>Tier 5 (no IRMAA limit)</i> and the bracket choice from the top of 10% to <i>37% (no bracket "
+                + "limit)</i>. A no-limit choice removes that ceiling, so the other one binds. <b>With both on no "
+                + "limit there is no ceiling at all: each year converts everything the Traditional balance allows, "
+                + "limited only by the cap input &mdash; a dramatic setting.</b></li>"
                 + "</ul>"
                 // v1 2026-10-17 (C1/C2)
                 + "<p><b>Whose inflation (since 2026-10-17).</b> The table sizes and taxes each conversion on "
@@ -5939,6 +5993,17 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "Crash on the stress card ignored)</i> &mdash; and the stress card itself is left as you set "
                 + "it for the Pro PoS, GK and Stress Test tabs. Zeroing the offset also keeps the fingerprint "
                 + "identical to a Random batch made with offset 0, so the crisis card never forces a rerun.</p>"
+                // v2 2026-11-17 (Q39)
+                + "<p><b>The batch never lets the Money Mkt cover early short years.</b> Whatever <i>Money Mkt "
+                + "covers short years before the last 5</i> (Account Balances card) shows, the SS Optimizer scores "
+                + "every combination with it off. A Social Security claim date is a one-time, lifelong decision; "
+                + "it should stand on what the plan's withdrawals and income pay for, not on the Money Mkt being "
+                + "spent down to cover short years. Whether to use the Money Mkt is a decision to make when a "
+                + "short year actually comes, not one to build into the spending plan the claim date is chosen "
+                + "for. When the box is checked, the status line says so &mdash; <i>scored with Money Mkt covers "
+                + "short years before the last 5 off (checked on the Account Balances card, ignored)</i> &mdash; "
+                + "and the box itself is left as you set it for the Pro PoS tab. Off, the fingerprint is the "
+                + "same as a batch run with the box unchecked, so a saved batch is reused.</p>"
                 + "<p>This also makes a finished batch permanently re-readable. Click any row to apply its "
                 + "claim dates and run the Pro tab; tick <i>Re-randomize each run</i> first and you get that "
                 + "same claim pair under a different future, which is the cheap way to ask whether your top "
@@ -7427,6 +7492,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v11 2026-09-27: `real` is gone. The scorer always works in today's dollars.
         // v12 2026-10-05: name of the stress scenario the batch overrode, or null.
         String stressIgnored;
+        // v2 2026-11-17 (Q39): true when the Money Mkt early-cover box was checked and overridden.
+        boolean mmEarlyIgnored;
         int scenGen;   // v1 2026-10-20 (F1): optScenarioGen when Run was pressed
     }
 
@@ -7496,6 +7563,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 ? HistoricalScenarios.SCENARIO_NAMES[c.base.scenarioIndex].split(" \\(")[0] : null;
         c.base.scenarioIndex = 0;
         c.base.seqOffset     = 0;
+        // v2 2026-11-17 (Q39): THE BATCH NEVER LETS THE MONEY MKT COVER EARLY SHORT YEARS.
+        // With it on, early draws turn negative Surplus/gap years to $0 and the floors read
+        // that surplus, so a claim pair could pass by spending the reserve. A claim date must
+        // stand on the plan's withdrawals and income. Off joins no fingerprint (it is hashed
+        // only when on), so this matches a batch run with the box unchecked.
+        c.mmEarlyIgnored     = c.base.mmCoversEarly;
+        c.base.mmCoversEarly = false;
         c.manBY       = c.base.manBirthYear;   c.manBM   = c.base.manBirthMonth;
         c.womanBY     = c.base.womanBirthYear; c.womanBM = c.base.womanBirthMonth;
         c.manPIA      = c.base.manPIA;         c.womanPIA = c.base.womanPIA;
@@ -7621,6 +7695,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "   |   fingerprint: " + fp
                 + (c.stressIgnored != null
                 ? "   |   scored in Random (" + c.stressIgnored + " on the stress card ignored)"
+                : "")
+                + (c.mmEarlyIgnored   // v2 2026-11-17 (Q39)
+                ? "   |   scored with Money Mkt covers short years before the last 5 off"
+                + " (checked on the Account Balances card, ignored)"
                 : ""));
         java.util.Map<String, SsOptResult> onDisk = loadBatchResults(fp);
         // v1 2026-10-15 (FR): the floors are no longer in the fingerprint, so a saved
@@ -9412,10 +9490,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         refreshSpouseFieldsEnabled();
     }
 
-    // v7: the tax-bracket dropdown offers 12/22/24/32; these map to the ordinary
-    // bracket indices in brackets(fs) (index 0 = 10%, 1 = 12%, 2 = 22%, 3 = 24%,
-    // 4 = 32%). The dropdown never offers 10% (never a sane fill target).
-    private static final int[] BRACKET_DROPDOWN_TO_INDEX = { 1, 2, 3, 4 };
+    // v2 2026-11-17 (Q37): BRACKET_DROPDOWN_TO_INDEX ({1, 2, 3, 4} for the old 12/22/24/32
+    // list) is gone; the dropdown now lists every bracket in brackets(fs) order.
 
     /** v7: push the frame's editable base thresholds into the TaxEngine active
      *  tables. Called before every simulation (from the input-gather) so any
@@ -10523,7 +10599,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         props.setProperty("tax.priorMagi1",         String.valueOf(iv(spPriorMagi1)));
         // v7: fill-target ceiling selections + editable base thresholds.
         props.setProperty("tax.fillIrmaaTierIdx",   String.valueOf(cmbFillIrmaaTier.getSelectedIndex()));
-        props.setProperty("tax.fillBracketDropdown", String.valueOf(cmbFillBracket.getSelectedIndex()));
+        // v2 2026-11-17 (Q37): the bracket is saved as its brackets(fs) index under a new key.
+        // The old key (its 4-item list: 12/22/24/32) is still written when the choice is one
+        // of those, so an earlier build reads the same bracket.
+        int fbIdx = cmbFillBracket.getSelectedIndex();
+        props.setProperty("tax.fillBracketTop",     String.valueOf(fbIdx));
+        if (fbIdx >= 1 && fbIdx <= 4)
+            props.setProperty("tax.fillBracketDropdown", String.valueOf(fbIdx - 1));
         props.setProperty("tax.editIrmaaMFJ",       csv(editIrmaaThreshMFJ));
         props.setProperty("tax.editIrmaaSingle",    csv(editIrmaaThreshSingle));
         props.setProperty("tax.editBracketMFJ",     csv(editBracketTopMFJ));
@@ -10767,10 +10849,17 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 if (t >= 0 && t < cmbFillIrmaaTier.getItemCount()) cmbFillIrmaaTier.setSelectedIndex(t);
             } catch (Exception ignore) { }
         }
-        if (props.getProperty("tax.fillBracketDropdown") != null) {
+        // v2 2026-11-17 (Q37): the new key first; else the old key, whose 4-item list
+        // (12/22/24/32) sits one place down in the full list.
+        if (props.getProperty("tax.fillBracketTop") != null) {
+            try {
+                int b = Integer.parseInt(props.getProperty("tax.fillBracketTop").trim());
+                if (b >= 0 && b < cmbFillBracket.getItemCount()) cmbFillBracket.setSelectedIndex(b);
+            } catch (Exception ignore) { }
+        } else if (props.getProperty("tax.fillBracketDropdown") != null) {
             try {
                 int b = Integer.parseInt(props.getProperty("tax.fillBracketDropdown").trim());
-                if (b >= 0 && b < cmbFillBracket.getItemCount()) cmbFillBracket.setSelectedIndex(b);
+                if (b >= 0 && b < 4) cmbFillBracket.setSelectedIndex(b + 1);
             } catch (Exception ignore) { }
         }
         // v7: editable base thresholds. Absent -> keep the 2026 defaults already
@@ -11532,11 +11621,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         i.priorMagi2         = iv(spPriorMagi2);   // v1 2026-10-14 (F2)
         i.priorMagi1         = iv(spPriorMagi1);
         i.fillIrmaaTierIdx   = cmbFillIrmaaTier.getSelectedIndex();
-        // map the tax-bracket dropdown (12/22/24/32) to brackets(fs) indices
-        // (1/2/3/4 -- index 0 is the 10% bracket, never a fill target).
-        i.fillBracketIdx     = BRACKET_DROPDOWN_TO_INDEX[
-                Math.max(0, Math.min(cmbFillBracket.getSelectedIndex(),
-                        BRACKET_DROPDOWN_TO_INDEX.length - 1))];
+        // v2 2026-11-17 (Q37): the dropdown index is the brackets(fs) index (0 = 10% ...
+        // 6 = 37%, no top). 12/22/24/32 keep their old values 1-4, so a saved SS Optimizer
+        // batch keeps its fingerprint.
+        i.fillBracketIdx     = Math.max(0, Math.min(cmbFillBracket.getSelectedIndex(), 6));
         // v7: push the (possibly edited) base thresholds into the engine's active
         // tables so this run reads them. Harmless when unedited (they equal 2026).
         syncActiveThresholds();
@@ -12271,7 +12359,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             calYear,    // v1 2026-10-20 (SD1): senior deduction years
                             sale.gain());   // v2 2026-11-02 (Q22): the bracket ceiling skips the gain
                     conv        = fill[0];
-                    convCeilInt = (int) fill[1];
+                    // v2 2026-11-17 (Q37): -1 marks "no ceiling" (Tier 5 + 37%) for the tooltips.
+                    convCeilInt = Double.isInfinite(fill[1]) ? -1 : (int) fill[1];
                     convByIrmaa = fill[2] == 1;
                     // v12 2026-10-11: land MAGI on the ceiling INCLUDING the extra
                     // Social Security the conversion makes taxable (tax torpedo).
@@ -17151,6 +17240,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                        int irmaaTierIdx, int bracketCeilIdx,
                                        int simYear, double pref) {
             double[] thr = irmaaThresh(fs);
+            // v2 2026-11-17 (Q37): a tier index past the last cliff is Tier 5 -- no IRMAA ceiling.
+            boolean noIrmaaCeil = irmaaTierIdx >= thr.length;
             int ti = Math.max(0, Math.min(irmaaTierIdx, thr.length - 1));
             // v12 2026-10-03: the buffer is entered in 2026 dollars and is now
             // inflation-indexed like the threshold it sits under. Held nominal, it
@@ -17162,22 +17253,30 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             // inflation, so in Frozen mode the fill aimed above the frozen line and
             // tripped IRMAA from about year 5. Full CPI (current law) is unchanged.
             // The buffer is a 2026-dollar cushion and still grows with prices.
-            double irmaaCeil = infl(thr[ti], irmaaFillFactor) - infl(buffer, inflFactor);
+            double irmaaCeil = noIrmaaCeil ? Double.POSITIVE_INFINITY
+                    : infl(thr[ti], irmaaFillFactor) - infl(buffer, inflFactor);
             // Bracket edge is a TAXABLE-income figure; convert to MAGI by adding
             // back the deduction so both ceilings are compared in MAGI.
             double ded        = totalDeduction(man65, woman65, fedFactor, fs);   // v12: chained
             double[][] brk    = brackets(fs);
             int bi = Math.max(0, Math.min(bracketCeilIdx, brk.length - 1));
             // brackets(fs)[bi][1] is the UPPER edge (taxable) of bracket bi.
-            double bracketCeilTaxable = brk[bi][1];
-            double bracketCeil = infl(bracketCeilTaxable, fedFactor) + ded;      // v12: chained
-            if (pref > 0) bracketCeil += pref;                                   // v2 2026-11-02 (Q22)
-            // v1 2026-10-20 (SD1): in 2025-2028 the senior deduction also sits between
-            // MAGI and taxable income, and it shrinks as MAGI rises: the ceiling is the
-            // MAGI at which taxable income reaches the bracket top.
-            bracketCeil = seniorCeiling(bracketCeil, seniorCount(man65, woman65, fs), fs, simYear);
+            // v2 2026-11-17 (Q37): the top bracket (37%) has no upper edge -- no bracket ceiling.
+            boolean noBracketCeil = bi == brk.length - 1;
+            double bracketCeil = Double.POSITIVE_INFINITY;
+            if (!noBracketCeil) {
+                double bracketCeilTaxable = brk[bi][1];
+                bracketCeil = infl(bracketCeilTaxable, fedFactor) + ded;         // v12: chained
+                if (pref > 0) bracketCeil += pref;                               // v2 2026-11-02 (Q22)
+                // v1 2026-10-20 (SD1): in 2025-2028 the senior deduction also sits between
+                // MAGI and taxable income, and it shrinks as MAGI rises: the ceiling is the
+                // MAGI at which taxable income reaches the bracket top.
+                bracketCeil = seniorCeiling(bracketCeil, seniorCount(man65, woman65, fs), fs, simYear);
+            }
             double bindingCeil = Math.min(irmaaCeil, bracketCeil);
             boolean irmaaBinds = irmaaCeil <= bracketCeil;
+            // v2 2026-11-17 (Q37): both "no limit" -> no ceiling: an infinite fill, which the
+            // callers cap at the Traditional balance available (and this, at the user cap).
             double conv = Math.max(0, bindingCeil - magiBeforeConv);
             if (userCap > 0) conv = Math.min(conv, userCap);
             return new double[]{ conv, bindingCeil, irmaaBinds ? 1 : 0 };
@@ -17214,6 +17313,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         static double torpedoFill(double plainConv, double grossSS, double ordinaryBefore,
                                   double magiBeforeConv, double bindingCeil, double userCap,
                                   double inflFactor, FilingStatus fs) {
+            // v2 2026-11-17 (Q37): no ceiling (Tier 5 + 37%) -- nothing to overshoot.
+            if (Double.isInfinite(bindingCeil)) return plainConv;
             double c0 = Math.max(0, bindingCeil - magiBeforeConv);   // fill before the cap
             if (c0 <= 0 || grossSS <= 0) return plainConv;
             if (convInducedTaxableSS(grossSS, ordinaryBefore, c0, inflFactor, fs) <= 0)
@@ -17493,10 +17594,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v7: fill-to-target ceilings, both user-selected.
         //   fillIrmaaTierIdx: index into the IRMAA upper-boundary array; 0 = the
         //     first cliff (Standard->Tier1, the pre-v7 default). Fill stays under
-        //     THIS tier's threshold (minus buffer).
+        //     THIS tier's threshold (minus buffer). v2 2026-11-17 (Q37): 5 (past the
+        //     last cliff) = Tier 5, no IRMAA ceiling.
         //   fillBracketIdx: index into brackets(fs); the ordinary-bracket whose
         //     TOP is the tax ceiling. Default 2 = top of the 22% bracket (MFJ),
-        //     matching the pre-v7 hardwired 22% behavior.
+        //     matching the pre-v7 hardwired 22% behavior. v2 2026-11-17 (Q37): 6 (the
+        //     37% bracket, which has no top) = no tax-bracket ceiling.
         int fillIrmaaTierIdx = 0;
         int fillBracketIdx   = 2;
         String stateCode = "AZ";    // v5: selected state tax profile ("AZ" / "CUSTOM")
