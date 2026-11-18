@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Tuesday, November 17, 2026 at 8:57 PM MST (UTC-7)
+// Last modified: Wednesday, November 18, 2026 at 9:34 AM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Tuesday, November 17, 2026 at 8:57 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Wednesday, November 18, 2026 at 9:34 AM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -363,12 +363,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private JSpinner spNomReturn, spStdDev, spInflation, spInflationStdDev;
     private JSpinner spLivingExp, spMedical, spMedInflation;
     // v1 2026-10-19 (L1): the Annual Spending card's title label, which shows the
-    // simulation-start year. The card is BUILT with this fixed title because its
-    // collapse state is saved under sectionKey(title); only the visible label
-    // follows the year. v1 2026-10-19 (K1): the key is "annualspendingbase" (it was
-    // "annualspending2027base"; loadPanelState moves an old setting across).
+    // simulation-start year. The card is BUILT with this fixed title; only the visible
+    // label follows the year. (Its collapse state was saved under this title until
+    // v2 2026-11-18 (Q43), when saving the card layout stopped.)
     private static final String SPENDING_CARD_KEY_TITLE = "Annual Spending Base";
-    private static final String SPENDING_CARD_OLD_KEY   = "annualspending2027base";
     private JLabel lblSpendingCardTitle;
     private JSpinner spBaseTax, spTaxInflation;
     private JSpinner spGoGo, spGoGoDuration;
@@ -406,6 +404,32 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private double[] editIrmaaThreshSingle = TaxEngine.IRMAA_THRESH_SINGLE_2026.clone();
     private double[] editBracketTopMFJ     = bracketTops(TaxEngine.BRACKETS_2026);
     private double[] editBracketTopSingle  = bracketTops(TaxEngine.BRACKETS_SINGLE_2026);
+    // v2 2026-11-18 (Q38): the standard deduction, the 65+ add-on (MFJ: per spouse) and
+    // the tax year these figures belong to (2026 or 2027), edited in the same dialog and
+    // saved with the scenario. The year also picks the IRMAA surcharge table. At startup
+    // all of them follow the plan's start year (applyTaxYearSet, once the start-year
+    // spinner exists); a loaded scenario's saved values win.
+    private double editStdDedMFJ    = TaxEngine.STD_DED_MFJ_2026;
+    private double editStdDedSingle = TaxEngine.STD_DED_SINGLE_2026;
+    private double editAdd65MFJ     = TaxEngine.ADD_STD_DED_65_EACH_2026;
+    private double editAdd65Single  = TaxEngine.ADD_STD_DED_65_SINGLE_2026;
+    private int    editTaxYear      = 2026;
+
+    /** v2 2026-11-18 (Q38): load one tax year's full set (cliffs, bracket tops, standard
+     *  deduction, 65+ add-on, year) into the frame's editable values. A year before 2027
+     *  gives the 2026 set; 2027 or later gives the 2027 set. Does not sync the engine. */
+    private void applyTaxYearSet(int year) {
+        int ty = TaxEngine.baseTaxYearFor(year);
+        editTaxYear           = ty;
+        editIrmaaThreshMFJ    = TaxEngine.irmaaThreshFor(ty, TaxEngine.FilingStatus.MFJ).clone();
+        editIrmaaThreshSingle = TaxEngine.irmaaThreshFor(ty, TaxEngine.FilingStatus.SINGLE).clone();
+        editBracketTopMFJ     = bracketTops(TaxEngine.bracketsFor(ty, TaxEngine.FilingStatus.MFJ));
+        editBracketTopSingle  = bracketTops(TaxEngine.bracketsFor(ty, TaxEngine.FilingStatus.SINGLE));
+        editStdDedMFJ         = TaxEngine.stdDedFor(ty, TaxEngine.FilingStatus.MFJ);
+        editStdDedSingle      = TaxEngine.stdDedFor(ty, TaxEngine.FilingStatus.SINGLE);
+        editAdd65MFJ          = TaxEngine.add65For(ty, TaxEngine.FilingStatus.MFJ);
+        editAdd65Single       = TaxEngine.add65For(ty, TaxEngine.FilingStatus.SINGLE);
+    }
 
     // Pull the upper edges out of a bracket table (drops the +inf top row's use
     // as an editable value -- the last finite top is the 35->37 boundary).
@@ -649,12 +673,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private static final java.io.File DIR_EXPORTS   = new java.io.File(DIR_INCOMELAB,"exports");
     private static final String CALIB_FILE   = new java.io.File(DIR_CALIB, "calibration.ilscen.prefs").getAbsolutePath();
     private static final String RECENT_FILE  = new java.io.File(DIR_CALIB, "recent.ilscen.prefs").getAbsolutePath();
-    // v7: collapsible input-section state is an APP preference (per-user layout),
-    // independent of any scenario. Stored separately so loading a scenario never
-    // re-expands the pane. Key = section slug derived from the card title;
-    // value = "true" (expanded, the default) / "false" (collapsed).
-    private static final String PANELSTATE_FILE = new java.io.File(DIR_CALIB, "panelstate.prefs").getAbsolutePath();
-    private final java.util.Map<String,Boolean> sectionExpanded = new java.util.HashMap<>();
+    // v2 2026-11-18 (Q43): every collapsible input card starts collapsed (Bob, Nov 17,
+    // 2026), so the card layout is no longer saved: panelstate.prefs is neither read nor
+    // written. An existing file is left on disk.
 
     // v12 2026-10-02: PARALLEL SS BATCH -- machine size and the "leave free" preference.
     //
@@ -708,7 +729,6 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // Ensure app directories exist under ~/.retirement_utils/.incomelab/
         DIR_SCENARIOS.mkdirs();
         DIR_CALIB.mkdirs();
-        loadPanelState();   // v7: must precede any card() so sections open in saved state
         loadAppPrefs();     // v12: must precede the SS Optimizer tab, which shows the value
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout(0, 0));
@@ -987,6 +1007,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // == Portfolio & Simulation =========================================
         int curYear = java.time.Year.now().getValue();
         spSimStartYear       = spinI(curYear, 2020, 2040, 1, "#");
+        // v2 2026-11-18 (Q38): the Edit thresholds values start as the set for the plan's
+        // start year (2026 -> the 2026 figures, 2027 or later -> the 2027 figures). A loaded
+        // scenario's saved values replace them; changing the start year later does not.
+        applyTaxYearSet(curYear);
+        syncActiveThresholds();
         spSimStartYear.setToolTipText("<html><b>Simulation start year</b><br>"
                 + "The calendar year used as year 0 of the simulation.<br>"
                 + "All other year-based inputs (withdrawal start, SS start,<br>"
@@ -1732,6 +1757,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "spending multiplier applies.<br><br>"
                 + "<b>Default: 10 years</b> -- roughly covers ages 65-75 for a typical<br>"
                 + "early retiree. Set to 0 to disable the go-go multiplier entirely.</html>");
+        // v6: frame the multiplier as a spending-curve lever rather than a
+        // travel line item -- the distinction drives how it should be set.
+        // v2 2026-11-18 (Bob, 9:32 AM): the note is the card's last row now, so it collapses
+        // with the card; it was a separate line under the card.
+        JLabel lblGoGoNote = new JLabel(
+                "<html><i>Front-loads the spending curve: go-go, then slow-go, then no-go.<br>Leaving slow-go at 1.000/0 makes the drop a cliff.</i></html>");
+        lblGoGoNote.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        lblGoGoNote.setForeground(new Color(110, 110, 110));
+        lblGoGoNote.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
         JPanel spendCard = card(SPENDING_CARD_KEY_TITLE, new Object[]{
                 "Living expenses ($/yr)",             spLivingExp,
                 "Medical -- premiums & out-of-pocket ($/yr)", spMedical,
@@ -1740,22 +1774,16 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 "Go-go years duration (from wd start)", spGoGoDuration,
                 "Slow-go multiplier (v6)",             spSlowGo,
                 "Slow-go years (after go-go)",         spSlowGoDuration,
+                null,                                  lblGoGoNote,
         });
+        // card() caps every row at 30 px; the two-line note needs its own height.
+        lblGoGoNote.setMaximumSize(null);
         // v1 2026-10-19 (L1): show the simulation-start year in the title, and follow
         // the Simulation start year spinner (a scenario load sets it, so this fires).
         lblSpendingCardTitle = findLabel(spendCard, SPENDING_CARD_KEY_TITLE.toUpperCase());
         updateSpendingCardTitle();
         spSimStartYear.addChangeListener(e -> updateSpendingCardTitle());
         inner.add(spendCard);
-        // v6: frame the multiplier as a spending-curve lever rather than a
-        // travel line item -- the distinction drives how it should be set.
-        JLabel lblGoGoNote = new JLabel(
-                "<html><i>Front-loads the spending curve: go-go, then slow-go, then no-go.<br>Leaving slow-go at 1.000/0 makes the drop a cliff.</i></html>");
-        lblGoGoNote.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        lblGoGoNote.setForeground(new Color(110, 110, 110));
-        lblGoGoNote.setAlignmentX(LEFT_ALIGNMENT);
-        lblGoGoNote.setBorder(BorderFactory.createEmptyBorder(0, 4, 2, 0));
-        inner.add(lblGoGoNote);
         inner.add(Box.createVerticalStrut(4));
 
         // == Tax engine + Roth conversion (v3) =============================
@@ -1859,15 +1887,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "A fixed conversion applied every drawing year, added to ordinary<br>"
                 + "income (raising MAGI and tax). Default $40,000.</html>");
         spConvBuffer = spinI(13_000, 0, 100_000, 1_000, "#,###");
-        spConvBuffer.setToolTipText("<html><b>MAGI buffer below the IRMAA cliff ($)</b><br>"
-                + "Used in <b>Fill to MAGI target</b> mode. The fill stops this many dollars<br>"
-                + "below the selected IRMAA tier's threshold (Standard: 2026 base $218,000,<br>"   // v2 2026-11-02 (Q23)
-                + "inflation-indexed), leaving headroom so an income surprise does not trip<br>"
-                + "the surcharge. Default $13,000 (with Standard selected, a ~$205,000 MAGI<br>"
-                + "target in 2026 dollars).<br><br>"
-                + "<b>Inflation-indexed</b> (v12): enter it in 2026 dollars; each year it grows<br>"
-                + "with inflation, as the threshold does under Full CPI (current law), so the<br>"
-                + "cushion -- and the MAGI target -- hold steady in today's dollars.</html>");
+        // v2 2026-11-18 (Q38): its tooltip is built by refreshFillTips() (tax year, plan year).
         spConvCap    = spinI(40_000, 0, 1_000_000, 1_000, "#,###");
         spConvCap.setToolTipText("<html><b>Roth conversion cap ($/yr)</b><br>"
                 + "Used in <b>Fill to MAGI target</b> mode. The computed fill is never<br>"
@@ -1929,20 +1949,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 "Tier 4 (stay under Tier 5)",
                 "Tier 5 (no IRMAA limit)" });   // v2 2026-11-17 (Q37): index 5 = past the last cliff
         cmbFillIrmaaTier.setSelectedIndex(0);
-        cmbFillIrmaaTier.setToolTipText("<html><b>Fill-to-target: IRMAA tier ceiling</b><br>"
-                + "Used in <b>Fill to MAGI target</b> mode. The conversion is sized so MAGI<br>"
-                + "stays UNDER the selected IRMAA cliff (minus the buffer below).<br><br>"
-                + "<b>Standard (default):</b> stay under the first cliff (2026 base $218,000<br>"
-                + "MFJ) -- zero Medicare surcharge. <b>Tier 1..4:</b> deliberately accept that<br>"
-                + "surcharge tier to convert more, e.g. to drain Traditional faster and<br>"
-                + "cut future RMDs / widow-year tax. <b>Tier 5 (no IRMAA limit):</b> no IRMAA<br>"   // Q37
-                + "ceiling at all; only the tax-bracket ceiling below limits the fill.<br><br>"
-                // v2 2026-11-17 (Q37): Bob asked for this warning in bold, normal colour.
-                + "<b>Tier 5 (no IRMAA limit) together with 37% (no bracket limit) removes the<br>"
-                + "fill ceiling: each year converts everything the Traditional balance allows,<br>"
-                + "limited only by the Fill cap, if set -- a dramatic setting.</b><br><br>"
-                + "The engine still takes the LOWER of this ceiling and the tax-bracket<br>"
-                + "ceiling below.</html>");
+        // v2 2026-11-18 (Q38): its tooltip is built by refreshFillTips() (tax year).
 
         // v7: tax-bracket ceiling selector.
         // v2 2026-11-17 (Q37): every bracket. The dropdown index IS the brackets(fs) index
@@ -1956,32 +1963,22 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 "Top of 35% bracket",
                 "37% (no bracket limit)" });
         cmbFillBracket.setSelectedIndex(2); // default: top of 22% (pre-v7 behavior)
-        cmbFillBracket.setToolTipText("<html><b>Fill-to-target: tax-bracket ceiling</b><br>"
-                + "Used in <b>Fill to MAGI target</b> mode. The conversion is also held so<br>"
-                + "taxable income does not exceed the TOP of the selected ordinary bracket.<br>"
-                + "Unlike IRMAA this is NOT a cliff -- crossing it taxes only the marginal<br>"
-                + "dollars -- so no buffer is applied to it; the fill may land exactly on it.<br>"
-                // v1 2026-10-20 (SD1)
-                + "In 2025-2028 the MAGI at the bracket top also counts the OBBBA senior<br>"
-                + "deduction left at that MAGI (it shrinks as MAGI rises).<br><br>"
-                + "<b>37% (no bracket limit):</b> no tax-bracket ceiling at all; only the<br>"   // Q37
-                + "IRMAA ceiling above limits the fill.<br><br>"
-                // v2 2026-11-17 (Q37): Bob asked for this warning in bold, normal colour.
-                + "<b>Tier 5 (no IRMAA limit) together with 37% (no bracket limit) removes the<br>"
-                + "fill ceiling: each year converts everything the Traditional balance allows,<br>"
-                + "limited only by the Fill cap, if set -- a dramatic setting.</b><br><br>"
-                + "The engine converts up to the LOWER of this and the IRMAA ceiling. With<br>"
-                + "Bob's default (IRMAA Standard + top of 22%), the $218k IRMAA cliff binds<br>"
-                + "first at ~$205k MAGI, filling all of 12% and most of 22% at zero surcharge.</html>");
+        // v2 2026-11-18 (Q38): the three Fill tooltips quote the tax year's first cliff and the
+        // plan's first year; built here and rebuilt when either changes.
+        refreshFillTips();
+        spSimStartYear.addChangeListener(e -> refreshFillTips());
 
         // v7: Edit thresholds... dialog button.
         btnEditThresholds = new JButton("Edit thresholds\u2026");
-        btnEditThresholds.setToolTipText("<html><b>Edit base (2026) thresholds</b><br>"
-                + "Opens a small editor for the BASE-YEAR IRMAA cliffs and ordinary-bracket<br>"
-                + "tops (MFJ and Single). These are the 2026 figures the inflation projection<br>"
-                + "scales forward via the IRMAA threshold-growth mode -- edit them if the IRS<br>"
-                + "or CMS publishes new numbers, or to stress-test a different schedule.<br>"
-                + "Values persist with the scenario. Reset-to-2026 is available in the dialog.<br><br>"
+        // v2 2026-11-18 (Q38): the dialog now holds the standard deduction, the 65+ add-on
+        // and a tax year (2026 or 2027) as well.
+        btnEditThresholds.setToolTipText("<html><b>Edit base thresholds</b><br>"
+                + "Opens a small editor for the IRMAA cliffs, ordinary-bracket tops, standard<br>"
+                + "deduction and 65+ add-on (MFJ and Single) for one tax year, 2026 or 2027.<br>"
+                + "They apply unchanged in the plan's first year and are projected forward<br>"
+                + "from there. The tax year also picks the IRMAA surcharge amounts. Edit them<br>"
+                + "to stress-test a different schedule. Values persist with the scenario.<br>"
+                + "Reset to 2026 and Reset to 2027 are in the dialog.<br><br>"
                 // v1 2026-10-21 (Q1)
                 + "Edited values are part of the SS Optimizer fingerprint (the 2026 values are<br>"
                 + "not), so SS Optimizer results saved under other thresholds are never reused.<br>"
@@ -2111,8 +2108,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         }));
         inner.add(Box.createVerticalStrut(4));
         // v9: Roth conversion + IRMAA controls split into their own collapsible
-        // section, collapsed by default (rarely edited). All persistence keys and
-        // tooltips unchanged -- only the visual grouping moved.
+        // section. All persistence keys and tooltips unchanged -- only the visual
+        // grouping moved. (Collapsed at startup, like every card since Q43.)
         inner.add(card("Roth Conversion & IRMAA Surcharge", new Object[]{
                 null,                      chkConvEnabled,   // v12
                 "Conversion mode",         tglConvMode,
@@ -2125,7 +2122,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 "MAGI 2 years before sim start ($, 0=estimate)", spPriorMagi2,   // v1 2026-10-14 (F2)
                 "MAGI 1 year before sim start ($, 0=estimate)",  spPriorMagi1,
                 "Base thresholds",         btnEditThresholds,
-        }, /*defaultExpanded=*/false));
+        }));
         inner.add(Box.createVerticalStrut(4));
         refreshTaxEngineEnabled();  // set initial enabled/greyed state
         refreshStateFieldsEnabled();  // v5: initial state-field enable/greyed state
@@ -2282,16 +2279,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // click target, and the saved section state. The combo keeps its own 32px
         // maximum because these rows are still built here, not by card().
         //
-        // Section key: sectionKey("Historical Stress Scenario") -> "historicalstress
-        // scenario". A new key, so it simply defaults to expanded the first time and
-        // is written to the panel-state file from then on. No saved layout is
-        // invalidated -- loadPanelState reads whatever keys it finds.
+        // v2 2026-11-18 (Q43): starts collapsed like every other input card.
         JPanel bodyScenario = new JPanel();
         bodyScenario.setLayout(new BoxLayout(bodyScenario, BoxLayout.Y_AXIS));
         bodyScenario.setOpaque(false);
         bodyScenario.setAlignmentX(LEFT_ALIGNMENT);
         cardScenario.add(collapseHeader("Historical Stress Scenario",
-                cardScenario, bodyScenario, /*defaultExpanded=*/true));
+                cardScenario, bodyScenario));
 
         JLabel scenRowLbl = new JLabel("Sequence of returns");
         scenRowLbl.setFont(new Font("SansSerif", Font.PLAIN, 14));
@@ -3214,9 +3208,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                     + "See Assumptions &amp; Methods, section 3.</html>";
                         // v1 2026-10-14: thresholds follow the LOOKBACK return's
                         // filing status; the surcharge is per Medicare enrollee.
+                        // v2 2026-11-18 (Q38): the first cliff and its tax year come from
+                        // Edit thresholds (they were written in as the 2026 figures).
                         String basis = er.irmaaJoint
-                                ? "joint return (2026 base $218,000)"
-                                : "single return (2026 base $109,000)";
+                                ? "joint return (" + TaxEngine.ACTIVE_TAX_YEAR + " base $"
+                                        + String.format("%,.0f", TaxEngine.ACTIVE_IRMAA_MFJ[0]) + ")"
+                                : "single return (" + TaxEngine.ACTIVE_TAX_YEAR + " base $"
+                                        + String.format("%,.0f", TaxEngine.ACTIVE_IRMAA_SINGLE[0]) + ")";
                         // v1 2026-10-14 (F2): where the lookback MAGI came from in the
                         // first two simulation years.
                         String src = er.irmaaSrc == 1
@@ -3250,13 +3248,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                         + "The surcharge is per Medicare enrollee: each person 65 or older<br>"
                                         + "pays it; a spouse not yet 65 or a deceased spouse does not.<br>"
                                         + "Because your conversions and later RMDs raise MAGI, they can<br>"
-                                        + "trip a higher tier two years out. Thresholds are 2026 values,<br>"
+                                        // v2 2026-11-18 (Q38): the tax year set under Edit thresholds.
+                                        + "trip a higher tier two years out. Thresholds are the %d values<br>"
+                                        + "from Edit thresholds (Roth Conversion &amp; IRMAA Surcharge card),<br>"
                                         + "grown per your IRMAA threshold-growth mode. See Assumptions &amp; Methods.%s</html>",
                                 CURRENCY.format(Math.round(er.irmaa / d)),
                                 er.irmaaTier, er.irmaaPeople,
                                 er.irmaaPeople == 1 ? "person" : "people",
                                 CURRENCY.format(Math.round(er.irmaa / d / Math.max(1, er.irmaaPeople))),
-                                basis, src);
+                                basis, TaxEngine.ACTIVE_TAX_YEAR, src);
                     }
                     case COL_MAGI -> {
                         if (!er.drawing) return null;
@@ -3647,7 +3647,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             + "+ ordinary income (max(RMD, Traditional draw) + annuity + conversion),<br>"
                             + "minus the MFJ + age-65 standard deduction (and, in 2025-2028, the OBBBA<br>"
                             + "senior deduction), run through chained-CPI-indexed<br>"   // v1 2026-10-20 (SD1)
-                            + "2026 brackets, plus the selected STATE tax and the IRMAA surcharge.<br>"
+                            // v2 2026-11-18 (Q38): the brackets of the tax year under Edit thresholds.
+                            + "brackets (2026 or 2027, per Edit thresholds on the Roth Conversion<br>"
+                            + "&amp; IRMAA Surcharge card), plus the selected STATE tax and the IRMAA surcharge.<br>"
                             + "(State defaults to Arizona; Colorado, Florida, Idaho, Nevada, Oklahoma<br>"
                             + "and Custom are on the Tax Engine card.) When OFF, reverts to the legacy flat escalator. Hover<br>"
                             + "a cell for that year's breakdown. See the Assumptions &amp; Methods tab.</html>";
@@ -4967,6 +4969,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<li>Additional age-65 standard deduction: $1,650 per qualifying spouse (2026, per IRS "
                 + "Rev. Proc. 2025-32), applied once each spouse reaches age 65 ($3,300 combined once both "
                 + "are 65+). Supersedes the 2025 figure of $1,600.</li>"
+                // v2 2026-11-18 (Q38)
+                + "<li>2027 (IRS Rev. Proc. 2026-35): $33,200 MFJ / $16,600 single; 65+ add-on $1,700 per "
+                + "qualifying spouse / $2,100 single. Used when the tax year under <i>Edit "
+                + "thresholds&hellip;</i> (<i>Roth Conversion &amp; IRMAA Surcharge</i> card) is 2027; all "
+                + "four figures can be edited there (since November 18, 2026).</li>"
                 // v1 2026-10-20 (SD1)
                 + "<li><b>OBBBA senior deduction</b> (temporary; modeled since October 20, 2026) &mdash; "
                 + "see below.</li>"
@@ -5073,6 +5080,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "</ul>"
                 + "<p>A Single return (also qualifying surviving spouse) uses half the thresholds &mdash; "
                 + "$109,000, $137,000, $171,000, $205,000 and $500,000 &mdash; and the same per-person amounts.</p>"
+                // v2 2026-11-18 (Q38)
+                + "<p><b>2027 figures (since November 18, 2026).</b> CMS published the 2027 schedule on "
+                + "November 17, 2026: joint-return cliffs $224,000, $282,000, $354,000, $424,000 and "
+                + "$750,000; Single $112,000, $141,000, $177,000, $212,000 and $500,000; per-person "
+                + "surcharges $1,189, $2,989, $4,788, $6,587 and $7,186 a year. The tax year chosen under "
+                + "<i>Edit thresholds&hellip;</i> on the <i>Roth Conversion &amp; IRMAA Surcharge</i> card "
+                + "(2026 or 2027) decides which schedule a plan uses. Its values apply unchanged in the "
+                + "plan's first year and are projected forward from there.</p>"
                 + "<p><b>After a death (v1 2026-10-14).</b> Only the survivor pays. The survivor's first two "
                 + "years are judged on the couple's last two joint returns &mdash; the death-year return may "
                 + "still be filed jointly (IRS Pub. 501) &mdash; so the <b>joint</b> thresholds apply; the Single "
@@ -5347,7 +5362,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "per your threshold-growth mode and the bracket edge with the chained CPI, as the law indexes "
                 + "each. In 2025&ndash;2028 the bracket edge, stated in MAGI, also counts the OBBBA senior "
                 + "deduction left at that MAGI (section 4). "   // v1 2026-10-20 (SD1)
-                + "<b>The buffer is inflation-indexed</b>: enter it in 2026 dollars and it grows with "
+                + "<b>The buffer is inflation-indexed</b>: enter it in the plan's first-year dollars and it grows with "
                 + "inflation, as the threshold does under Full CPI (current law), so under that default the "
                 + "cushion and the MAGI target hold steady in today's dollars for the whole horizon. (Held in "
                 + "nominal dollars, as before v12, a $13,000 "
@@ -5894,7 +5909,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "silently reused. Since October 21, 2026 that includes the IRMAA cliffs and bracket tops "
                 + "edited under <i>Edit thresholds&hellip;</i> on the <i>Roth Conversion &amp; IRMAA "
                 + "Surcharge</i> card; they join the hash only when they differ from the 2026 values, so a "
-                + "plan on the defaults keeps its fingerprint and its saved rows. Each row stores its full working as well as its results &mdash; every "
+                + "plan on the defaults keeps its fingerprint and its saved rows. "
+                // v2 2026-11-18 (Q38)
+                + "Since November 18, 2026 the standard deduction, the 65+ add-on and the tax year in the "
+                + "same dialog join it the same way: only when they differ from the 2026 values. "
+                + "Each row stores its full working as well as its results &mdash; every "
                 + "per-year violation, every graced dip, the floors it was judged against and its margin to "
                 + "each &mdash; so a batch read back off disk explains its verdicts exactly as a fresh one "
                 + "does. Delete the file for a clean slate; it costs only the resume.</p>"
@@ -9511,18 +9530,114 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private void syncActiveThresholds() {
         // v1 2026-10-22 (Q3): a change under a running batch stops it. Announced before
         // the tables move, so a worker that read a moved table sees optTaxGen moved too.
-        if (optBatchRunning && TaxEngine.thresholdsDiffer(editBracketTopMFJ, editBracketTopSingle,
-                editIrmaaThreshMFJ, editIrmaaThreshSingle))
+        // v2 2026-11-18 (Q38): the standard deduction, the 65+ add-on and the tax year too.
+        if (optBatchRunning && (TaxEngine.thresholdsDiffer(editBracketTopMFJ, editBracketTopSingle,
+                editIrmaaThreshMFJ, editIrmaaThreshSingle)
+                || TaxEngine.baseDiffers(editStdDedMFJ, editStdDedSingle,
+                        editAdd65MFJ, editAdd65Single, editTaxYear)))
             stopBatchForTaxChange("tax thresholds");
         TaxEngine.setActiveThresholds(
                 editBracketTopMFJ, editBracketTopSingle,
                 editIrmaaThreshMFJ, editIrmaaThreshSingle);
+        TaxEngine.setActiveBase(editStdDedMFJ, editStdDedSingle,
+                editAdd65MFJ, editAdd65Single, editTaxYear);
+        refreshFillTips();   // Q38: they quote the tax year's first cliff
     }
 
-    /** v7: modal editor for the base-year (2026) IRMAA cliffs and ordinary-
-     *  bracket tops, MFJ and Single. Edits the frame's editable arrays in place
-     *  on OK; the inflation projection scales them forward unchanged. Reset
-     *  restores the 2026 constants. Values persist with the scenario. */
+    /** v2 2026-11-18 (Q38, Bob 9:32 AM): the Fill buffer, Fill IRMAA tier and Fill bracket
+     *  tooltips (Roth Conversion & IRMAA Surcharge card). They quote the first IRMAA cliff
+     *  (MFJ) of the tax year under Edit thresholds, and the buffer is in the plan's
+     *  first-year dollars (the fill scales it by that year's inflation factor, 1.0).
+     *  Called from syncActiveThresholds and the start-year spinner; a no-op until the
+     *  controls exist. */
+    private void refreshFillTips() {
+        if (spConvBuffer == null || cmbFillIrmaaTier == null || cmbFillBracket == null
+                || spSimStartYear == null) return;
+        int ty = editTaxYear, py = iv(spSimStartYear);
+        double c1 = editIrmaaThreshMFJ[0];
+        String cliff  = String.format("$%,.0f", c1);
+        String target = String.format("$%,.0f", c1 - 13_000);          // the default buffer
+        String cliffK = "$" + Math.round(c1 / 1000) + "k", targetK = "$" + Math.round((c1 - 13_000) / 1000) + "k";
+        String warn = "<b>Tier 5 (no IRMAA limit) together with 37% (no bracket limit) removes the<br>"
+                + "fill ceiling: each year converts everything the Traditional balance allows,<br>"
+                + "limited only by the Fill cap, if set -- a dramatic setting.</b><br><br>";   // Q37
+        spConvBuffer.setToolTipText("<html><b>MAGI buffer below the IRMAA cliff ($)</b><br>"
+                + "Used in <b>Fill to MAGI target</b> mode. The fill stops this many dollars<br>"
+                + "below the selected IRMAA tier's threshold (Standard: " + ty + " base " + cliff + "<br>"
+                + "MFJ, inflation-indexed), leaving headroom so an income surprise does not<br>"
+                + "trip the surcharge. Default $13,000 (with Standard selected, a ~" + target + "<br>"
+                + "MAGI target in " + py + " dollars, the plan's first year).<br><br>"
+                + "<b>Inflation-indexed</b> (v12): enter it in " + py + " dollars (the plan's first<br>"
+                + "year); each year it grows with inflation, as the threshold does under Full<br>"
+                + "CPI (current law), so the cushion -- and the MAGI target -- hold steady in<br>"
+                + "today's dollars.</html>");
+        cmbFillIrmaaTier.setToolTipText("<html><b>Fill-to-target: IRMAA tier ceiling</b><br>"
+                + "Used in <b>Fill to MAGI target</b> mode. The conversion is sized so MAGI<br>"
+                + "stays UNDER the selected IRMAA cliff (minus the buffer below).<br><br>"
+                + "<b>Standard (default):</b> stay under the first cliff (" + ty + " base " + cliff + "<br>"
+                + "MFJ) -- zero Medicare surcharge. <b>Tier 1..4:</b> deliberately accept that<br>"
+                + "surcharge tier to convert more, e.g. to drain Traditional faster and<br>"
+                + "cut future RMDs / widow-year tax. <b>Tier 5 (no IRMAA limit):</b> no IRMAA<br>"
+                + "ceiling at all; only the tax-bracket ceiling below limits the fill.<br><br>"
+                + warn
+                + "The engine still takes the LOWER of this ceiling and the tax-bracket<br>"
+                + "ceiling below.</html>");
+        cmbFillBracket.setToolTipText("<html><b>Fill-to-target: tax-bracket ceiling</b><br>"
+                + "Used in <b>Fill to MAGI target</b> mode. The conversion is also held so<br>"
+                + "taxable income does not exceed the TOP of the selected ordinary bracket.<br>"
+                + "Unlike IRMAA this is NOT a cliff -- crossing it taxes only the marginal<br>"
+                + "dollars -- so no buffer is applied to it; the fill may land exactly on it.<br>"
+                + "In 2025-2028 the MAGI at the bracket top also counts the OBBBA senior<br>"
+                + "deduction left at that MAGI (it shrinks as MAGI rises).<br><br>"
+                + "<b>37% (no bracket limit):</b> no tax-bracket ceiling at all; only the<br>"
+                + "IRMAA ceiling above limits the fill.<br><br>"
+                + warn
+                + "The engine converts up to the LOWER of this and the IRMAA ceiling. With<br>"
+                + "Bob's default (IRMAA Standard + top of 22%), the " + cliffK + " IRMAA cliff (" + ty + ")<br>"
+                + "binds first at ~" + targetK + " MAGI, filling all of 12% and most of 22% at zero<br>"
+                + "surcharge.</html>");
+    }
+
+    /** v2 2026-11-18 (Q38): Reset to 2026 by the computer's date (Bob, Nov 17, 2026):
+     *  0 = available; 1 = greyed out and disabled from January 1, 2027; 2 = hidden from
+     *  February 1, 2027. */
+    static int reset2026State(java.time.LocalDate today) {
+        if (today.isBefore(java.time.LocalDate.of(2027, 1, 1))) return 0;
+        if (today.isBefore(java.time.LocalDate.of(2027, 2, 1))) return 1;
+        return 2;
+    }
+
+    /** v2 2026-11-18 (Q38): the line at the top of the Edit base thresholds dialog. */
+    private static String thresholdNoteHtml(int taxYear, int planYear) {
+        return "<html><div style='width:430px'><b>Tax year " + taxYear + "</b> &mdash; set by the "
+                + "Reset button pressed last; editing a value keeps it.<br>"
+                + "<i>These values apply unchanged in " + planYear + ", the plan's first year, and "
+                + "are projected forward from there. The tax year also picks the IRMAA surcharge "
+                + "amounts (hover here to see them). Cliffs must increase down each column; "
+                + "bracket tops likewise.</i></div></html>";
+    }
+
+    /** v2 2026-11-18 (Q38): that year's per-person IRMAA surcharges, for the note's tooltip. */
+    private static String surchargeTipHtml(int taxYear) {
+        double[] s = TaxEngine.irmaaSurchargeFor(taxYear);
+        StringBuilder sb = new StringBuilder("<html><b>IRMAA surcharge per person, tax year ")
+                .append(taxYear).append("</b><br>(Part B + Part D, per year)<br>");
+        for (int t = 1; t < s.length; t++)
+            sb.append("Tier ").append(t).append(": $").append(String.format("%,.2f", s[t])).append("<br>");
+        return sb.append("<br>Set by the tax year; not editable here. Projected<br>"
+                + "forward from the plan's first year.</html>").toString();
+    }
+
+    /** v7: modal editor for the base IRMAA cliffs and ordinary-bracket tops, MFJ and
+     *  Single. Edits the frame's editable values on OK; the inflation projection scales
+     *  them forward. Values persist with the scenario.
+     *  v2 2026-11-18 (Q38): also the standard deduction and the 65+ add-on, and the tax
+     *  year the figures belong to (2026 or 2027): set by the Reset button pressed last
+     *  and kept when a value is edited by hand. The year also picks the IRMAA surcharge
+     *  table. The values apply unchanged in the plan's first simulation year and are
+     *  projected forward from there. Reset to 2026 follows the computer's date
+     *  (reset2026State). The buttons are components now, so a Reset refills the fields
+     *  without closing the dialog. */
     private void showThresholdDialog() {
         // Labels for the five IRMAA upper boundaries and the editable bracket
         // tops (10/12/22/24/32/35 -> six finite tops; the 37% band has no top).
@@ -9541,6 +9656,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         double[] wIrmaaSingle = editIrmaaThreshSingle.clone();
         double[] wBrkMFJ      = editBracketTopMFJ.clone();
         double[] wBrkSingle   = editBracketTopSingle.clone();
+        final int[] wYear     = { editTaxYear };   // Q38: changed only by a Reset button
 
         // Build the spinner grids. Bracket-top arrays may include the +inf top
         // row; only edit the finite tops (all but the last).
@@ -9549,6 +9665,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         int nBrk = Math.min(brkLabels.length, wBrkMFJ.length - 1); // exclude +inf top
         JSpinner[] spBrkMFJ    = new JSpinner[nBrk];
         JSpinner[] spBrkSingle = new JSpinner[nBrk];
+        // Q38: standard deduction and 65+ add-on (MFJ: per spouse).
+        JSpinner spStdMFJ    = spinI((int) Math.round(editStdDedMFJ),    0, 1_000_000, 100, "#,###");
+        JSpinner spStdSingle = spinI((int) Math.round(editStdDedSingle), 0, 1_000_000, 100, "#,###");
+        JSpinner spAddMFJ    = spinI((int) Math.round(editAdd65MFJ),     0,   100_000,  50, "#,###");
+        JSpinner spAddSingle = spinI((int) Math.round(editAdd65Single),  0,   100_000,  50, "#,###");
 
         JPanel grid = new JPanel(new java.awt.GridBagLayout());
         java.awt.GridBagConstraints g = new java.awt.GridBagConstraints();
@@ -9559,7 +9680,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         java.util.function.BiConsumer<String, int[]> header = (title, span) -> { };
         // -- IRMAA section header --
         g.gridx = 0; g.gridy = row; g.gridwidth = 3;
-        grid.add(sectionLabel("IRMAA base cliffs (MAGI, 2026 $)"), g);
+        grid.add(sectionLabel("IRMAA cliffs (MAGI)"), g);
         g.gridwidth = 1; row++;
         g.gridx = 1; g.gridy = row; grid.add(new JLabel("MFJ"), g);
         g.gridx = 2;                grid.add(new JLabel("Single"), g);
@@ -9572,9 +9693,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             g.gridx = 2; grid.add(spIrmaaSingle[i], g);
             row++;
         }
-        // -- Bracket section header --
+        // -- Bracket section header (Q38: extra space above it, Bob Nov 18) --
         g.gridx = 0; g.gridy = row; g.gridwidth = 3;
-        grid.add(sectionLabel("Ordinary bracket tops (taxable income, 2026 $)"), g);
+        g.insets = new java.awt.Insets(16, 4, 2, 4);
+        grid.add(sectionLabel("Ordinary bracket tops (taxable income)"), g);
+        g.insets = new java.awt.Insets(2, 4, 2, 4);
         g.gridwidth = 1; row++;
         g.gridx = 1; g.gridy = row; grid.add(new JLabel("MFJ"), g);
         g.gridx = 2;                grid.add(new JLabel("Single"), g);
@@ -9587,42 +9710,91 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             g.gridx = 2; grid.add(spBrkSingle[i], g);
             row++;
         }
+        // -- Q38: standard deduction section (extra space above it, as above) --
+        g.gridx = 0; g.gridy = row; g.gridwidth = 3;
+        g.insets = new java.awt.Insets(16, 4, 2, 4);
+        grid.add(sectionLabel("Standard deduction"), g);
+        g.insets = new java.awt.Insets(2, 4, 2, 4);
+        g.gridwidth = 1; row++;
+        g.gridx = 1; g.gridy = row; grid.add(new JLabel("MFJ"), g);
+        g.gridx = 2;                grid.add(new JLabel("Single"), g);
+        row++;
+        g.gridx = 0; g.gridy = row; grid.add(new JLabel("Base amount"), g);
+        g.gridx = 1; grid.add(spStdMFJ, g);
+        g.gridx = 2; grid.add(spStdSingle, g);
+        row++;
+        g.gridx = 0; g.gridy = row; grid.add(new JLabel("Age 65+ add-on (MFJ: each spouse)"), g);
+        g.gridx = 1; grid.add(spAddMFJ, g);
+        g.gridx = 2; grid.add(spAddSingle, g);
+        row++;
 
         JScrollPane scroll = new JScrollPane(grid);
-        scroll.setPreferredSize(new java.awt.Dimension(460, 420));
+        scroll.setPreferredSize(new java.awt.Dimension(540, 500));   // Q38: fits all 26 fields
         scroll.getVerticalScrollBar().setUnitIncrement(16);
 
         JPanel content = new JPanel(new java.awt.BorderLayout(0, 6));
-        JLabel note = new JLabel("<html><i>Base-year (2026) values. The IRMAA "
-                + "threshold-growth setting projects these forward. Cliffs must "
-                + "increase down each column; bracket tops likewise.</i></html>");
+        // Q38: the tax year and how the values are used; the tooltip lists that year's
+        // per-person surcharges.
+        int planYear = iv(spSimStartYear);
+        JLabel note = new JLabel();
+        Runnable showYear = () -> {
+            note.setText(thresholdNoteHtml(wYear[0], planYear));
+            note.setToolTipText(surchargeTipHtml(wYear[0]));
+        };
+        showYear.run();
         content.add(note, java.awt.BorderLayout.NORTH);
         content.add(scroll, java.awt.BorderLayout.CENTER);
 
-        // Reset-to-2026 button lives inside the option pane's button row via a
-        // custom options array.
-        Object[] options = { "OK", "Cancel", "Reset to 2026" };
-        while (true) {
-            int choice = JOptionPane.showOptionDialog(this, content,
-                    "Edit base thresholds", JOptionPane.YES_NO_CANCEL_OPTION,
-                    JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
-
-            if (choice == 2) { // Reset to 2026 -- refill spinners, keep dialog open
-                double[] rIrmaaMFJ    = TaxEngine.IRMAA_THRESH_MFJ_2026.clone();
-                double[] rIrmaaSingle = TaxEngine.IRMAA_THRESH_SINGLE_2026.clone();
-                double[] rBrkMFJ      = bracketTops(TaxEngine.BRACKETS_2026);
-                double[] rBrkSingle   = bracketTops(TaxEngine.BRACKETS_SINGLE_2026);
-                for (int i = 0; i < spIrmaaMFJ.length; i++) {
-                    spIrmaaMFJ[i].setValue((int) Math.round(rIrmaaMFJ[i]));
-                    spIrmaaSingle[i].setValue((int) Math.round(rIrmaaSingle[i]));
-                }
-                for (int i = 0; i < nBrk; i++) {
-                    spBrkMFJ[i].setValue((int) Math.round(rBrkMFJ[i]));
-                    spBrkSingle[i].setValue((int) Math.round(rBrkSingle[i]));
-                }
-                continue;
+        // Q38: Reset to 2026 / Reset to 2027 refill every field and set the tax year.
+        java.util.function.IntConsumer fillYear = yr -> {
+            double[] rIrmaaMFJ    = TaxEngine.irmaaThreshFor(yr, TaxEngine.FilingStatus.MFJ);
+            double[] rIrmaaSingle = TaxEngine.irmaaThreshFor(yr, TaxEngine.FilingStatus.SINGLE);
+            double[] rBrkMFJ      = bracketTops(TaxEngine.bracketsFor(yr, TaxEngine.FilingStatus.MFJ));
+            double[] rBrkSingle   = bracketTops(TaxEngine.bracketsFor(yr, TaxEngine.FilingStatus.SINGLE));
+            for (int i = 0; i < spIrmaaMFJ.length; i++) {
+                spIrmaaMFJ[i].setValue((int) Math.round(rIrmaaMFJ[i]));
+                spIrmaaSingle[i].setValue((int) Math.round(rIrmaaSingle[i]));
             }
-            if (choice != 0) return; // Cancel / closed -> discard
+            for (int i = 0; i < nBrk; i++) {
+                spBrkMFJ[i].setValue((int) Math.round(rBrkMFJ[i]));
+                spBrkSingle[i].setValue((int) Math.round(rBrkSingle[i]));
+            }
+            spStdMFJ.setValue((int) Math.round(TaxEngine.stdDedFor(yr, TaxEngine.FilingStatus.MFJ)));
+            spStdSingle.setValue((int) Math.round(TaxEngine.stdDedFor(yr, TaxEngine.FilingStatus.SINGLE)));
+            spAddMFJ.setValue((int) Math.round(TaxEngine.add65For(yr, TaxEngine.FilingStatus.MFJ)));
+            spAddSingle.setValue((int) Math.round(TaxEngine.add65For(yr, TaxEngine.FilingStatus.SINGLE)));
+            wYear[0] = yr;
+            showYear.run();
+        };
+
+        // The buttons are components so a Reset stays inside the open dialog and the
+        // 2026 one can be greyed out or left off by date.
+        JButton bOk     = new JButton("OK");
+        JButton bCancel = new JButton("Cancel");
+        JButton b2026   = new JButton("Reset to 2026");
+        JButton b2027   = new JButton("Reset to 2027");
+        int st2026 = reset2026State(java.time.LocalDate.now());
+        b2026.setEnabled(st2026 == 0);
+        if (st2026 == 1)
+            b2026.setToolTipText("<html>The 2026 tax year has ended, so its values can no longer be<br>"
+                    + "chosen here. This button disappears on February 1, 2027.</html>");
+        Object[] options = (st2026 == 2)
+                ? new Object[]{ bOk, bCancel, b2027 }
+                : new Object[]{ bOk, bCancel, b2026, b2027 };
+        JOptionPane pane = new JOptionPane(content, JOptionPane.PLAIN_MESSAGE,
+                JOptionPane.DEFAULT_OPTION, null, options, bOk);
+        bOk.addActionListener(e -> pane.setValue(bOk));
+        bCancel.addActionListener(e -> pane.setValue(bCancel));
+        b2026.addActionListener(e -> fillYear.accept(2026));
+        b2027.addActionListener(e -> fillYear.accept(2027));
+
+        while (true) {
+            pane.setValue(JOptionPane.UNINITIALIZED_VALUE);
+            JDialog dlg = pane.createDialog(this, "Edit base thresholds");
+            dlg.getRootPane().setDefaultButton(bOk);
+            dlg.setVisible(true);   // modal
+            dlg.dispose();
+            if (pane.getValue() != bOk) return; // Cancel / closed -> discard
 
             // OK: read spinners into working copies, validate monotonicity.
             for (int i = 0; i < spIrmaaMFJ.length; i++) {
@@ -9649,6 +9821,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             editIrmaaThreshSingle = wIrmaaSingle;
             System.arraycopy(wBrkMFJ,    0, editBracketTopMFJ,    0, nBrk);
             System.arraycopy(wBrkSingle, 0, editBracketTopSingle, 0, nBrk);
+            editStdDedMFJ    = iv(spStdMFJ);      // Q38
+            editStdDedSingle = iv(spStdSingle);
+            editAdd65MFJ     = iv(spAddMFJ);
+            editAdd65Single  = iv(spAddSingle);
+            editTaxYear      = wYear[0];
             syncActiveThresholds();
             checkOptStale();   // v1 2026-10-21 (Q1): thresholds are part of the fingerprint now
             return;
@@ -10622,6 +10799,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         props.setProperty("tax.editIrmaaSingle",    csv(editIrmaaThreshSingle));
         props.setProperty("tax.editBracketMFJ",     csv(editBracketTopMFJ));
         props.setProperty("tax.editBracketSingle",  csv(editBracketTopSingle));
+        // v2 2026-11-18 (Q38): the tax year and the standard deduction / 65+ add-on (MFJ, Single).
+        props.setProperty("tax.thresholdYear",      String.valueOf(editTaxYear));
+        props.setProperty("tax.editStdDed",         csv(new double[]{ editStdDedMFJ, editStdDedSingle }));
+        props.setProperty("tax.editAdd65",          csv(new double[]{ editAdd65MFJ, editAdd65Single }));
         props.setProperty("tax.filingStatus",       String.valueOf(cmbFilingStatus.getSelectedIndex()));
         // v6: death event + Traditional share (saved with the scenario).
         props.setProperty("tax.deathWho",           String.valueOf(
@@ -10874,13 +11055,30 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 if (b >= 0 && b < 4) cmbFillBracket.setSelectedIndex(b + 1);
             } catch (Exception ignore) { }
         }
-        // v7: editable base thresholds. Absent -> keep the 2026 defaults already
-        // held on the frame. Length-checked so a malformed/old file can't corrupt
-        // the arrays; a mismatch is ignored and the 2026 default stands.
+        // v2 2026-11-18 (Q38): the tax year first -- its set fills anything the file lacks.
+        // A file saved before Q38 has no year. Those builds always used the 2026 standard
+        // deduction, 65+ add-on and surcharges, and started from the 2026 cliffs and tops,
+        // so it loads as 2026 and its results are unchanged.
+        int fileTaxYear = 2026;
+        String tyProp = props.getProperty("tax.thresholdYear");
+        if (tyProp != null) {
+            try { fileTaxYear = Integer.parseInt(tyProp.trim()); }
+            catch (NumberFormatException ignore) { }
+        }
+        applyTaxYearSet(fileTaxYear);
+        // v7: editable base thresholds. Absent -> keep the year's set applied just above.
+        // Length-checked so a malformed/old file can't corrupt the arrays; a mismatch is
+        // ignored and the year's value stands.
         editIrmaaThreshMFJ    = parseCsvOr(props.getProperty("tax.editIrmaaMFJ"),      editIrmaaThreshMFJ);
         editIrmaaThreshSingle = parseCsvOr(props.getProperty("tax.editIrmaaSingle"),   editIrmaaThreshSingle);
         editBracketTopMFJ     = parseCsvOr(props.getProperty("tax.editBracketMFJ"),    editBracketTopMFJ);
         editBracketTopSingle  = parseCsvOr(props.getProperty("tax.editBracketSingle"), editBracketTopSingle);
+        double[] fileStd = parseCsvOr(props.getProperty("tax.editStdDed"),
+                new double[]{ editStdDedMFJ, editStdDedSingle });
+        double[] fileAdd = parseCsvOr(props.getProperty("tax.editAdd65"),
+                new double[]{ editAdd65MFJ, editAdd65Single });
+        editStdDedMFJ = fileStd[0]; editStdDedSingle = fileStd[1];
+        editAdd65MFJ  = fileAdd[0]; editAdd65Single  = fileAdd[1];
         syncActiveThresholds(); // make loaded thresholds live immediately
         // v4: filing status. Absent in older (v3) scenarios -> default MFJ.
         if (props.getProperty("tax.filingStatus") != null && cmbFilingStatus != null) {
@@ -11167,44 +11365,6 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             for (String p : recent) pw.println(p);
         } catch (Exception ignored) {}
     }
-
-    // v7: load the collapsible-section layout preference. Called ONCE in the
-    // constructor BEFORE any card() is built, so each card honors its saved
-    // state. Missing file or missing key -> default expanded (handled by the
-    // getOrDefault in card()). Any parse issue silently leaves the map empty,
-    // which also defaults everything expanded.
-    private void loadPanelState() {
-        java.io.File f = new java.io.File(PANELSTATE_FILE);
-        if (!f.exists()) return;
-        java.util.Properties p = new java.util.Properties();
-        try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
-            p.load(in);
-        } catch (Exception ignored) { return; }
-        for (String name : p.stringPropertyNames()) {
-            sectionExpanded.put(name, Boolean.parseBoolean(p.getProperty(name)));
-        }
-        // v1 2026-10-19 (K1): the Annual Spending card's key was renamed -- carry an
-        // old saved setting across once, and drop the old entry from the file.
-        String newKey = sectionKey(SPENDING_CARD_KEY_TITLE);
-        if (sectionExpanded.containsKey(SPENDING_CARD_OLD_KEY)) {
-            Boolean old = sectionExpanded.remove(SPENDING_CARD_OLD_KEY);
-            sectionExpanded.putIfAbsent(newKey, old);
-            savePanelState();
-        }
-    }
-
-    // v7: persist the section layout. Called on every arrow toggle so the state
-    // survives an unclean exit. Best-effort: a write failure is ignored (the map
-    // still governs the live session).
-    private void savePanelState() {
-        java.util.Properties p = new java.util.Properties();
-        for (java.util.Map.Entry<String,Boolean> e : sectionExpanded.entrySet())
-            p.setProperty(e.getKey(), String.valueOf(e.getValue()));
-        try (java.io.FileOutputStream out = new java.io.FileOutputStream(PANELSTATE_FILE)) {
-            p.store(out, "IncomeLab input-pane section layout (app preference)");
-        } catch (Exception ignored) {}
-    }
-
 
     // =========================================================================
     //  CALIBRATION -- stores and retrieves run times for countdown estimates
@@ -16255,6 +16415,68 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         static final double[] IRMAA_THRESH_SINGLE_2026 = {109_000, 137_000, 171_000, 205_000, 500_000};
         static final double[] IRMAA_PER_PERSON_YR_2026 = {0, 1_148.40, 2_884.80, 4_620.00,  6_355.20,  6_936.00};
 
+        // v2 2026-11-18 (Q38): the 2027 set, chosen by the tax year under Edit thresholds.
+        // Brackets, standard deduction and 65+ add-on: IRS Rev. Proc. 2026-35 (IR-2026-133,
+        // Nov 5, 2026; add-on sec. 3.15(3)). IRMAA cliffs and surcharges: CMS fact sheet
+        // "2027 Medicare Parts A & B Premiums and Deductibles", Nov 17, 2026.
+        // Per-person 2027 annual surcharge (Part B + Part D) x 12:
+        //   T1 (83.70+15.40)*12 = 1,189.20   T2 (209.40+39.70)*12 = 2,989.20
+        //   T3 (335.00+64.00)*12 = 4,788.00  T4 (460.60+88.30)*12 = 6,586.80
+        //   T5 (502.40+96.40)*12 = 7,185.60
+        static final double[][] BRACKETS_2027 = {
+                {        0,   25_600, 0.10},
+                {   25_600,  104_050, 0.12},
+                {  104_050,  218_250, 0.22},
+                {  218_250,  416_650, 0.24},
+                {  416_650,  529_100, 0.32},
+                {  529_100,  793_650, 0.35},
+                {  793_650, Double.MAX_VALUE, 0.37}
+        };
+        static final double[][] BRACKETS_SINGLE_2027 = {
+                {        0,   12_800, 0.10},
+                {   12_800,   52_025, 0.12},
+                {   52_025,  109_125, 0.22},
+                {  109_125,  208_325, 0.24},
+                {  208_325,  264_550, 0.32},
+                {  264_550,  661_375, 0.35},
+                {  661_375, Double.MAX_VALUE, 0.37}
+        };
+        static final double STD_DED_MFJ_2027    = 33_200.0;
+        static final double STD_DED_SINGLE_2027 = 16_600.0;
+        static final double ADD_STD_DED_65_EACH_2027   = 1_700.0;  // per spouse (MFJ)
+        static final double ADD_STD_DED_65_SINGLE_2027 = 2_100.0;  // single filer
+        static final double[] IRMAA_THRESH_MFJ_2027    = {224_000, 282_000, 354_000, 424_000, 750_000};
+        static final double[] IRMAA_THRESH_SINGLE_2027 = {112_000, 141_000, 177_000, 212_000, 500_000};
+        static final double[] IRMAA_PER_PERSON_YR_2027 = {0, 1_189.20, 2_989.20, 4_788.00,  6_586.80,  7_185.60};
+
+        /** v2 2026-11-18 (Q38): the tax year whose set a year maps to -- 2027 or later
+         *  gives 2027 (the newest published), anything earlier gives 2026. */
+        static int baseTaxYearFor(int year) { return (year >= 2027) ? 2027 : 2026; }
+        static double[][] bracketsFor(int year, FilingStatus fs) {
+            boolean s = fs == FilingStatus.SINGLE;
+            return (baseTaxYearFor(year) == 2027) ? (s ? BRACKETS_SINGLE_2027 : BRACKETS_2027)
+                                                  : (s ? BRACKETS_SINGLE_2026 : BRACKETS_2026);
+        }
+        static double[] irmaaThreshFor(int year, FilingStatus fs) {
+            boolean s = fs == FilingStatus.SINGLE;
+            return (baseTaxYearFor(year) == 2027) ? (s ? IRMAA_THRESH_SINGLE_2027 : IRMAA_THRESH_MFJ_2027)
+                                                  : (s ? IRMAA_THRESH_SINGLE_2026 : IRMAA_THRESH_MFJ_2026);
+        }
+        static double stdDedFor(int year, FilingStatus fs) {
+            boolean s = fs == FilingStatus.SINGLE;
+            return (baseTaxYearFor(year) == 2027) ? (s ? STD_DED_SINGLE_2027 : STD_DED_MFJ_2027)
+                                                  : (s ? STD_DED_SINGLE_2026 : STD_DED_MFJ_2026);
+        }
+        /** MFJ: per qualifying spouse. */
+        static double add65For(int year, FilingStatus fs) {
+            boolean s = fs == FilingStatus.SINGLE;
+            return (baseTaxYearFor(year) == 2027) ? (s ? ADD_STD_DED_65_SINGLE_2027 : ADD_STD_DED_65_EACH_2027)
+                                                  : (s ? ADD_STD_DED_65_SINGLE_2026 : ADD_STD_DED_65_EACH_2026);
+        }
+        static double[] irmaaSurchargeFor(int year) {
+            return (baseTaxYearFor(year) == 2027) ? IRMAA_PER_PERSON_YR_2027 : IRMAA_PER_PERSON_YR_2026;
+        }
+
         // Social Security provisional-income thresholds. Statutory, NOT
         // inflation-indexed in real life (fixed since 1993) -- so we hold them
         // fixed here too, which realistically drags more SS into the taxable
@@ -16749,7 +16971,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 case FIXED -> ded = (mfj ? R.dedMfj : R.dedSingle) * (R.dedIndexed ? inflFactor : 1.0);
                 // v12 2026-10-07: deductions that follow the federal amount follow its
                 // chained indexing too (Arizona's by ARS 43-1041, Idaho's by conformity).
-                case FEDERAL_BASIC -> ded = infl(mfj ? STD_DED_MFJ_2026 : STD_DED_SINGLE_2026, fedFactor);
+                // v2 2026-11-18 (Q38): the active (dialog) federal basic amount.
+                case FEDERAL_BASIC -> ded = infl(mfj ? ACTIVE_STD_DED_MFJ : ACTIVE_STD_DED_SINGLE, fedFactor);
                 case FEDERAL_WITH_65 -> ded = totalDeduction(man65, woman65, fedFactor, fs);
                 default -> { }
             }
@@ -16882,6 +17105,37 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         static double[][] ACTIVE_BRACKETS_SINGLE  = deepCopy(BRACKETS_SINGLE_2026);
         static double[]   ACTIVE_IRMAA_MFJ        = IRMAA_THRESH_MFJ_2026.clone();
         static double[]   ACTIVE_IRMAA_SINGLE     = IRMAA_THRESH_SINGLE_2026.clone();
+        // v2 2026-11-18 (Q38): the standard deduction, the 65+ add-on and the tax year (which
+        // picks the surcharge table), set from the dialog via setActiveBase(). Default 2026.
+        static double ACTIVE_STD_DED_MFJ     = STD_DED_MFJ_2026;
+        static double ACTIVE_STD_DED_SINGLE  = STD_DED_SINGLE_2026;
+        static double ACTIVE_ADD65_EACH      = ADD_STD_DED_65_EACH_2026;
+        static double ACTIVE_ADD65_SINGLE    = ADD_STD_DED_65_SINGLE_2026;
+        static int    ACTIVE_TAX_YEAR        = 2026;
+
+        /** v2 2026-11-18 (Q38): push the dialog's standard deduction, 65+ add-on and tax year. */
+        static void setActiveBase(double stdMfj, double stdSingle, double add65Each,
+                                  double add65Single, int taxYear) {
+            ACTIVE_STD_DED_MFJ    = stdMfj;
+            ACTIVE_STD_DED_SINGLE = stdSingle;
+            ACTIVE_ADD65_EACH     = add65Each;
+            ACTIVE_ADD65_SINGLE   = add65Single;
+            ACTIVE_TAX_YEAR       = baseTaxYearFor(taxYear);
+        }
+        /** v2 2026-11-18 (Q38): would setActiveBase(these) change anything? */
+        static boolean baseDiffers(double stdMfj, double stdSingle, double add65Each,
+                                   double add65Single, int taxYear) {
+            return ACTIVE_STD_DED_MFJ != stdMfj || ACTIVE_STD_DED_SINGLE != stdSingle
+                    || ACTIVE_ADD65_EACH != add65Each || ACTIVE_ADD65_SINGLE != add65Single
+                    || ACTIVE_TAX_YEAR != baseTaxYearFor(taxYear);
+        }
+        /** v2 2026-11-18 (Q38): true while the base values are the 2026 constants. */
+        private static boolean baseIs2026() {
+            return ACTIVE_STD_DED_MFJ == STD_DED_MFJ_2026 && ACTIVE_STD_DED_SINGLE == STD_DED_SINGLE_2026
+                    && ACTIVE_ADD65_EACH == ADD_STD_DED_65_EACH_2026
+                    && ACTIVE_ADD65_SINGLE == ADD_STD_DED_65_SINGLE_2026
+                    && ACTIVE_TAX_YEAR == 2026;
+        }
 
         /** Push edited base-year thresholds into the active tables. Bracket tops
          *  arrays hold the UPPER edge of each bracket; the lower edge of bracket
@@ -16908,6 +17162,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             ACTIVE_BRACKETS_SINGLE = deepCopy(BRACKETS_SINGLE_2026);
             ACTIVE_IRMAA_MFJ      = IRMAA_THRESH_MFJ_2026.clone();
             ACTIVE_IRMAA_SINGLE   = IRMAA_THRESH_SINGLE_2026.clone();
+            setActiveBase(STD_DED_MFJ_2026, STD_DED_SINGLE_2026,           // Q38
+                    ADD_STD_DED_65_EACH_2026, ADD_STD_DED_65_SINGLE_2026, 2026);
         }
 
         /**
@@ -16919,15 +17175,22 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
          * and the saved rows -- it already had.
          */
         static String thresholdSignature() {
-            if (java.util.Arrays.deepEquals(ACTIVE_BRACKETS_MFJ, BRACKETS_2026)
+            String s = "";
+            if (!(java.util.Arrays.deepEquals(ACTIVE_BRACKETS_MFJ, BRACKETS_2026)
                     && java.util.Arrays.deepEquals(ACTIVE_BRACKETS_SINGLE, BRACKETS_SINGLE_2026)
                     && java.util.Arrays.equals(ACTIVE_IRMAA_MFJ, IRMAA_THRESH_MFJ_2026)
-                    && java.util.Arrays.equals(ACTIVE_IRMAA_SINGLE, IRMAA_THRESH_SINGLE_2026))
-                return "";
-            return ";thresholds=" + java.util.Arrays.deepToString(ACTIVE_BRACKETS_MFJ)
-                    + java.util.Arrays.deepToString(ACTIVE_BRACKETS_SINGLE)
-                    + java.util.Arrays.toString(ACTIVE_IRMAA_MFJ)
-                    + java.util.Arrays.toString(ACTIVE_IRMAA_SINGLE);
+                    && java.util.Arrays.equals(ACTIVE_IRMAA_SINGLE, IRMAA_THRESH_SINGLE_2026)))
+                s = ";thresholds=" + java.util.Arrays.deepToString(ACTIVE_BRACKETS_MFJ)
+                        + java.util.Arrays.deepToString(ACTIVE_BRACKETS_SINGLE)
+                        + java.util.Arrays.toString(ACTIVE_IRMAA_MFJ)
+                        + java.util.Arrays.toString(ACTIVE_IRMAA_SINGLE);
+            // v2 2026-11-18 (Q38): the standard deduction, 65+ add-on and tax year, likewise
+            // only when they differ from 2026 -- the part above is unchanged, so an edited
+            // plan saved before Q38 keeps its fingerprint too.
+            if (!baseIs2026())
+                s += ";base=" + ACTIVE_TAX_YEAR + "," + ACTIVE_STD_DED_MFJ + "," + ACTIVE_STD_DED_SINGLE
+                        + "," + ACTIVE_ADD65_EACH + "," + ACTIVE_ADD65_SINGLE;
+            return s;
         }
 
         /** v1 2026-10-22 (Q3): would setActiveThresholds(these) change the active tables?
@@ -17018,14 +17281,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
          *  deduction is separate (seniorDeduction, v1 2026-10-20). */
         static double totalDeduction(boolean man65, boolean woman65,
                                      double inflFactor, FilingStatus fs) {
+            // v2 2026-11-18 (Q38): the active (dialog) values; the 2026 constants by default.
             if (fs == FilingStatus.SINGLE) {
-                double d = infl(STD_DED_SINGLE_2026, inflFactor);
-                if (man65) d += infl(ADD_STD_DED_65_SINGLE_2026, inflFactor);
+                double d = infl(ACTIVE_STD_DED_SINGLE, inflFactor);
+                if (man65) d += infl(ACTIVE_ADD65_SINGLE, inflFactor);
                 return d;
             }
-            double d = infl(STD_DED_MFJ_2026, inflFactor);
-            if (man65)   d += infl(ADD_STD_DED_65_EACH_2026, inflFactor);
-            if (woman65) d += infl(ADD_STD_DED_65_EACH_2026, inflFactor);
+            double d = infl(ACTIVE_STD_DED_MFJ, inflFactor);
+            if (man65)   d += infl(ACTIVE_ADD65_EACH, inflFactor);
+            if (woman65) d += infl(ACTIVE_ADD65_EACH, inflFactor);
             return d;
         }
 
@@ -17238,8 +17502,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             // not yet 65.
             r.irmaaTier = irmaaTier(magiTwoYrPrior, irmaaThreshFactor, irmaaFs);
             r.irmaaEnrollees = irmaaEnrollees;
-            r.irmaaCost = IRMAA_PER_PERSON_YR_2026[Math.min(r.irmaaTier,
-                    IRMAA_PER_PERSON_YR_2026.length - 1)] * irmaaEnrollees * inflFactor;
+            // v2 2026-11-18 (Q38): the surcharge table of the tax year set under Edit thresholds.
+            double[] surcharge = irmaaSurchargeFor(ACTIVE_TAX_YEAR);
+            r.irmaaCost = surcharge[Math.min(r.irmaaTier, surcharge.length - 1)]
+                    * irmaaEnrollees * inflFactor;
 
             // v2 2026-11-02 (Q22): the top ORDINARY bracket -- the gain sits above the brackets.
             r.topBracket = topBracket((gain > 0) ? Math.max(0, r.taxableIncome - gain) : r.taxableIncome,
@@ -17848,26 +18114,21 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
      * body panel that holds the card's rows.
      *
      * Extracted from card() so a hand-built card gets IDENTICAL behaviour -- the
-     * triangle, the whole-row click target, and the same saved section state --
-     * without a second copy of any of it. The only card that needs this is the
+     * triangle and the whole-row click target -- without a second copy of any of it. The only card that needs this is the
      * Historical Stress Scenario card: card() clamps every row it lays out to 30px
      * high, which squashes a JComboBox, so that one builds its own rows and calls
      * this for the header.
      *
      * The caller supplies `body` and adds its own rows to it. This method sets the
-     * body's initial visibility from the saved state, so the caller must not.
+     * body's initial visibility, so the caller must not.
+     * v2 2026-11-18 (Q43): every card starts collapsed and the state is not saved.
      *
-     * @param title          display title; also the source of the save/load key
+     * @param title          display title
      * @param card           the card panel, revalidated on each toggle
      * @param body           the panel holding the rows; its visibility IS the state
-     * @param defaultExpanded state to use when nothing is saved for this section
      */
-    private JPanel collapseHeader(String title, JPanel card, JPanel body,
-                                  boolean defaultExpanded) {
-        // v7: section slug (stable key for save/load), derived from the title so
-        // no call site changes. Titles are unique across the pane.
-        final String key = sectionKey(title);
-        final boolean startExpanded = sectionExpanded.getOrDefault(key, defaultExpanded);
+    private JPanel collapseHeader(String title, JPanel card, JPanel body) {
+        final boolean startExpanded = false;   // Q43
 
         // Header row: a triangle (U+25BE down / U+25B8 right) + the section title.
         // v9: the ENTIRE header -- triangle, title, and the space across to the right
@@ -17905,8 +18166,6 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 boolean nowExpanded = !body.isVisible();
                 body.setVisible(nowExpanded);
                 arrow.setText(nowExpanded ? "\u25be" : "\u25b8");
-                sectionExpanded.put(key, nowExpanded);
-                savePanelState();                 // persist immediately
                 card.revalidate();
                 card.repaint();
             }
@@ -17918,18 +18177,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         arrow.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
         titleLbl.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
 
-        body.setVisible(startExpanded);           // honor saved/default state
+        body.setVisible(startExpanded);           // Q43: collapsed
         return header;
     }
 
+    // v2 2026-11-18 (Q43): one builder; every card starts collapsed (the v9 overload
+    // that chose expanded or collapsed per card is gone).
     private JPanel card(String title, Object[] items) {
-        return card(title, items, true);   // default: sections start expanded
-    }
-
-    // v9: overload allowing a section to start COLLAPSED by default (e.g. the
-    // rarely-edited Roth Conversion & IRMAA Surcharge section). A saved panel
-    // state still overrides this default on scenario load.
-    private JPanel card(String title, Object[] items, boolean defaultExpanded) {
         JPanel card = new JPanel();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBackground(Color.WHITE);
@@ -17949,7 +18203,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // inline here, which is why the one card that cannot use this helper -- the
         // Historical Stress Scenario card, hand-built so its JComboBox escapes the
         // 30px row clamp below -- had no triangle at all. One builder, both callers.
-        card.add(collapseHeader(title, card, body, defaultExpanded));
+        card.add(collapseHeader(title, card, body));
 
         for (int i = 0; i < items.length; i += 2) {
             Object labelObj = items[i]; Object comp = items[i+1];
@@ -17968,17 +18222,6 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
 
         card.add(body);                           // visibility already set by collapseHeader
         return card;
-    }
-
-    // v7: stable per-section key from the display title. Lowercases, keeps
-    // alphanumerics, collapses the rest to nothing -- e.g. "Social Security" ->
-    // "socialsecurity", "Tax Engine & Roth Conversion (v3)" ->
-    // "taxenginerothconversionv3". Stable as long as the title is unchanged.
-    private static String sectionKey(String title) {
-        StringBuilder sb = new StringBuilder();
-        for (char c : title.toLowerCase().toCharArray())
-            if (Character.isLetterOrDigit(c)) sb.append(c);
-        return sb.toString();
     }
 
     // v1 2026-10-19 (L1): the first JLabel under `root` whose text is `text`, or null.
