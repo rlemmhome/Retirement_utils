@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Tuesday, November 17, 2026 at 4:14 PM MST (UTC-7)
+// Last modified: Tuesday, November 17, 2026 at 8:57 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Tuesday, November 17, 2026 at 4:14 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Tuesday, November 17, 2026 at 8:57 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -529,7 +529,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private JLabel            lblConvEffect, lblConvEffectSub;
     private String            convEffectSubText;
     private int               convEffectSubWrapW = -1;
-    private transient ProResults convEffectFor, convEffectNoConv;
+    // v2 2026-11-17 (Q42): convEffectOther is the comparison run -- without conversions when the
+    // run converts, with conversions at the card's settings when it does not.
+    private transient ProResults convEffectFor, convEffectOther;
     private String            convEffectError;
     private int               convEffectGen;
     private JLabel            lblActualPoSSub;   // v1 2026-10-17 (PD1): paths that ran out
@@ -2672,26 +2674,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v2 2026-11-14 (Q29): Roth conversion tax effect.
         lblConvEffect    = mkMetricLabel();
         lblConvEffectSub = new JLabel(" ");
-        String convEffectTip = "<html><b>Roth conversion tax effect</b><br>"
-                + "After each run the program runs the same plan again with Roth conversions off --<br>"
-                + "the same random markets (same seed), every other input unchanged -- and compares<br>"
-                + "the lifetime taxes of the two median tables: <b>Tax (est) + Conv Tax</b> in every<br>"
-                + "withdrawal year, so federal, state, IRMAA and NIIT are all in. Each total adds up<br>"
-                + "the table's own cells.<br><br>"
-                + "<b>Saves</b> = lifetime tax without conversions minus with; <b>Costs</b> = the reverse.<br><br>"
-                + "<b>Weigh two things with it:</b><br>"
-                + "* <b>Traditional left at the plan's end.</b> Converting moves tax earlier. Without<br>"
-                + "&nbsp;&nbsp;&nbsp;conversions more Traditional is left, and it is taxed later -- to you or to<br>"
-                + "&nbsp;&nbsp;&nbsp;heirs. No heir tax rate is assumed; compare the two balances.<br>"
-                + "* <b>Withdrawals differ slightly between the two runs.</b> The PoS solver sizes each<br>"
-                + "&nbsp;&nbsp;&nbsp;year's draw from the balance it sees, and conversion tax lowers that balance,<br>"
-                + "&nbsp;&nbsp;&nbsp;so part of the difference comes from slightly different withdrawals.<br><br>"
-                + "Follows the Real/Nominal toggle (Real: each year in today's dollars). Reads<br>"
-                + "<i>Roth conversions are off</i> when <i>Perform Roth conversions</i> (Roth Conversion &amp;<br>"
-                + "IRMAA Surcharge card) or the computed tax engine is off. Run Simulation stays<br>"
-                + "greyed while the comparison runs. The SS Optimizer does not run it.</html>";
-        lblConvEffect.setToolTipText(convEffectTip);
-        lblConvEffectSub.setToolTipText(convEffectTip);
+        setConvEffectTip(CONV_EFFECT_TIP);   // v2 2026-11-17 (Q42): per run once the comparison is in
         metricsRow.add(wrapMetric(lblConvEffect, "Roth conversion tax effect", lblConvEffectSub));
         lblConvEffectSub.getParent().addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override public void componentResized(java.awt.event.ComponentEvent e) { wrapConvEffectSub(); }
@@ -4213,12 +4196,40 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "Traditional balances remaining at the plan's end. A reported tax saving or cost should therefore "
                 + "be considered alongside the ending Traditional balance, not as the sole measure of whether "
                 + "conversions are beneficial.</p>"
-                + "<p><b>How it is computed.</b> After each run the program runs the same plan again with Roth "
-                + "conversions off &mdash; the same random markets (same seed), every other input unchanged &mdash; "
+                + "<p><b>How it is computed.</b> After each run the program runs the same plan again the other way "
+                + "&mdash; with Roth conversions off when the run converts, or on at the Roth Conversion &amp; IRMAA "
+                + "Surcharge card's settings when it does not (since 2026-11-17) &mdash; with the same random markets "
+                + "(same seed) and every other input unchanged, "
                 + "and adds up Tax (est) + Conv Tax over the withdrawal years of each median table. Years before "
                 + "withdrawals start show no tax in the table and are not counted. In Today's $ each year is "
                 + "adjusted for inflation, but not discounted. Withdrawals differ slightly between the two runs, "
                 + "because conversion tax lowers the balance each year's withdrawal is sized from.</p>"
+                // v2 2026-11-17 (Q42)
+                + "<p><b>What the box shows (since 2026-11-17).</b> With conversions on: <i>Saves</i> or <i>Costs</i>, "
+                + "the two lifetime totals, the tax paid in the survivor years (after the death the scenario models) "
+                + "and the Traditional balance left at the plan's end, with conversions versus without. With "
+                + "conversions off: the RMDs over the plan and the part above what the plan withdraws anyway &mdash; "
+                + "<i>forced</i> RMDs, which go to the savings account &mdash; with the tax they caused (that year's "
+                + "Tax (est) less the same year with only the planned withdrawal taken, IRMAA counted two years "
+                + "later); then the same comparison for converting at the card's settings. Hovering the box shows "
+                + "every figure for both runs: lifetime tax, Conv Tax, RMDs, forced RMDs and their federal, state "
+                + "and IRMAA tax, the year Traditional reaches $0 and Tax (est) from then on, survivor-years tax, "
+                + "and Traditional at plan end. Not counted: interest on the savings forced RMDs add, years before "
+                + "withdrawals start, and any tax after the plan ends.</p>"
+                + "<p><b>The lifetime figure is not the whole answer.</b> Converting pays tax now, at your current "
+                + "bracket, to lower two taxes the lifetime figure cannot fully see:</p><ul>"
+                + "<li><b>The survivor's tax.</b> After a death the survivor files Single, with brackets about half "
+                + "as wide and lower IRMAA cliffs. RMDs from the same Traditional balance can then land in a higher "
+                + "bracket and over a cliff. The survivor-years figure shows this for the years the plan models.</li>"
+                + "<li><b>The heirs' tax.</b> Most heirs other than a spouse must empty an inherited Traditional IRA "
+                + "within 10 years, on top of their own earnings, often in their peak years. An inherited Roth also "
+                + "has to be emptied, but tax-free. This happens after the plan ends, so no figure counts it; the "
+                + "Traditional balance left at the plan's end is the measure of what would be taxed.</li></ul>"
+                + "<p>Example (made-up numbers): converting $50,000 a year at 22% costs $11,000 a year now. Left in "
+                + "Traditional, the same money might later be taxed at 24% for a survivor, or at 32% for an heir in "
+                + "peak earning years. So a run can show <i>Costs</i> and still be the better plan for the survivor "
+                + "and the heirs. Read <i>Saves</i> or <i>Costs</i> together with the survivor-years and plan-end "
+                + "Traditional figures, never on its own.</p>"
                 + "<div style='text-align:right; margin:6px 0 12px 0;'><a href='#toc' style='color:#5566aa; text-decoration:none; font-size:11px;'>&uarr; back to top</a></div>"
                 ;
     }
@@ -12085,6 +12096,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
 
         // v3: MAGI history for the IRMAA 2-year lookback (index by sim year).
         double[] magiHistory = new double[inp.horizon];
+        // v2 2026-11-17 (Q42): each year's MAGI had only the planned Traditional draw come out
+        // (no RMD above it) -- the lookback for the forced-RMD tax. Display only.
+        double[] magiNF = new double[inp.horizon];
         // v8: exact-tie-out Money Mkt (total) reserve. This REPLACES the old
         // median-composite (median balance x a median fraction) for the Money Mkt column,
         // which wobbled and lagged because it recombined independent per-year
@@ -12296,6 +12310,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             boolean irmaaJoint = filingFor(inp, calYear - 2)   // v1 2026-10-14: lookback
                     == TaxEngine.FilingStatus.MFJ;                 // return joint? (tooltip)
             int    mmIntTaxInt = 0;   // v12
+            // v2 2026-11-17 (Q42): the RMD above the planned draw and the tax it caused.
+            double forcedRmdRow = 0, forcedTaxRow = 0, forcedFedRow = 0, forcedStateRow = 0, forcedIrmaaRow = 0;
+            double magiNFRow = 0;
             int    convSSIndInt = 0;  // v12 2026-10-11: torpedo -- extra taxable SS from the conversion
             int    stStartInt = 0, stSubInt = 0, stExclInt = 0, stDedInt = 0, stTaxableInt = 0;
             boolean stParts = false;  // v12 2026-10-05: framework-state breakdown present
@@ -12473,6 +12490,32 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                             sale.withInterest(0));                   // v2 2026-11-02 (Q22)
                     mmIntTaxInt = (int) Math.max(0, tr.totalTax - trNoInt.totalTax);
                 }
+                // v2 2026-11-17 (Q42): the part of this year's RMD above the planned Traditional draw,
+                // and the tax it caused: this year's tax less the same year with only the planned
+                // draw taken, IRMAA judged on the matching lookback (magiNF, two years back). Display
+                // only: a separate computation; nothing feeds back. Not counted: interest on the
+                // savings the extra RMD adds.
+                forcedRmdRow = Math.max(0, tradDraw - tradPortion);
+                double lbNF = (y >= 2) ? magiNF[y - 2] : magiTwoYrPrior;
+                if (forcedRmdRow > 0.5 || lbNF != magiTwoYrPrior) {
+                    TaxEngine.TaxResult trNF = TaxEngine.compute(
+                            grossSS, ordinaryBeforeConv - forcedRmdRow, lbNF,
+                            p65, womanAge >= 65, inflFactor, fedF, irmaaTF,
+                            irmaaFs, irmaaPeople,
+                            fsYear, stProfile, calYear, tradPortion,
+                            streamsStateExempt(inp, calYear, ssInflNow, fAnn, fPen, fMil),
+                            stateCtx(inp, calYear, manAge, womanAge, manSS, womanSS, tradPortion,
+                                    nonExemptTaxable(inp.pensionStream, inp, calYear, ssInflNow, fPen),
+                                    nonExemptTaxable(inp.annuityStream, inp, calYear, ssInflNow, fAnn)),
+                            sale);
+                    forcedTaxRow   = tr.totalTax  - trNF.totalTax;
+                    forcedFedRow   = tr.fedTax    - trNF.fedTax;
+                    forcedStateRow = tr.stateTax  - trNF.stateTax;
+                    forcedIrmaaRow = tr.irmaaCost - trNF.irmaaCost;
+                    magiNFRow      = trNF.magi;
+                } else {
+                    magiNFRow = tr.magi;
+                }
                 taxableSSInt = (int) tr.taxableSS;
                 ordTaxInt    = (int) (tr.ordinaryOther - sale.agiPart());   // living ordinary only (Q22: less the sale)
                 seniorDedInt   = (int) tr.seniorDed;        // v1 2026-10-20 (SD1)
@@ -12524,6 +12567,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 double magiWithConv = tr.magi + conv + convSSInd;
                 magiInt        = (int) magiWithConv;
                 magiHistory[y] = magiWithConv;
+                magiNF[y]      = magiNFRow + conv + convSSInd;   // v2 2026-11-17 (Q42)
             } else {
                 // Legacy flat escalator (computed tax OFF, or pre-withdrawal).
                 tax = taxThisYear(inp, y);
@@ -12581,7 +12625,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                     niitRow    *= startPror;   // v2 2026-11-02 (Q22)
                 }
                 mmIntTaxInt = (int) (mmIntTaxInt * startPror);
+                forcedTaxRow   *= startPror;   // v2 2026-11-17 (Q42): as Tax (est) is scaled
+                forcedFedRow   *= startPror;
+                forcedStateRow *= startPror;
+                forcedIrmaaRow *= startPror;
             }
+            if (!(drawing && inp.computedTax)) magiNF[y] = magiHistory[y];   // v2 2026-11-17 (Q42)
             double totalSpend = drawing ? living + medical + tax : 0;
             // v2 2026-11-01 (Q21): before the top-up window, with "Money Mkt covers short
             // years before the last 5" on, Money Mkt (total) pays a negative Surplus/gap
@@ -12686,6 +12735,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             // v12: interest only counts when the computed tax engine taxed it.
             row.mmInterest    = (drawing && inp.computedTax) ? (int) mmInterest : 0;
             row.mmInterestTax = mmIntTaxInt;
+            row.forcedRmd     = (int) forcedRmdRow;     // v2 2026-11-17 (Q42)
+            row.forcedRmdTax  = (int) Math.round(forcedTaxRow);
+            row.forcedFed     = (int) Math.round(forcedFedRow);
+            row.forcedState   = (int) Math.round(forcedStateRow);
+            row.forcedIrmaa   = (int) Math.round(forcedIrmaaRow);
             row.saleGain      = (int) Math.round(saleAgiRow);   // v2 2026-11-02 (Q22)
             row.niit = niitRow; row.pref0 = pref0Row; row.pref15 = pref15Row; row.pref20 = pref20Row;
             row.ltcgSub = ltcgSubRow;
@@ -17740,6 +17794,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         int  saleGain;                 // v2 2026-11-02 (Q22): the sale's gain (or -loss taken) in MAGI
         double niit, pref0, pref15, pref20, ltcgSub;   // v2 2026-11-02 (Q22): Tax (est) tooltip
         boolean survivorYear;          // v6: true once the death event has fired
+        // v2 2026-11-17 (Q42): the RMD above the planned Traditional draw, and the tax it
+        // caused (total and federal / state / IRMAA). Display only (Roth conversion box).
+        int     forcedRmd, forcedRmdTax, forcedFed, forcedState, forcedIrmaa;
         String topBracket = "--";
         boolean convBoundByIrmaa;
         int  convCeiling;
@@ -18175,13 +18232,17 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                                     int binIters, int threads, String doneMsg) {
         final int gen = ++convEffectGen;
         convEffectFor    = res;
-        convEffectNoConv = null;
+        convEffectOther  = null;
         convEffectError  = null;
         refreshConvEffect();
-        if (!res.inp.convEnabled || !res.inp.computedTax) return false;
+        if (!res.inp.computedTax) return false;
+        // v2 2026-11-17 (Q42): conversions off -> the comparison runs WITH them, at the card's
+        // fill settings (or flat amount), so the box can say what converting would change.
         final SimInputs off = res.inp.copy();
-        off.convEnabled = false;
-        progressBar.setString(doneMsg + "  .  comparing without Roth conversions...");
+        off.convEnabled = !res.inp.convEnabled;
+        progressBar.setString(doneMsg + (res.inp.convEnabled
+                ? "  .  comparing without Roth conversions..."
+                : "  .  comparing with Roth conversions at your " + convHow(res.inp) + "..."));
         new SwingWorker<ProResults, Void>() {
             @Override protected ProResults doInBackground() {
                 return simulatePro(off, seed, solvePaths, fanPaths, binIters, /*withGk=*/false, threads);
@@ -18189,7 +18250,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             @Override protected void done() {
                 try {
                     ProResults r = get();
-                    if (gen == convEffectGen) convEffectNoConv = r;
+                    if (gen == convEffectGen) convEffectOther = r;
                 } catch (Exception ex) {
                     Throwable t = (ex.getCause() != null) ? ex.getCause() : ex;
                     if (gen == convEffectGen) convEffectError = String.valueOf(t);
@@ -18205,28 +18266,179 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     }
 
     /** v2 2026-11-14 (Q29): the Roth conversion tax effect box for lastResults, in the
-     *  current Real/Nominal basis. */
+     *  current Real/Nominal basis. v2 2026-11-17 (Q42): both states -- conversions on (Saves /
+     *  Costs, survivor years, Traditional at plan end) and off (the RMD line, then what
+     *  converting at the card's settings would change) -- and a per-run tooltip. */
     private void refreshConvEffect() {
         if (lblConvEffect == null) return;
         ProResults res = lastResults;
+        setConvEffectTip(CONV_EFFECT_TIP);
         if (res == null) { setConvEffect("--", " "); return; }
-        if (!res.inp.convEnabled || !res.inp.computedTax) { setConvEffect("Roth conversions are off", " "); return; }
-        if (convEffectFor != res || convEffectNoConv == null) {
-            if (convEffectFor == res && convEffectError != null)
-                setConvEffect("--", "The comparison run failed: " + convEffectError);
-            else
-                setConvEffect("computing...", "Running the plan again without Roth conversions.");
+        if (!res.inp.computedTax) { setConvEffect("Roth conversions are off", " "); return; }
+        boolean on = res.inp.convEnabled;
+        boolean ready = convEffectFor == res && convEffectOther != null;
+        String failed = (convEffectFor == res && convEffectError != null) ? convEffectError : null;
+        String basis = showRealDollars ? "Today's dollars." : "Nominal dollars.";
+        if (!on) {
+            ConvFacts k = convFacts(res);
+            String l2 = "If you converted at your " + convHow(res.inp) + ": ";
+            if (failed != null) l2 += "the comparison run failed (" + failed + ").";
+            else if (!ready)    l2 += "computing...";
+            else {
+                ConvFacts w = convFacts(convEffectOther);
+                long save = k.life - w.life;
+                l2 += (save >= 0 ? "saves " + CURRENCY.format(save) + " in lifetime tax; "
+                                 : "costs " + CURRENCY.format(-save) + " more in lifetime tax; ")
+                        + survClause(w, k, false)
+                        + "Traditional at plan end " + CURRENCY.format(w.tradEnd) + " vs "
+                        + CURRENCY.format(k.tradEnd) + ". " + basis;
+                setConvEffectTip(convEffectTipFor(res.inp, w, k, false));
+            }
+            setConvEffect("Roth conversions are off", rmdLine(k) + "<br>" + l2 + "<br>" + CONV_EFFECT_WEIGH);
             return;
         }
-        long[] with = lifetimeTax(res), without = lifetimeTax(convEffectNoConv);
-        long save = without[0] - with[0];
+        if (!ready) {
+            if (failed != null) setConvEffect("--", "The comparison run failed: " + failed);
+            else                setConvEffect("computing...", "Running the plan again without Roth conversions.");
+            return;
+        }
+        ConvFacts w = convFacts(res), o = convFacts(convEffectOther);
+        long save = o.life - w.life;
         String fig = (save >= 0 ? "Saves " : "Costs ") + CURRENCY.format(Math.abs(save));
-        String sub = "Lifetime tax with conversions <b>" + CURRENCY.format(with[0]) + "</b> (Conv Tax "
-                + CURRENCY.format(with[1]) + "); without, <b>" + CURRENCY.format(without[0]) + "</b>.<br>"
-                + "Traditional left at plan end: " + CURRENCY.format(finalTradShown(res)) + " with, "
-                + CURRENCY.format(finalTradShown(convEffectNoConv)) + " without. "
-                + (showRealDollars ? "Today's dollars." : "Nominal dollars.");
+        String sub = "Lifetime tax with conversions <b>" + CURRENCY.format(w.life) + "</b> (Conv Tax "
+                + CURRENCY.format(w.conv) + "); without, <b>" + CURRENCY.format(o.life) + "</b>.<br>"
+                + survClause(w, o, true)
+                + "Traditional at plan end " + CURRENCY.format(w.tradEnd) + " vs " + CURRENCY.format(o.tradEnd)
+                + ". " + basis + "<br>" + CONV_EFFECT_WEIGH;
+        setConvEffectTip(convEffectTipFor(res.inp, w, o, true));
         setConvEffect(fig, sub);
+    }
+
+    /** v2 2026-11-17 (Q42): one run's figures for the box, in the shown basis. Withdrawal years only. */
+    private static final class ConvFacts {
+        long life, conv, rmd, forced, forcedTax, fFed, fState, fIrmaa, afterSum, afterMax, surv, tradEnd;
+        int  forcedYears, forcedFrom, zeroYear, zeroAge, afterYears, survFrom;
+    }
+
+    private ConvFacts convFacts(ProResults r) {
+        ConvFacts k = new ConvFacts();
+        long[] lt = lifetimeTax(r);
+        k.life = lt[0];
+        k.conv = lt[1];
+        for (EnhRow row : r.medianRows) {
+            if (!row.drawing) continue;
+            double d = showRealDollars ? row.inflFactor : 1.0;
+            long t = Math.round(row.tax / d);
+            k.rmd       += Math.round(row.combRmd / d);
+            if (row.forcedRmd > 0) {
+                k.forced += Math.round(row.forcedRmd / d);
+                k.forcedYears++;
+                if (k.forcedFrom == 0) k.forcedFrom = row.calYear;
+            }
+            k.forcedTax += Math.round(row.forcedRmdTax / d);
+            k.fFed      += Math.round(row.forcedFed / d);
+            k.fState    += Math.round(row.forcedState / d);
+            k.fIrmaa    += Math.round(row.forcedIrmaa / d);
+            if (k.zeroYear == 0 && row.tradBal <= 0) { k.zeroYear = row.calYear; k.zeroAge = row.manAge; }
+            if (k.zeroYear != 0) { k.afterSum += t; k.afterMax = Math.max(k.afterMax, t); k.afterYears++; }
+            if (row.survivorYear) {
+                if (k.survFrom == 0) k.survFrom = row.calYear;
+                k.surv += t + ((row.convTax > 0) ? Math.round(row.convTax / d) : 0);
+            }
+        }
+        k.tradEnd = finalTradShown(r);
+        return k;
+    }
+
+    /** v2 2026-11-17 (Q42): "fill settings", or the flat amount when the card is in flat mode. */
+    private static String convHow(SimInputs in) {
+        return in.convFillMode ? "fill settings"
+                : "flat amount (" + CURRENCY.format(in.convFlat) + " a year)";
+    }
+
+    /** v2 2026-11-17 (Q42): the box's RMD line (conversions off). */
+    private static String rmdLine(ConvFacts k) {
+        if (k.rmd <= 0) return "No RMDs during the withdrawal years.";
+        if (k.forced <= 0)
+            return "RMDs over the plan " + CURRENCY.format(k.rmd) + "; none above the planned withdrawals, so no extra tax.";
+        return "RMDs over the plan " + CURRENCY.format(k.rmd) + ", of which " + CURRENCY.format(k.forced)
+                + " above the planned withdrawals (sent to the savings account) in "
+                + (k.forcedYears == 1 ? String.valueOf(k.forcedFrom) : k.forcedYears + " years from " + k.forcedFrom)
+                + "; extra tax they caused " + CURRENCY.format(k.forcedTax) + ".";
+    }
+
+    /** v2 2026-11-17 (Q42): "survivor years tax = $A vs $B; " (with conversions first), or "" when
+     *  neither run has a survivor year. */
+    private static String survClause(ConvFacts w, ConvFacts o, boolean capital) {
+        if (w.survFrom == 0 && o.survFrom == 0) return "";
+        return (capital ? "Survivor" : "survivor") + " years tax = " + CURRENCY.format(w.surv) + " vs "
+                + CURRENCY.format(o.surv) + "; ";
+    }
+
+    private static final String CONV_EFFECT_WEIGH = "Weigh the tax paid now against the survivor's and "
+            + "heirs' tax. Hover for details; see Assumptions 7d.";
+
+    private void setConvEffectTip(String tip) {
+        if (lblConvEffect != null)    lblConvEffect.setToolTipText(tip);
+        if (lblConvEffectSub != null) lblConvEffectSub.setToolTipText(tip);
+    }
+
+    /** v2 2026-11-17 (Q42): every figure of this run's comparison, with conversions (w) and
+     *  without (o); thisRunConverts says which of the two is the run on screen. */
+    private String convEffectTipFor(SimInputs in, ConvFacts w, ConvFacts o, boolean thisRunConverts) {
+        String basis = showRealDollars ? "today's dollars" : "nominal dollars";
+        StringBuilder t = new StringBuilder("<html><body style='width:520px'><b>Roth conversion tax effect -- this run</b> (median table, ")
+                .append(basis).append(")<br>")
+                .append(thisRunConverts ? "Your run converts; the comparison runs the same plan without conversions."
+                        : "Your run does not convert; the comparison runs the same plan with conversions at your "
+                        + convHow(in) + ".")
+                .append(" Same random markets (same seed), every other input unchanged.<br><br>")
+                .append("<table cellpadding='1' cellspacing='0'>")
+                .append("<tr><td></td><td align='right'><b>With conversions</b>&nbsp;&nbsp;</td><td align='right'><b>Without</b></td></tr>");
+        tipRow(t, "Lifetime tax (Tax (est) + Conv Tax)", CURRENCY.format(w.life), CURRENCY.format(o.life));
+        tipRow(t, "&nbsp;&nbsp;of which Conv Tax", CURRENCY.format(w.conv), CURRENCY.format(o.conv));
+        tipRow(t, "RMDs over the plan", CURRENCY.format(w.rmd), CURRENCY.format(o.rmd));
+        tipRow(t, "&nbsp;&nbsp;above the planned withdrawals", forcedCell(w), forcedCell(o));
+        tipRow(t, "&nbsp;&nbsp;extra tax they caused", CURRENCY.format(w.forcedTax), CURRENCY.format(o.forcedTax));
+        tipRow(t, "&nbsp;&nbsp;&nbsp;&nbsp;federal / state / IRMAA",
+                CURRENCY.format(w.fFed) + " / " + CURRENCY.format(w.fState) + " / " + CURRENCY.format(w.fIrmaa),
+                CURRENCY.format(o.fFed) + " / " + CURRENCY.format(o.fState) + " / " + CURRENCY.format(o.fIrmaa));
+        tipRow(t, "Traditional reaches $0 (start of year)", zeroCell(w), zeroCell(o));
+        tipRow(t, "Tax (est) from then on", afterCell(w), afterCell(o));
+        if (w.survFrom != 0 || o.survFrom != 0)
+            tipRow(t, "Survivor years tax (from " + (w.survFrom != 0 ? w.survFrom : o.survFrom) + ")",
+                    CURRENCY.format(w.surv), CURRENCY.format(o.surv));
+        tipRow(t, "Traditional at plan end", CURRENCY.format(w.tradEnd), CURRENCY.format(o.tradEnd));
+        t.append("</table><br>")
+                .append("<b>Saves</b> = lifetime tax without conversions minus with; <b>Costs</b> = the reverse. ")
+                .append("<b>Above the planned withdrawals:</b> the part of a year's RMD beyond what the plan withdraws ")
+                .append("anyway (it goes to the savings account); its tax is that year's Tax (est) less the same year ")
+                .append("with only the planned withdrawal taken, IRMAA counted two years later.<br><br>")
+                .append("<b>Not counted:</b> interest on the savings those RMDs add; years before withdrawals start; ")
+                .append("tax after the plan ends -- including what a survivor or heirs owe on Traditional left. ")
+                .append("Withdrawals differ slightly between the two runs, because conversion tax lowers the ")
+                .append("balance each year's withdrawal is sized from.<br><br>")
+                .append(CONV_EFFECT_MEASURES)
+                .append("<br><br>Run Simulation stays greyed while the comparison runs. The SS Optimizer does not run it.</body></html>");
+        return t.toString();
+    }
+
+    private static void tipRow(StringBuilder t, String label, String with, String without) {
+        t.append("<tr><td>").append(label).append("&nbsp;&nbsp;</td><td align='right'>").append(with)
+                .append("&nbsp;&nbsp;</td><td align='right'>").append(without).append("</td></tr>");
+    }
+    private static String forcedCell(ConvFacts k) {
+        if (k.forced <= 0) return "$0";
+        return CURRENCY.format(k.forced) + " (" + (k.forcedYears == 1 ? String.valueOf(k.forcedFrom)
+                : k.forcedYears + " yrs from " + k.forcedFrom) + ")";
+    }
+    private static String zeroCell(ConvFacts k) {
+        return k.zeroYear == 0 ? "never" : k.zeroYear + " (age " + k.zeroAge + ")";
+    }
+    private static String afterCell(ConvFacts k) {
+        if (k.zeroYear == 0 || k.afterYears == 0) return "--";
+        if (k.afterMax == 0) return "$0 every year";
+        return CURRENCY.format(Math.round((double) k.afterSum / k.afterYears)) + "/yr avg, max " + CURRENCY.format(k.afterMax);
     }
 
     /** v2 2026-11-14 (Q29): {Tax (est) + Conv Tax, Conv Tax} over the withdrawal years -- the
@@ -18255,6 +18467,19 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         return Math.round(r.medianFinalTrad / endInfl[endInfl.length / 2]);
     }
 
+    // v2 2026-11-17 (Q42): the box's tooltip until a run's comparison is in.
+    private static final String CONV_EFFECT_TIP = "<html><body style='width:520px'><b>Roth conversion tax effect</b><br>"
+            + "After each run the program runs the same plan again the other way -- without Roth conversions "
+            + "when the run converts, with them at the Roth Conversion &amp; IRMAA Surcharge card's settings when "
+            + "it does not -- with the same random markets (same seed) and every other input unchanged, and "
+            + "compares the two median tables: lifetime Tax (est) + Conv Tax (federal, state, IRMAA, NIIT), "
+            + "survivor-years tax, and the Traditional balance left at the plan's end. With conversions off the "
+            + "box also adds up the RMDs and the part above the planned withdrawals, with the tax it caused.<br><br>"
+            + "Hover again once the comparison is in for every figure. Follows the Real/Nominal toggle. Reads "
+            + "<i>Roth conversions are off</i> with no comparison when the computed tax engine is off. Run "
+            + "Simulation stays greyed while the comparison runs. The SS Optimizer does not run it. See "
+            + "Assumptions &amp; Methods 7d.</body></html>";
+
     // v2 2026-11-14 (Q31): what the figure measures, shown in the box under its lines.
     private static final String CONV_EFFECT_MEASURES = "<b>What it measures:</b> cumulative modeled taxes "
             + "over the plan, with and without Roth conversions: federal and state tax, IRMAA, NIIT and "
@@ -18263,7 +18488,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
 
     private void setConvEffect(String figure, String sub) {
         lblConvEffect.setText(figure);
-        sub = (sub == null || sub.isBlank()) ? CONV_EFFECT_MEASURES : sub + "<br>" + CONV_EFFECT_MEASURES;   // Q31
+        // v2 2026-11-17 (Q42): the measures line moved to the tooltip; it fills an otherwise empty box.
+        sub = (sub == null || sub.isBlank()) ? CONV_EFFECT_MEASURES : sub;   // Q31
         convEffectSubText  = sub;
         convEffectSubWrapW = -1;
         wrapConvEffectSub();
