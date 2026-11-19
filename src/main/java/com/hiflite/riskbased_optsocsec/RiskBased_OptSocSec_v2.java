@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Wednesday, November 18, 2026 at 5:15 PM MST (UTC-7)
+// Last modified: Wednesday, November 18, 2026 at 5:47 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Wednesday, November 18, 2026 at 5:15 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Wednesday, November 18, 2026 at 5:47 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -1988,13 +1988,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v7: Edit thresholds... dialog button.
         btnEditThresholds = new JButton("Edit thresholds\u2026");
         // v2 2026-11-18 (Q38): the dialog now holds the standard deduction, the 65+ add-on
-        // and a tax year (2026 or 2027) as well.
+        // and a tax year (2026 or 2027) as well. (Q46b: + the capital-gain bands, Q44.)
         btnEditThresholds.setToolTipText("<html><b>Edit base thresholds</b><br>"
                 + "Opens a small editor for the IRMAA cliffs, ordinary-bracket tops, standard<br>"
                 + "deduction and 65+ add-on (MFJ and Single) for one tax year, 2026 or 2027.<br>"
                 + "They apply unchanged in the plan's first year and are projected forward<br>"
-                + "from there. The tax year also picks the IRMAA surcharge amounts. Edit them<br>"
-                + "to stress-test a different schedule. Values persist with the scenario.<br>"
+                + "from there. The tax year also picks the IRMAA surcharge amounts and the<br>"
+                + "capital-gain bands of a brokerage sale (hover over the \"Tax year\" line at<br>"
+                + "the top of the dialog to see them). Edit them to stress-test a different<br>"
+                + "schedule. Values persist with the scenario.<br>"
                 + "Reset to 2026 and Reset to 2027 are in the dialog.<br><br>"
                 // v1 2026-10-21 (Q1)
                 + "Edited values are part of the SS Optimizer fingerprint (the 2026 values are<br>"
@@ -9588,7 +9590,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         else if (avail == 2026 && reset2026State(java.time.LocalDate.now()) != 0)
             tail = " The 2026 figures are no longer offered, so the " + ty + " figures are used unchanged in " + py + ".";
         else
-            tail = " To update: Edit thresholds&hellip; &rarr; Reset to " + avail + " &rarr; OK, then Save.";
+            // v2 2026-11-18 (Q46a, Bob): name the card the button is on.
+            tail = " To update: Roth Conversion &rarr; Edit thresholds&hellip; &rarr; Reset to " + avail
+                    + " &rarr; OK, then Save.";
         lblTaxYearLine.setForeground(new Color(176, 0, 0));
         lblTaxYearLine.setText("<html><div style='width:255px'><b>Tax figures: " + ty
                 + " &mdash; the plan starts in " + py + ".</b>" + tail + "</div></html>");
