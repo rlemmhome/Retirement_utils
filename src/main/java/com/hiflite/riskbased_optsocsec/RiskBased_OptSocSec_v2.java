@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Wednesday, November 18, 2026 at 5:47 PM MST (UTC-7)
+// Last modified: Thursday, November 19, 2026 at 1:30 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Wednesday, November 18, 2026 at 5:47 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Thursday, November 19, 2026 at 1:30 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -395,6 +395,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private JComboBox<String> cmbFillIrmaaTier; // IRMAA tier to stay under (fill mode)
     private JComboBox<String> cmbFillBracket;   // tax-bracket top to stay under (fill mode)
     private JButton    btnEditThresholds;       // opens the Edit thresholds... dialog
+    private JButton    btnEditTaxFigures;       // v2 2026-11-19 (Q47): the same dialog, Tax Engine card
     // v7: user-editable base (2026) thresholds. These start as copies of the
     // TaxEngine 2026 constants and are what fillConversion / the tax engine read
     // once the user has opened the dialog (see applyEditableThresholds). Held on
@@ -998,8 +999,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "The year whose brackets, standard deduction, 65+ add-on, IRMAA cliffs and<br>"
                 + "surcharges, and capital-gain bands the plan uses. They apply unchanged in<br>"
                 + "the plan's first year and are projected forward from there. Set under<br>"
-                + "<i>Edit thresholds&hellip;</i> on the Roth Conversion &amp; IRMAA Surcharge card<br>"
-                + "(Reset to 2026 / Reset to 2027) and saved with the scenario.<br><br>"
+                // v2 2026-11-19 (Q47): either button.
+                + "<i>Edit tax figures&hellip;</i> on the Tax Engine card (or <i>Edit thresholds&hellip;</i><br>"
+                + "on the Roth Conversion &amp; IRMAA Surcharge card) with Reset to 2026 / Reset<br>"
+                + "to 2027, and saved with the scenario.<br><br>"
                 + "A scenario saved before November 18, 2026 opens with the 2026 figures, so<br>"
                 + "its results are unchanged; red means the figures' year is not the plan's<br>"
                 + "first year.</html>");
@@ -1989,22 +1992,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         btnEditThresholds = new JButton("Edit thresholds\u2026");
         // v2 2026-11-18 (Q38): the dialog now holds the standard deduction, the 65+ add-on
         // and a tax year (2026 or 2027) as well. (Q46b: + the capital-gain bands, Q44.)
-        btnEditThresholds.setToolTipText("<html><b>Edit base thresholds</b><br>"
-                + "Opens a small editor for the IRMAA cliffs, ordinary-bracket tops, standard<br>"
-                + "deduction and 65+ add-on (MFJ and Single) for one tax year, 2026 or 2027.<br>"
-                + "They apply unchanged in the plan's first year and are projected forward<br>"
-                + "from there. The tax year also picks the IRMAA surcharge amounts and the<br>"
-                + "capital-gain bands of a brokerage sale (hover over the \"Tax year\" line at<br>"
-                + "the top of the dialog to see them). Edit them to stress-test a different<br>"
-                + "schedule. Values persist with the scenario.<br>"
-                + "Reset to 2026 and Reset to 2027 are in the dialog.<br><br>"
-                // v1 2026-10-21 (Q1)
-                + "Edited values are part of the SS Optimizer fingerprint (the 2026 values are<br>"
-                + "not), so SS Optimizer results saved under other thresholds are never reused.<br>"
-                // v1 2026-10-22 (Q3)
-                + "Changing them while an SS Optimizer batch runs stops the batch; combinations<br>"
-                + "it finished stay saved.</html>");
+        // v2 2026-11-19 (Q47): one tooltip text for both buttons (editTaxFiguresTip).
+        btnEditThresholds.setToolTipText(editTaxFiguresTip(false));
         btnEditThresholds.addActionListener(e -> showThresholdDialog());
+        // v2 2026-11-19 (Q47, Bob 1:29 PM): the same dialog from the Tax Engine card, just under
+        // "Use computed tax engine" -- the brackets and deductions live there.
+        btnEditTaxFigures = new JButton("Edit tax figures\u2026");
+        btnEditTaxFigures.setToolTipText(editTaxFiguresTip(true));
+        btnEditTaxFigures.addActionListener(e -> showThresholdDialog());
 
         cmbFilingStatus = new JComboBox<>(new String[]{
                 "Married filing jointly", "Single" });
@@ -2117,6 +2112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 "User Traditional share % (v6)", spHisRmdShare,
                 "Survivor spending reduction % (v6)", spSurvivorSpendCut,
                 "Computed tax (vs flat)",  chkComputedTax,
+                "Tax figures",             btnEditTaxFigures,   // v2 2026-11-19 (Q47)
                 "State",                   cmbState,
                 "Custom state rate (%)",   spCustomStateRate,
                 "Custom: tax SS",          chkCustomTaxSS,
@@ -9534,6 +9530,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // The Edit thresholds dialog is live whenever the computed engine is on
         // (it edits base tables the whole engine reads, not just fill mode).
         if (btnEditThresholds != null) btnEditThresholds.setEnabled(computed);
+        if (btnEditTaxFigures != null) btnEditTaxFigures.setEnabled(computed);   // Q47
 
         // v5: state selector lives only when the computed engine is ON; the
         // custom-state sub-fields additionally follow the state selection.
@@ -9581,7 +9578,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         if (ty == py) {
             lblTaxYearLine.setForeground(new Color(110, 110, 110));
             lblTaxYearLine.setText("<html><div style='width:255px'>Tax figures: " + ty
-                    + " (Edit thresholds&hellip; on the Roth Conversion &amp; IRMAA Surcharge card)</div></html>");
+                    + " (Edit tax figures&hellip; on the Tax Engine card)</div></html>");   // Q47
             return;
         }
         String tail;
@@ -9591,7 +9588,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             tail = " The 2026 figures are no longer offered, so the " + ty + " figures are used unchanged in " + py + ".";
         else
             // v2 2026-11-18 (Q46a, Bob): name the card the button is on.
-            tail = " To update: Roth Conversion &rarr; Edit thresholds&hellip; &rarr; Reset to " + avail
+            // v2 2026-11-19 (Q47, Bob): the Tax Engine card's Edit tax figures... button.
+            tail = " To update: Tax Engine &rarr; Edit tax figures&hellip; &rarr; Reset to " + avail
                     + " &rarr; OK, then Save.";
         lblTaxYearLine.setForeground(new Color(176, 0, 0));
         lblTaxYearLine.setText("<html><div style='width:255px'><b>Tax figures: " + ty
@@ -9659,6 +9657,32 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         if (today.isBefore(java.time.LocalDate.of(2027, 1, 1))) return 0;
         if (today.isBefore(java.time.LocalDate.of(2027, 2, 1))) return 1;
         return 2;
+    }
+
+    /** v2 2026-11-19 (Q47): tooltip of the two buttons that open the Tax figures and IRMAA
+     *  thresholds dialog -- "Edit tax figures..." (Tax Engine card) and "Edit thresholds..."
+     *  (Roth Conversion & IRMAA Surcharge card). Same text; each names the other button. */
+    private static String editTaxFiguresTip(boolean taxEngineCard) {
+        return "<html><b>" + (taxEngineCard ? "Edit tax figures" : "Edit thresholds") + "</b><br>"
+                + "Opens the <i>Tax figures and IRMAA thresholds</i> dialog: the IRMAA cliffs,<br>"
+                + "ordinary-bracket tops, standard deduction and 65+ add-on (MFJ and Single)<br>"
+                + "for one tax year, 2026 or 2027. They apply unchanged in the plan's first year<br>"
+                + "and are projected forward from there. The tax year also picks the IRMAA<br>"
+                + "surcharge amounts and the capital-gain bands of a brokerage sale (hover over<br>"
+                + "the \"Tax year\" line at the top of the dialog to see them). Edit them to<br>"
+                + "stress-test a different schedule. Values persist with the scenario.<br>"
+                + "Reset to 2026 and Reset to 2027 are in the dialog. Live only when computed<br>"
+                + "tax is on.<br><br>"
+                + "The same dialog opens from "
+                + (taxEngineCard ? "<i>Edit thresholds&hellip;</i> on the Roth Conversion &amp; IRMAA<br>Surcharge card."
+                                 : "<i>Edit tax figures&hellip;</i> on the Tax Engine card.")
+                + "<br><br>"
+                // v1 2026-10-21 (Q1)
+                + "Edited values are part of the SS Optimizer fingerprint (the 2026 values are<br>"
+                + "not), so SS Optimizer results saved under other thresholds are never reused.<br>"
+                // v1 2026-10-22 (Q3)
+                + "Changing them while an SS Optimizer batch runs stops the batch; combinations<br>"
+                + "it finished stay saved.</html>";
     }
 
     /** v2 2026-11-18 (Q38): the line at the top of the Edit base thresholds dialog. */
@@ -9853,7 +9877,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
 
         while (true) {
             pane.setValue(JOptionPane.UNINITIALIZED_VALUE);
-            JDialog dlg = pane.createDialog(this, "Edit base thresholds");
+            // v2 2026-11-19 (Q47): title fits both buttons that open it.
+            JDialog dlg = pane.createDialog(this, "Tax figures and IRMAA thresholds");
             dlg.getRootPane().setDefaultButton(bOk);
             dlg.setVisible(true);   // modal
             dlg.dispose();
