@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Wednesday, November 18, 2026 at 9:34 AM MST (UTC-7)
+// Last modified: Wednesday, November 18, 2026 at 5:15 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Wednesday, November 18, 2026 at 9:34 AM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Wednesday, November 18, 2026 at 5:15 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -409,6 +409,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // saved with the scenario. The year also picks the IRMAA surcharge table. At startup
     // all of them follow the plan's start year (applyTaxYearSet, once the start-year
     // spinner exists); a loaded scenario's saved values win.
+    // v2 2026-11-18 (Q45): the tax-year line on the Scenario card (refreshTaxYearLine).
+    private JLabel lblTaxYearLine;
     private double editStdDedMFJ    = TaxEngine.STD_DED_MFJ_2026;
     private double editStdDedSingle = TaxEngine.STD_DED_SINGLE_2026;
     private double editAdd65MFJ     = TaxEngine.ADD_STD_DED_65_EACH_2026;
@@ -987,6 +989,21 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         scenBtnRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,32));
         scenSaveCard.add(Box.createVerticalStrut(4));
         scenSaveCard.add(scenBtnRow);
+        // v2 2026-11-18 (Q45, 2a): which year's tax figures the plan uses, under Save/Load.
+        lblTaxYearLine = new JLabel(" ");
+        lblTaxYearLine.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        lblTaxYearLine.setAlignmentX(LEFT_ALIGNMENT);
+        lblTaxYearLine.setBorder(BorderFactory.createEmptyBorder(4, 2, 0, 0));
+        lblTaxYearLine.setToolTipText("<html><b>Tax figures</b><br>"
+                + "The year whose brackets, standard deduction, 65+ add-on, IRMAA cliffs and<br>"
+                + "surcharges, and capital-gain bands the plan uses. They apply unchanged in<br>"
+                + "the plan's first year and are projected forward from there. Set under<br>"
+                + "<i>Edit thresholds&hellip;</i> on the Roth Conversion &amp; IRMAA Surcharge card<br>"
+                + "(Reset to 2026 / Reset to 2027) and saved with the scenario.<br><br>"
+                + "A scenario saved before November 18, 2026 opens with the 2026 figures, so<br>"
+                + "its results are unchanged; red means the figures' year is not the plan's<br>"
+                + "first year.</html>");
+        scenSaveCard.add(lblTaxYearLine);
         scenSaveCard.add(Box.createVerticalStrut(4));
         scenSaveCard.add(exportRow);   // v1 2026-10-18 (EX)
         scenSaveCard.add(baseRow);
@@ -1966,7 +1983,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // v2 2026-11-18 (Q38): the three Fill tooltips quote the tax year's first cliff and the
         // plan's first year; built here and rebuilt when either changes.
         refreshFillTips();
-        spSimStartYear.addChangeListener(e -> refreshFillTips());
+        spSimStartYear.addChangeListener(e -> { refreshFillTips(); refreshTaxYearLine(); });   // Q45
 
         // v7: Edit thresholds... dialog button.
         btnEditThresholds = new JButton("Edit thresholds\u2026");
@@ -2588,7 +2605,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             qaPanel.add(qaVal[i], gv);
         }
         qaVal[4].setText("");          // v2 2026-11-15 (Q35): the top-off line has no value
-        lblDetail.setVisible(false);   // shown only for a stress scenario
+        lblDetail.setVisible(false);   // shown only for a stress scenario or (Q45) other tax figures
 
         JPanel aSouth = new JPanel(new BorderLayout(2, 2)); aSouth.setOpaque(false);
         aSouth.add(lblDetail,   BorderLayout.NORTH);
@@ -4164,7 +4181,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "<li>Federal tax: the gain is taxed at 0%, 15% or 20%, stacked on top of ordinary income (the IRS "
                 + "Qualified Dividends and Capital Gain Tax Worksheet). In 2026 a married couple pays 0% while "
                 + "taxable income stays under $98,900, 15% up to $613,700 and 20% above (single: $49,450 and "
-                + "$545,500); the bands grow with the brackets.</li>"
+                + "$545,500); the bands grow with the brackets. "
+                // v2 2026-11-18 (Q44)
+                + "In 2027 (IRS Rev. Proc. 2026-35) the tops are $102,100 and $633,600 (single: $51,050 and "
+                + "$563,200). Since November 18, 2026 the tax year under <i>Edit thresholds&hellip;</i> "
+                + "(<i>Roth Conversion &amp; IRMAA Surcharge</i> card) picks the 2026 or 2027 tops, as it "
+                + "does the IRMAA surcharges; they apply unchanged in the plan's first year, the sale year.</li>"
                 + "<li>Net Investment Income Tax: 3.8% on the smaller of the gain (plus that year's cash reserve "
                 + "interest) and the part of MAGI above $250,000 joint / $200,000 single. The thresholds are not "
                 + "indexed. Charged in the sale year only.</li>"
@@ -9542,6 +9564,34 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         TaxEngine.setActiveBase(editStdDedMFJ, editStdDedSingle,
                 editAdd65MFJ, editAdd65Single, editTaxYear);
         refreshFillTips();   // Q38: they quote the tax year's first cliff
+        refreshTaxYearLine();   // Q45
+    }
+
+    /** v2 2026-11-18 (Q45, 2a; previewed to Bob 3:09 PM): the Scenario card's tax-year line.
+     *  Grey when the tax figures' year is the plan's first year; bold dark red otherwise,
+     *  with how to update when a set exists for the start year and its Reset button is
+     *  live. Called from syncActiveThresholds and the start-year spinner; a no-op until
+     *  both controls exist. Shows the inputs as they stand (the top-box marker shows
+     *  what the last run used). */
+    private void refreshTaxYearLine() {
+        if (lblTaxYearLine == null || spSimStartYear == null) return;
+        int ty = editTaxYear, py = iv(spSimStartYear), avail = TaxEngine.baseTaxYearFor(py);
+        if (ty == py) {
+            lblTaxYearLine.setForeground(new Color(110, 110, 110));
+            lblTaxYearLine.setText("<html><div style='width:255px'>Tax figures: " + ty
+                    + " (Edit thresholds&hellip; on the Roth Conversion &amp; IRMAA Surcharge card)</div></html>");
+            return;
+        }
+        String tail;
+        if (avail == ty)          // no set for the start year yet (e.g. a 2028 start)
+            tail = " No " + py + " figures yet, so the " + ty + " figures are used unchanged in " + py + ".";
+        else if (avail == 2026 && reset2026State(java.time.LocalDate.now()) != 0)
+            tail = " The 2026 figures are no longer offered, so the " + ty + " figures are used unchanged in " + py + ".";
+        else
+            tail = " To update: Edit thresholds&hellip; &rarr; Reset to " + avail + " &rarr; OK, then Save.";
+        lblTaxYearLine.setForeground(new Color(176, 0, 0));
+        lblTaxYearLine.setText("<html><div style='width:255px'><b>Tax figures: " + ty
+                + " &mdash; the plan starts in " + py + ".</b>" + tail + "</div></html>");
     }
 
     /** v2 2026-11-18 (Q38, Bob 9:32 AM): the Fill buffer, Fill IRMAA tier and Fill bracket
@@ -9613,17 +9663,26 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "Reset button pressed last; editing a value keeps it.<br>"
                 + "<i>These values apply unchanged in " + planYear + ", the plan's first year, and "
                 + "are projected forward from there. The tax year also picks the IRMAA surcharge "
-                + "amounts (hover here to see them). Cliffs must increase down each column; "
-                + "bracket tops likewise.</i></div></html>";
+                + "amounts and the capital-gain bands of a brokerage sale (hover here to see them). "   // Q44
+                + "Cliffs must increase down each column; bracket tops likewise.</i></div></html>";
     }
 
-    /** v2 2026-11-18 (Q38): that year's per-person IRMAA surcharges, for the note's tooltip. */
+    /** v2 2026-11-18 (Q38): that year's per-person IRMAA surcharges, for the note's tooltip.
+     *  v2 2026-11-18 (Q44): and that year's long-term capital gain band tops. */
     private static String surchargeTipHtml(int taxYear) {
         double[] s = TaxEngine.irmaaSurchargeFor(taxYear);
         StringBuilder sb = new StringBuilder("<html><b>IRMAA surcharge per person, tax year ")
                 .append(taxYear).append("</b><br>(Part B + Part D, per year)<br>");
         for (int t = 1; t < s.length; t++)
             sb.append("Tier ").append(t).append(": $").append(String.format("%,.2f", s[t])).append("<br>");
+        TaxEngine.FilingStatus mfj = TaxEngine.FilingStatus.MFJ, sgl = TaxEngine.FilingStatus.SINGLE;
+        sb.append("<br><b>Long-term capital gain bands, tax year ").append(taxYear).append("</b><br>")
+          .append("(taxable income; the one-year brokerage sale)<br>")
+          .append("0% up to: MFJ ").append(String.format("$%,.0f", TaxEngine.ltcg0TopFor(taxYear, mfj)))
+          .append(" / Single ").append(String.format("$%,.0f", TaxEngine.ltcg0TopFor(taxYear, sgl))).append("<br>")
+          .append("15% up to: MFJ ").append(String.format("$%,.0f", TaxEngine.ltcg15TopFor(taxYear, mfj)))
+          .append(" / Single ").append(String.format("$%,.0f", TaxEngine.ltcg15TopFor(taxYear, sgl))).append("<br>")
+          .append("20% above.<br>");
         return sb.append("<br>Set by the tax year; not editable here. Projected<br>"
                 + "forward from the plan's first year.</html>").toString();
     }
@@ -11883,6 +11942,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         ProResults res   = new ProResults();
         res.inp          = inp;
         res.medianRows   = new ArrayList<>();
+        res.taxYear      = TaxEngine.ACTIVE_TAX_YEAR;   // v2 2026-11-18 (Q45): figures this run uses
 
         int startY = inp.withdrawStartYear - inp.baseYear;
 
@@ -13140,8 +13200,22 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 ? "[Stress: " + HistoricalScenarios.SCENARIO_NAMES[inp.scenarioIndex].split(" \\(")[0]
                 + (inp.seqOffset > 0 ? ", +" + inp.seqOffset + " yr" : "") + "]"
                 : "";
-        lblDetail.setText(scenLabel.isEmpty() ? " " : scenLabel);
-        lblDetail.setVisible(!scenLabel.isEmpty());
+        // v2 2026-11-18 (Q45, 2b): + the tax figures' year, bold dark red, when this run's
+        // figures are not the plan's first year's; shares the line with a stress marker.
+        String taxLabel = (res.taxYear != 0 && res.taxYear != inp.baseYear)
+                ? "[Tax figures " + res.taxYear + "; plan starts " + inp.baseYear + "]" : "";
+        if (taxLabel.isEmpty()) {
+            lblDetail.setText(scenLabel.isEmpty() ? " " : scenLabel);
+            lblDetail.setToolTipText(null);
+        } else {
+            lblDetail.setText("<html>" + scenLabel + (scenLabel.isEmpty() ? "" : "&nbsp;&nbsp;")
+                    + "<b><font color='#B00000'>" + taxLabel + "</font></b></html>");
+            lblDetail.setToolTipText("<html><b>Tax figures " + res.taxYear + "</b><br>"
+                    + "This run used the " + res.taxYear + " tax figures (Edit thresholds&hellip; on the<br>"
+                    + "Roth Conversion &amp; IRMAA Surcharge card) unchanged in " + inp.baseYear + ", the<br>"
+                    + "plan's first year. See the line under Save/Load on the Scenario card.</html>");
+        }
+        lblDetail.setVisible(!scenLabel.isEmpty() || !taxLabel.isEmpty());
 
         // v1 2026-10-19 (FB1): the median final balance stands at the END of the
         // horizon, so it is deflated by the median END-of-horizon price level. It
@@ -16338,6 +16412,26 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         static final double LTCG_0_TOP_SINGLE_2026  =  49_450.0;
         static final double LTCG_15_TOP_MFJ_2026    = 613_700.0;
         static final double LTCG_15_TOP_SINGLE_2026 = 545_500.0;
+        // v2 2026-11-18 (Q44): the 2027 tops, Rev. Proc. 2026-35 sec. 3.03 (as reported by three
+        // secondary sources; the IRS news release IR-2026-133 does not list them). Picked by
+        // the tax year under Edit thresholds, like the IRMAA surcharges; not editable (Bob,
+        // Nov 18, 2026: option 1A -- a new tax year needs a program update anyway).
+        static final double LTCG_0_TOP_MFJ_2027     = 102_100.0;
+        static final double LTCG_0_TOP_SINGLE_2027  =  51_050.0;
+        static final double LTCG_15_TOP_MFJ_2027    = 633_600.0;
+        static final double LTCG_15_TOP_SINGLE_2027 = 563_200.0;
+        /** v2 2026-11-18 (Q44): top of the 0% long-term gain band for that tax year. */
+        static double ltcg0TopFor(int year, FilingStatus fs) {
+            boolean s = fs == FilingStatus.SINGLE;
+            return (baseTaxYearFor(year) == 2027) ? (s ? LTCG_0_TOP_SINGLE_2027 : LTCG_0_TOP_MFJ_2027)
+                                                  : (s ? LTCG_0_TOP_SINGLE_2026 : LTCG_0_TOP_MFJ_2026);
+        }
+        /** v2 2026-11-18 (Q44): top of the 15% long-term gain band for that tax year. */
+        static double ltcg15TopFor(int year, FilingStatus fs) {
+            boolean s = fs == FilingStatus.SINGLE;
+            return (baseTaxYearFor(year) == 2027) ? (s ? LTCG_15_TOP_SINGLE_2027 : LTCG_15_TOP_MFJ_2027)
+                                                  : (s ? LTCG_15_TOP_SINGLE_2026 : LTCG_15_TOP_MFJ_2026);
+        }
         // Net Investment Income Tax (IRC 1411): 3.8% over a MAGI threshold that is NOT
         // indexed (IRS NIIT Q&A). Charged in the sale year only (Bob, Nov 2, 2026).
         static final double NIIT_RATE          = 0.038;
@@ -16374,9 +16468,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 return fedTax(taxable, fedFactor, fs);
             }
             double pr = Math.min(pref, taxable), o = taxable - pr;
-            boolean single = fs == FilingStatus.SINGLE;
-            double t0  = infl(single ? LTCG_0_TOP_SINGLE_2026  : LTCG_0_TOP_MFJ_2026,  fedFactor);
-            double t15 = infl(single ? LTCG_15_TOP_SINGLE_2026 : LTCG_15_TOP_MFJ_2026, fedFactor);
+            // v2 2026-11-18 (Q44): the band tops of the tax year under Edit thresholds.
+            double t0  = infl(ltcg0TopFor(ACTIVE_TAX_YEAR, fs),  fedFactor);
+            double t15 = infl(ltcg15TopFor(ACTIVE_TAX_YEAR, fs), fedFactor);
             double z = Math.min(pr, Math.max(0, t0 - o));                    // in the 0% band
             double f = Math.min(pr - z, Math.max(0, t15 - Math.max(o, t0)));  // in the 15% band
             double t = pr - z - f;                                            // in the 20% band
@@ -17190,6 +17284,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             if (!baseIs2026())
                 s += ";base=" + ACTIVE_TAX_YEAR + "," + ACTIVE_STD_DED_MFJ + "," + ACTIVE_STD_DED_SINGLE
                         + "," + ACTIVE_ADD65_EACH + "," + ACTIVE_ADD65_SINGLE;
+            // v2 2026-11-18 (Q44): the 2027 capital-gain bands, so SS Optimizer rows saved with a
+            // 2027 set before Q44 (2026 bands) re-score once. The 2026 set adds nothing.
+            if (ACTIVE_TAX_YEAR == 2027) s += ";ltcg=2027";
             return s;
         }
 
@@ -18104,6 +18201,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // PoS worker only; null when absent (the tooltip then falls back).
         String stateName;
         java.util.NavigableMap<Integer, TaxEngine.StateTaxYear> stateYears;
+        // v2 2026-11-18 (Q45): the tax figures' year this run used (Edit thresholds). Display only.
+        int taxYear;
     }
 
     // ========================================================================
