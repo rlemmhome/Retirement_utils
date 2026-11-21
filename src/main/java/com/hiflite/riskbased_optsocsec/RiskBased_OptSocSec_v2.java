@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Thursday, November 19, 2026 at 1:30 PM MST (UTC-7)
+// Last modified: Friday, November 20, 2026 at 8:10 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Thursday, November 19, 2026 at 1:30 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Friday, November 20, 2026 at 8:10 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -527,6 +527,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private JTabbedPane       mainTabs;  // direct ref for tab switching
     private JLabel            lblAnswer, lblSub, lblDetail;
     private String            subLineBase, subLineMult;   // v2 2026-11-15 (Q35): the sub-line, before fitting
+    // v2 2026-11-20 (Q48): the "NN% PoS target" part, bold dark red when the target is below 50%.
+    private String            subLinePosPart;
+    private boolean           subLineLowPoS;
+    private static final String LOW_POS_TIP = "<html><b>Below 50%:</b> more than half of the simulated futures run<br>"
+            + "the portfolio out, so the median path ends with the portfolio at $0 and<br>"
+            + "leans on the cash reserve. This shows a possibility, not a plan.</html>";
     // v2 2026-11-15 (Q34): the top box's question/value rows -- the question parts that carry the
     // re-run/baseline tooltip, the two dark-blue Money Mkt phrases, the values, and row 1's question.
     // v2 2026-11-15 (Q35): three dark-blue phrases (qaMmParts), the top-off line's ON/OFF (qaTopOff)
@@ -1046,7 +1052,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         ((JSpinner.DefaultEditor) spHorizon.getEditor()).getTextField().setEditable(false);
         ((JSpinner.DefaultEditor) spHorizon.getEditor()).getTextField().setBackground(new Color(225, 225, 220));
         ((JSpinner.DefaultEditor) spHorizon.getEditor()).getTextField().setForeground(new Color(80, 80, 80));
-        spTargetPoS          = spinI(80, 60, 99, 1, "#");
+        // v2 2026-11-20 (Q48, Bob): down to 40% (was 60%), to show possibilities.
+        spTargetPoS          = spinI(80, 40, 99, 1, "#");
+        spTargetPoS.setToolTipText("<html><b>Target probability of success (%)</b> -- 40 to 99<br>"
+                + "The share of simulated futures in which the withdrawal must last the<br>"
+                + "whole plan. Below 50%, more than half of the futures run the portfolio<br>"
+                + "out, so the median path ends at $0 and leans on the cash reserve. Use a<br>"
+                + "target that low to see possibilities, not as a plan.<br><br>"
+                + "The SS Optimizer never scores below 60%.</html>");
         spWithdrawStartYear  = spinI(2027, 2025, 2040, 1, "#");
         spWithdrawStartMonth = spinI(1, 1, 12, 1, "#");
         // v1 2026-10-16 (V9): the defined meaning of a year before the simulation start.
@@ -1556,6 +1569,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 "Haircut start year (0=never)",    spSSHaircutYear,
                 null,                              lblSSBenefitNote,
         }));
+        // v2 2026-11-20 (Q53): card() caps a row at 30 px; the note can grow a red line.
+        lblSSBenefitNote.setMaximumSize(null);
         inner.add(Box.createVerticalStrut(4));
 
         // == Guaranteed income streams (v11) ===============================
@@ -1632,8 +1647,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "The 2.3% default is anchored to the Social Security 2026 Trustees Report<br>"
                 + "(intermediate assumptions, ultimate long-range CPI-W of 2.4%/yr) and the<br>"
                 + "CBO's projection that the Federal Reserve reaches its 2% target over the<br>"
-                + "2027-2035 window. Housing and health are modeled as separate, faster-<br>"
-                + "growing series and are excluded from this &quot;core&quot; figure.<br><br>"
+                // v2 2026-11-20 (Q54)
+                + "2027-2035 window. Health costs have their own rate (Medical Cost<br>"
+                + "Increase); housing is not modeled separately and grows at this rate.<br><br>"
                 + "See Assumptions &amp; Methods section 2 for the full basis. The 1961-2024<br>"
                 + "historical average is 3.79% and is available as a stress-case setting.<br>"
                 + "Update at least annually.<br><br>"
@@ -1676,14 +1692,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         spMedical.setToolTipText("<html><b>Medical premiums &amp; out-of-pocket ($/yr)</b><br>"
                 + "All health-care costs: <b>medical premiums and out-of-pocket</b> (deductible<br>"
                 + "and copay, dentist / vision / hearing).<br><br>"
-                + "<b>Include your base Medicare premiums here</b> -- Part B (~$203/mo/person in<br>"
-                + "2026) plus a Part D drug plan (~$40-55/mo/person) plus any Medigap/supplement.<br>"
-                + "For a couple both on Medicare that base runs roughly $6,000/yr before supplement<br>"
-                + "and out-of-pocket. Medicare premiums are a MEDICAL cost, not a tax -- only the<br>"
-                + "income-related IRMAA <i>surcharge</i> (above $218k MAGI) appears near the Tax<br>"
-                + "column; your base premiums belong here.<br><br>"
+                // v2 2026-11-20 (Q50, Bob): no amounts or years; the premiums of the plan's start year.
+                + "<b>Include your base Medicare premiums here</b> -- the Part B and Part D premiums<br>"
+                + "you will pay in the year the plan starts (the simulation start year), plus any<br>"
+                + "Medigap/supplement. Medicare premiums are a MEDICAL cost, not a tax -- only the<br>"
+                + "income-related IRMAA <i>surcharge</i> appears near the Tax column; your base<br>"
+                + "premiums belong here.<br><br>"
                 + "Pre-Medicare (bridge years) this line is your ACA/marketplace premium instead;<br>"
-                + "the figure changes once you and your spouse are both on Medicare (~2027-2028).<br>"
+                + "the figure changes once you and your spouse are both on Medicare.<br>"
                 + "The tool inflates this line at the medical-inflation rate below.</html>");
         spMedInflation = spinD(4.5,     0.0, 15.0,   0.1,  "0.0#");
         spMedInflation.setToolTipText("<html><b>Medical Cost Increase (%/yr)</b><br>"
@@ -2006,6 +2022,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         cmbFilingStatus.setSelectedIndex(0); // default: MFJ (preserves prior behavior)
         cmbFilingStatus.addActionListener(e -> refreshTaxEngineEnabled());
         cmbFilingStatus.addActionListener(e -> updateHorizonFromPlanAge());   // v1 2026-10-16 (HZ2)
+        cmbFilingStatus.addActionListener(e -> updateSSBenefitNote());       // v2 2026-11-20 (Q53): spouse line
         cmbFilingStatus.setToolTipText("<html><b>Filing status (federal + SS taxation + IRMAA basis)</b><br>"
                 + "Switches the entire tax basis between MFJ and Single. Affects the<br>"
                 + "standard deduction, the ordinary brackets, the age-65 add-on, the<br>"
@@ -4092,6 +4109,38 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     }
 
 
+    /** v2 2026-11-20 (Q48): Assumptions section 1 -- the 40-99% PoS target range. */
+    private static String assumptions1PosRange() {
+        return ""
+            // v2 2026-11-20 (Q48)
+            + "<p><b>The PoS target can be set from 40% to 99%</b> (since November 20, 2026; 60% before). "
+            + "Below 50%, more than half of the futures run the portfolio out, so the median path ends with "
+            + "the portfolio at $0 and leans on the cash reserve; the target in the top box's sub-line turns "
+            + "red. Such a target shows a possibility, not a plan. The SS Optimizer never scores below 60% "
+            + "(section 11).</p>";
+    }
+
+    /** v2 2026-11-20 (Q48, Q52): Assumptions section 11 paragraphs -- the optimizer's 60% PoS floor and
+     *  the portfolio-only PoS test. A method so html2 stays under the 65,535-byte constant limit. */
+    private static String assumptions11PosNotes() {
+        return ""
+            // v2 2026-11-20 (Q48)
+            + "<p><b>The optimizer never scores below a 60% PoS target</b> (since November 20, 2026). The "
+            + "PoS target on the Portfolio &amp; Simulation card can go as low as 40% to show possibilities. "
+            + "With a lower target, the SS Optimizer sizes withdrawals and tests every claim pair at 60%, and "
+            + "the status line says so &mdash; <i>scored at a 60% PoS gate (your 45% target on the Portfolio "
+            + "&amp; Simulation card is below the optimizer's 60% minimum)</i>. A claim date is a one-time, "
+            + "lifelong decision; it should not rest on a plan that fails in more than 40% of futures. The "
+            + "fingerprint is the same as a batch run at 60%, so a saved batch is reused.</p>"
+            // v2 2026-11-20 (Q52, Bob: document it)
+            + "<p><b>The PoS test is portfolio-only.</b> A claim pair passes the PoS test when its Actual PoS "
+            + "&mdash; the figure in the Pro PoS tab's Actual PoS box &mdash; meets the target. A path that the "
+            + "cash reserve carried to the end after the portfolio ran out still counts as a miss; the "
+            + "&quot;combined resources&quot; survival rate in the Pro tab's top box is not part of this test. "
+            + "Because the engine sizes withdrawals to the target, Actual PoS lands close to it, so a pair "
+            + "can miss the test by a fraction of a point.</p>";
+    }
+
     // =========================================================================
     //  ASSUMPTIONS & METHODS TAB  (v3)
     //  Read-only reference documenting every coded assumption so a user (or
@@ -4524,6 +4573,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "cash reserve, to cover any year whose income falls short. Lifetimes with poor markets "
                 + "can therefore reach $0 near the end by design. Actual PoS is a separate result from the "
                 + "target PoS and is not set by it.</p>"
+                + assumptions1PosRange()   // v2 2026-11-20 (Q48): a call, keeping html under the constant limit
                 + "<p><b>Q) Why isn't Actual PoS 100%, or exactly the target?</b><br>"
                 + "A) The yearly re-check protects most of the plan, but the top-up spends down the portfolio "
                 + "in the final years. The line under Actual PoS shows how many of those lifetimes the cash "
@@ -4691,16 +4741,16 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "remain available as user-selectable stress-case settings; they are documented at the end of "
                 + "this section.</p>"
 
-                + "<p><b>General inflation CAGR.</b> General price inflation is anchored to the Social Security "
-                + "2026 Trustees Report, whose intermediate assumptions set an ultimate long-range CPI-W growth "
-                + "rate of 2.4% per year, consistent with the CBO's projection that the Federal Reserve reaches "
-                + "its 2% target over the 2027-2035 window. This assumption schedule holds general inflation "
-                + "near 2.2% in the first five years and drifts to 2.4% for the balance of the horizon. Housing "
-                + "and health are modeled as separate, faster-growing series and are therefore excluded from "
-                + "this &quot;core&quot; figure; shelter CPI starts elevated at roughly 3.4% (per BLS data "
-                + "through May 2026) and tapers toward ~2.5% long-run, while health is escalated on its own "
-                + "spending basis (see the health assumption). All nominal returns elsewhere in the model are "
-                + "deflated against this general-inflation series. The current default value is <b>2.3%</b>.</p>"
+                // v2 2026-11-20 (Q54): the model uses one mean rate; housing is not a separate series.
+                + "<p><b>General inflation.</b> The model uses one mean inflation rate for every year of the "
+                + "plan &mdash; the <i>General spending Mean inflation</i> input &mdash; and draws each year's "
+                + "actual rate around it (floored at 0%). The 2.3% default is anchored to the Social Security "
+                + "2026 Trustees Report, whose intermediate assumptions set a long-range CPI-W rate of 2.4% per "
+                + "year, and to the CBO's projection that the Federal Reserve reaches its 2% target over "
+                + "2027&ndash;2035. Health costs have their own rate (<i>Medical Cost Increase</i>, Annual "
+                + "Spending card); housing is not modeled separately and grows at this rate. Note: All nominal "
+                + "returns in the model are deflated against this general-inflation series. The current "
+                + "default value is <b>2.3%</b>.</p>"
 
                 + "<p><b>Market return CAGR.</b> Equity returns use nominal U.S. large-cap total-return "
                 + "assumptions drawn from the 2026 forward-looking capital market assumptions of J.P. Morgan "
@@ -5316,9 +5366,13 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "deliberately reserved for something more valuable. In a down market the household draws "
                 + "living expenses from savings <i>before</i> drawing down the IRA accounts, so "
                 + "investments are not sold at depressed prices. The simulation does not model that tactic, so "
-                + "its results are conservative on this point. It draws the reserve in one case only: the "
-                + "final-years top-up (section 1), in the last 5 plan years, once the portfolio is empty. That "
-                + "draw is already-taxed cash, so it adds no tax, and the lower balance earns (and is taxed on) "
+                // v2 2026-11-20 (Q51): two cases since Q21's box (Nov 1).
+                + "its results are conservative on this point. It draws the reserve in two cases: the "
+                + "final-years top-up (section 1), in the last 5 plan years once the portfolio is empty; and, "
+                + "only when <i>These savings can cover short years before the last 5</i> is checked (Account "
+                + "Balances card, off by default), earlier years whose Surplus/gap is negative. The SS Optimizer "
+                + "always scores with that box off (section 11). Either draw is already-taxed cash, so it adds "
+                + "no tax, and the lower balance earns (and is taxed on) "
                 + "less interest from then on. The other cash pool, the holding account (Taxable "
                 + "Brokerage Account card), is not earmarked: it can pay conversion tax when its box is checked "
                 + "(section 7b), and short years draw it only after this reserve.</p>"   // v2 2026-11-14 (Q26)
@@ -6055,6 +6109,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "cover short years before the last 5&quot; off (checked on the Account Balances card, ignored)</i> &mdash; "
                 + "and the box itself is left as you set it for the Pro PoS tab. Off, the fingerprint is the "
                 + "same as a batch run with the box unchecked, so a saved batch is reused.</p>"
+                + assumptions11PosNotes()   // v2 2026-11-20 (Q48, Q52): a call, so html2 stays under the constant limit
                 + "<p>This also makes a finished batch permanently re-readable. Click any row to apply its "
                 + "claim dates and run the Pro tab; tick <i>Re-randomize each run</i> first and you get that "
                 + "same claim pair under a different future, which is the cheap way to ask whether your top "
@@ -7537,6 +7592,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         int manBY, manBM, womanBY, womanBM, manPIA, womanPIA;
         boolean single;
         int goGoFloor, slowGoFloor, greenBuf, termGrace, posTarget, gridStepMo;
+        int posTargetEntered;   // v2 2026-11-20 (Q48): the card's value, when below the 60% floor
         int fullPaths, fullFan, binIters;
         int rankBy;   // v12 2026-10-11 (OF1): ordering only -- not hashed
         long seed;
@@ -7600,6 +7656,9 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 who, claimM, claimY, birthM, birthY + 70);
     }
 
+    /** v2 2026-11-20 (Q48): the lowest PoS target the SS Optimizer scores at. */
+    private static final int OPT_MIN_POS_TARGET = 60;
+
     private BatchCfg readBatchCfg() {
         BatchCfg c = new BatchCfg();
         c.base        = readInputs();
@@ -7629,7 +7688,14 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         c.slowGoFloor = iv(spOptSlowGoFloor);
         c.greenBuf    = iv(spOptGreenBuffer);
         c.termGrace   = iv(spOptTermGrace);
-        c.posTarget   = iv(spTargetPoS);
+        // v2 2026-11-20 (Q48, Bob): THE OPTIMIZER NEVER SCORES BELOW A 60% PoS TARGET. The card
+        // allows 40% to show possibilities; a claim date is a lifelong decision and should not
+        // rest on a plan that fails in more than 40% of futures. The withdrawal solver and the
+        // PoS gate both use it, so a lower target gives the same fingerprint as 60%. The card
+        // keeps its value for the Pro PoS tab (c.base is a fresh copy).
+        c.posTargetEntered = iv(spTargetPoS);
+        c.posTarget   = Math.max(c.posTargetEntered, OPT_MIN_POS_TARGET);
+        c.base.targetPoS = c.posTarget / 100.0;
         c.gridStepMo  = OPT_GRID_STEP[(cmbOptGrid != null)
                 ? Math.max(0, Math.min(cmbOptGrid.getSelectedIndex(), OPT_GRID_STEP.length - 1))
                 : 0];
@@ -7750,6 +7816,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + (c.mmEarlyIgnored   // v2 2026-11-17 (Q39)
                 ? "   |   scored with \"These savings can cover short years before the last 5\" off"
                 + " (checked on the Account Balances card, ignored)"
+                : "")
+                + (c.posTargetEntered < c.posTarget   // v2 2026-11-20 (Q48)
+                ? "   |   scored at a " + c.posTarget + "% PoS gate (your " + c.posTargetEntered
+                + "% target on the Portfolio & Simulation card is below the optimizer's "
+                + c.posTarget + "% minimum)"
                 : ""));
         java.util.Map<String, SsOptResult> onDisk = loadBatchResults(fp);
         // v1 2026-10-15 (FR): the floors are no longer in the fingerprint, so a saved
@@ -13222,6 +13293,10 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 rate, inp.targetPoS * 100, inp.horizon);
         subLineMult = String.format("Go-go multiplier %.2f  .  Slow-go multiplier %.2f",
                 inp.goGoMultiplier, inp.slowGoMultiplier);
+        // v2 2026-11-20 (Q48): below 50% the target turns bold dark red, with a tooltip.
+        subLinePosPart = String.format("%.0f%% PoS target", inp.targetPoS * 100);
+        subLineLowPoS  = inp.targetPoS < 0.50 - 1e-9;
+        lblSub.setToolTipText(subLineLowPoS ? LOW_POS_TIP : null);
         fitSubLine();
         // v2 2026-11-15 (Q34): only the stress-scenario marker is left of this line; the ages,
         // start date, return and inflation gave way to the question rows below it.
@@ -13494,10 +13569,24 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // claim age in PIA as-of-year dollars; the engine then grows them by COLA
         // to each year (so a later claim pays more than shown here).
         int asOfYr = (spPiaAsOfYear != null) ? iv(spPiaAsOfYear) : 0;
+        // v2 2026-11-20 (Q53, Bob): a claim date after the age-70 month gets a red line here.
+        boolean single = cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1;
+        String late = lateAfter70Line("User", manBY, manBM, manSY, manSM)
+                + (single ? "" : lateAfter70Line("Spouse", womBY, womBM, womSY, womSM));
         lblSSBenefitNote.setText(String.format(
-                "<html><i>Monthly at claim, in %d dollars (before COLA growth): User $%,.0f (%s)"
-                        + " . Spouse $%,.0f (%s)</i></html>",
-                asOfYr, manM, manAdj, womM, womAdj));
+                // Q53: one fixed-width block, so the label's preferred height counts every wrapped line.
+                "<html><div style='width:255px'><i>Monthly at claim, in %d dollars (before COLA growth): User $%,.0f (%s)"
+                        + " . Spouse $%,.0f (%s)</i>%s</div></html>",
+                asOfYr, manM, manAdj, womM, womAdj, late));
+    }
+
+    /** v2 2026-11-20 (Q53): the red line for a claim date after the age-70 month, "" otherwise.
+     *  No cap: SSA allows a late claim (back payments for up to 6 months). */
+    private static String lateAfter70Line(String who, int birthY, int birthM, int claimY, int claimM) {
+        if (claimY * 12 + claimM <= (birthY + 70) * 12 + birthM) return "";
+        return String.format("<div><b><font color='#B00000'>%s's SS start %02d/%d is "
+                + "after age 70 (%02d/%d): no credit accrues after 70, so the later date only delays the "
+                + "payments.</font></b></div>", who, claimM, claimY, birthM, birthY + 70);
     }
 
     // v6: median inflation factor at a given calendar year, clamped to range.
@@ -15810,8 +15899,15 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             w = box.getWidth() - in.left - in.right;
         }
         String one = subLineBase + "  .  " + subLineMult;
-        String t = (w <= 0 || lblSub.getFontMetrics(lblSub.getFont()).stringWidth(one) + 4 <= w) ? one
-                : "<html><div>" + subLineBase.replace("  ", "&nbsp;&nbsp;") + "&nbsp;&nbsp;. </div><div>&nbsp;&nbsp;"
+        // v2 2026-11-20 (Q48): a red target needs HTML and a little more room (bold).
+        boolean fits = w <= 0 || lblSub.getFontMetrics(lblSub.getFont()).stringWidth(one)
+                + (subLineLowPoS ? 14 : 4) <= w;
+        String base = subLineBase.replace("  ", "&nbsp;&nbsp;");
+        if (subLineLowPoS && subLinePosPart != null)
+            base = base.replace(subLinePosPart, "<b><font color='#B00000'>" + subLinePosPart + "</font></b>");
+        String t = (fits && !subLineLowPoS) ? one
+                : fits ? "<html>" + base + "&nbsp;&nbsp;.&nbsp;&nbsp;" + subLineMult.replace("  ", "&nbsp;&nbsp;") + "</html>"
+                : "<html><div>" + base + "&nbsp;&nbsp;. </div><div>&nbsp;&nbsp;"
                 + subLineMult.replace("  ", "&nbsp;&nbsp;") + "</div></html>";
         if (!t.equals(lblSub.getText())) lblSub.setText(t);
     }
