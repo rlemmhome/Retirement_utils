@@ -1,6 +1,6 @@
 // ==============================================================
 // RiskBased_OptSocSec_v2.java
-// Last modified: Friday, November 20, 2026 at 8:10 PM MST (UTC-7)
+// Last modified: Saturday, November 21, 2026 at 8:25 PM MST (UTC-7)
 // ==============================================================
 package com.hiflite.riskbased_optsocsec;
 
@@ -112,7 +112,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     // the version and the build datestamp, replacing the old feature-list suffix.
     // Keep BUILD_STAMP in sync with the header "Last modified" line on each edit.
     private static final String APP_VERSION = "v2";
-    private static final String BUILD_STAMP = "Friday, November 20, 2026 at 8:10 PM MST (UTC-7)";
+    private static final String BUILD_STAMP = "Saturday, November 21, 2026 at 8:25 PM MST (UTC-7)";
     private static String windowTitle() {
         return "Income withdrawal and Probability of Success -- "
                 + APP_VERSION + " (" + BUILD_STAMP + ")";
@@ -501,6 +501,12 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
 
     // == SS Optimizer fields ================================================
     private JCheckBox  chkOptimize;                  // true = scan, false = manual
+    // v2 2026-11-21 (Q55): lock boxes for the two SS start dates (Social Security card), the user's own
+    // choices (a date that has already started is locked regardless), and the red note that replaces
+    // chkOptimize on the SS Optimizer tab when every date in the plan is held.
+    private JCheckBox  chkLockUserSS, chkLockSpouseSS;
+    private boolean    lockUserChosen, lockSpouseChosen;
+    private JLabel     lblOptAllLocked;
     private JLabel     lblOptStatus;
     /**
      * v11 2026-09-27: the plan fingerprint, in a control you can SELECT and copy.
@@ -1548,7 +1554,24 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         lblSSBenefitNote.setFont(new Font("SansSerif", Font.ITALIC, 12));
         lblSSBenefitNote.setForeground(new Color(80, 100, 60));
 
-        ChangeListener ssListener = e -> { updateSSBenefitNote(); refreshOptRunButton(); };   // Q27: + the button
+        // v2 2026-11-21 (Q55): lock boxes. Checked = the SS Optimizer uses the date as entered and scans
+        // only the other person. A date before this month has already started: its box shows checked
+        // and greyed (refreshSsLocks), whatever was chosen.
+        chkLockUserSS   = new JCheckBox("Lock User SS start date", false);
+        chkLockSpouseSS = new JCheckBox("Lock Spouse SS start date", false);
+        for (JCheckBox cb : new JCheckBox[]{ chkLockUserSS, chkLockSpouseSS }) {
+            cb.setOpaque(false);
+            cb.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        }
+        chkLockUserSS.addActionListener(e -> {
+            lockUserChosen = chkLockUserSS.isSelected();
+            refreshSsLocks(); refreshOptRunButton(); checkOptStale();
+        });
+        chkLockSpouseSS.addActionListener(e -> {
+            lockSpouseChosen = chkLockSpouseSS.isSelected();
+            refreshSsLocks(); refreshOptRunButton(); checkOptStale();
+        });
+        ChangeListener ssListener = e -> { refreshSsLocks(); updateSSBenefitNote(); refreshOptRunButton(); };   // Q27: + the button; Q55: + the locks
         for (JSpinner sp : new JSpinner[]{
                 spManPIA, spManBirthYear, spManBirthMonth, spManSSStartYear, spManSSStartMonth,
                 spWomanPIA, spWomanBirthYear, spWomanBirthMonth, spWomanSSStartYear, spWomanSSStartMonth,
@@ -1559,9 +1582,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 "User PIA (monthly at FRA, $)",     spManPIA,
                 "User SS start year",               spManSSStartYear,
                 "User SS start month",              spManSSStartMonth,
+                null,                               chkLockUserSS,      // v2 2026-11-21 (Q55)
                 "Spouse PIA (monthly at FRA, $)",   spWomanPIA,
                 "Spouse SS start year",             spWomanSSStartYear,
                 "Spouse SS start month",            spWomanSSStartMonth,
+                null,                               chkLockSpouseSS,    // v2 2026-11-21 (Q55)
                 "PIA as-of year (both)",            spPiaAsOfYear,
                 "SS COLA (%/yr)",                  spSSCola,
                 "SS bridge mode (v9)",             cmbBridgeMode,
@@ -4109,6 +4134,19 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     }
 
 
+    /** v2 2026-11-21 (Q55): Assumptions section 11 -- locked SS start dates. */
+    private static String assumptions11Locks() {
+        return "<p><b>Locked start dates</b> (since November 21, 2026). Each SS start date on the Social "
+            + "Security card has a lock box. A locked date is used as entered and the SS Optimizer scans only "
+            + "the other person's date; unchecking the box returns the date to the scan. A start date before "
+            + "the current month has already begun and locks itself (its box shows checked and greyed). With "
+            + "both dates locked &mdash; or the one date of a single filer &mdash; the tab's <i>Optimize SS start "
+            + "dates</i> box gives way to a red note, and <i>Run SS Optimizer</i> scores only that one "
+            + "combination against the floors. A held date joins the fingerprint, so a batch with a date locked "
+            + "never reuses rows from a batch that scanned it. The Pro PoS and GK tabs always use the dates as "
+            + "entered.</p>";
+    }
+
     /** v2 2026-11-20 (Q48): Assumptions section 1 -- the 40-99% PoS target range. */
     private static String assumptions1PosRange() {
         return ""
@@ -6110,6 +6148,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
                 + "and the box itself is left as you set it for the Pro PoS tab. Off, the fingerprint is the "
                 + "same as a batch run with the box unchecked, so a saved batch is reused.</p>"
                 + assumptions11PosNotes()   // v2 2026-11-20 (Q48, Q52): a call, so html2 stays under the constant limit
+                + assumptions11Locks()      // v2 2026-11-21 (Q55)
                 + "<p>This also makes a finished batch permanently re-readable. Click any row to apply its "
                 + "claim dates and run the Pro tab; tick <i>Re-randomize each run</i> first and you get that "
                 + "same claim pair under a different future, which is the cheap way to ask whether your top "
@@ -6617,13 +6656,22 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         chkOptimize.setOpaque(false);
         chkOptimize.setToolTipText("<html><b>Checked:</b> Run the SS optimizer to find the best claiming ages.<br>"
                 + "<b>Unchecked:</b> Use the SS start dates entered manually in the input panel.<br><br>"
-                + "When unchecked, click Run Simulation on the Pro PoS / GK tabs as usual.</html>");
+                + "When unchecked, click Run Simulation on the Pro PoS / GK tabs as usual.<br><br>"
+                // v2 2026-11-21 (Q55)
+                + "A start date locked on the Social Security card (or one that has already<br>"
+                + "started) is used as entered; only the other person's date is scanned.</html>");
 
         // v12 2026-10-03: the italic mode note that stood here described the removed
         // reduced-fidelity scan + top-few re-verify. Every combination is now one
         // full-fidelity Pro run (see runSsOptimizerCore), so the note is gone.
 
         modeRow.add(chkOptimize);
+        // v2 2026-11-21 (Q55): replaces chkOptimize when every SS start date in the plan is held.
+        lblOptAllLocked = new JLabel(" ");
+        lblOptAllLocked.setFont(new Font("SansSerif", Font.BOLD, 14));
+        lblOptAllLocked.setForeground(new Color(176, 0, 0));
+        lblOptAllLocked.setVisible(false);
+        modeRow.add(lblOptAllLocked);
         modeRow.add(lblOptObjective);
 
         // == Optimizer controls =============================================
@@ -6661,11 +6709,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
             boolean opt = chkOptimize.isSelected();
             refreshOptRunButton();   // v2 2026-11-14 (Q27): was setEnabled(opt); greyed when all claimed
             // Gray out IL SS spinners when in optimizer mode
-            for (JSpinner sp : new JSpinner[]{
-                    spManSSStartYear, spManSSStartMonth,
-                    spWomanSSStartYear, spWomanSSStartMonth}) {
-                sp.setEnabled(!opt);
-            }
+            // v2 2026-11-21 (Q55): except a held (locked) date, which the optimizer still uses.
+            refreshSsDateSpinners();
             lblOptStatus.setText(opt
                     ? "Ready to scan. Click Run SS Optimizer."
                     : "Manual mode: enter SS start dates in the input panel.");
@@ -7532,6 +7577,16 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         if (!cfg.single)
             optRunNotes += claimedNote("Spouse", cfg.base.womanSSStartYear, cfg.base.womanSSStartMonth,
                     today.getYear(), today.getMonthValue());
+        // v2 2026-11-21 (Q55): a date the user locked.
+        boolean uHeldN = cfg.lockUser || ssClaimed(cfg.base.manSSStartYear, cfg.base.manSSStartMonth,
+                today.getYear(), today.getMonthValue());
+        boolean sHeldN = cfg.single || cfg.lockSpouse || ssClaimed(cfg.base.womanSSStartYear,
+                cfg.base.womanSSStartMonth, today.getYear(), today.getMonthValue());
+        optRunNotes += lockedNote("User", cfg.lockUser, cfg.base.manSSStartYear, cfg.base.manSSStartMonth,
+                today.getYear(), today.getMonthValue(), sHeldN, "spouse");
+        if (!cfg.single)
+            optRunNotes += lockedNote("Spouse", cfg.lockSpouse, cfg.base.womanSSStartYear,
+                    cfg.base.womanSSStartMonth, today.getYear(), today.getMonthValue(), uHeldN, "user");
         SwingWorker<Void, String> worker = new SwingWorker<>() {
             @Override protected Void doInBackground() {
                 runSsOptimizerCore(cfg, this::publish);
@@ -7601,6 +7656,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         String stressIgnored;
         // v2 2026-11-17 (Q39): true when the Money Mkt early-cover box was checked and overridden.
         boolean mmEarlyIgnored;
+        // v2 2026-11-21 (Q55): a date locked on the Social Security card (or already started).
+        boolean lockUser, lockSpouse;
         int scenGen;   // v1 2026-10-20 (F1): optScenarioGen when Run was pressed
     }
 
@@ -7629,18 +7686,90 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
     private void refreshOptRunButton() {
         if (btnRunOpt == null || chkOptimize == null || spManSSStartYear == null) return;
         boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
+        // v2 2026-11-21 (Q55, Bob 1A): every date held (locked, or already started) -> the mode
+        // checkbox gives way to a red note and Run SS Optimizer scores that one combination.
+        // (Q27 greyed the button when everyone had claimed.)
+        boolean userHeld = ssHeld(true), spouseHeld = single || ssHeld(false);
+        boolean allHeld = userHeld && spouseHeld;
+        boolean anyAuto = ssStarted(true) || (!single && ssStarted(false));
+        chkOptimize.setVisible(!allHeld);
+        // The red note replaces the checkbox and its Objective note (one row, nothing to rank).
+        if (lblOptObjective != null) lblOptObjective.setVisible(!allHeld);
+        if (lblOptAllLocked != null) {
+            lblOptAllLocked.setVisible(allHeld);
+            lblOptAllLocked.setText(!allHeld ? " " : "<html>" + (single
+                    ? "Optimization is not allowed: the Social Security start date is locked (Social Security "
+                    + "card). The SS Optimizer scores only that one date."
+                    : "Optimization is not allowed: both Social Security start dates are locked"
+                    + (anyAuto ? "" : " by you") + " (Social Security card). The SS Optimizer scores only "
+                    + "that one combination.") + "</html>");
+        }
+        btnRunOpt.setEnabled((allHeld || chkOptimize.isSelected()) && !optBatchRunning);
+        btnRunOpt.setToolTipText(!allHeld ? null : single
+                ? "<html>The Social Security start date is locked on the Social Security card,<br>"
+                + "so the SS Optimizer scores only that one date against the floors.</html>"
+                : "<html>Both Social Security start dates are locked on the Social Security card,<br>"
+                + "so the SS Optimizer scores only that one combination against the floors.</html>");
+    }
+
+    /** v2 2026-11-21 (Q55): that person's SS start date is before this month (already started). */
+    private boolean ssStarted(boolean user) {
+        JSpinner y = user ? spManSSStartYear : spWomanSSStartYear, m = user ? spManSSStartMonth : spWomanSSStartMonth;
+        if (y == null || m == null) return false;
         java.time.LocalDate t = java.time.LocalDate.now();
-        boolean allClaimed = ssClaimed(iv(spManSSStartYear), iv(spManSSStartMonth), t.getYear(), t.getMonthValue())
-                && (single || ssClaimed(iv(spWomanSSStartYear), iv(spWomanSSStartMonth),
-                        t.getYear(), t.getMonthValue()));
-        btnRunOpt.setEnabled(chkOptimize.isSelected() && !optBatchRunning && !allClaimed);
-        btnRunOpt.setToolTipText(!allClaimed ? null : single
-                ? "<html>The Social Security start date is before this month, so the benefit has<br>"
-                + "already started and there is nothing left to optimize. (Detected automatically<br>"
-                + "from the SS start date on the Social Security card.)</html>"
-                : "<html>Both Social Security start dates are before this month, so both benefits have<br>"
-                + "already started and there is nothing left to optimize. (Detected automatically<br>"
-                + "from the SS start dates on the Social Security card.)</html>");
+        return ssClaimed(iv(y), iv(m), t.getYear(), t.getMonthValue());
+    }
+
+    /** v2 2026-11-21 (Q55): the SS Optimizer holds that person's date -- locked by the user, or
+     *  already started. */
+    private boolean ssHeld(boolean user) {
+        return (user ? lockUserChosen : lockSpouseChosen) || ssStarted(user);
+    }
+
+    /** v2 2026-11-21 (Q55): show the lock boxes -- an already-started date checked and greyed,
+     *  otherwise the user's choice; the spouse's box is greyed for a single filer -- and set the
+     *  SS date spinners to match. */
+    private void refreshSsLocks() {
+        if (chkLockUserSS == null || chkLockSpouseSS == null) return;
+        boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
+        String auto = "<html><b>Locked automatically</b><br>"
+                + "This SS start date is before this month, so the benefit has already<br>"
+                + "started. The SS Optimizer uses it as entered.</html>";
+        String manual = "<html><b>Lock this SS start date</b><br>"
+                + "Checked: the SS Optimizer uses this date as entered and scans only the<br>"
+                + "other person's date. Use it when benefits have started or the date is<br>"
+                + "decided. Unchecked: the date is scanned again.<br><br>"
+                + "With both dates locked the SS Optimizer scores only that one combination.<br>"
+                + "A start date before this month locks itself. The Pro PoS and GK tabs<br>"
+                + "always use the dates as entered.</html>";
+        boolean uStarted = ssStarted(true), sStarted = ssStarted(false);
+        chkLockUserSS.setSelected(uStarted || lockUserChosen);
+        chkLockUserSS.setEnabled(!uStarted);
+        chkLockUserSS.setToolTipText(uStarted ? auto : manual);
+        chkLockSpouseSS.setSelected(sStarted || lockSpouseChosen);
+        chkLockSpouseSS.setEnabled(!single && !sStarted);
+        chkLockSpouseSS.setToolTipText(sStarted ? auto : manual);
+        refreshSsDateSpinners();
+    }
+
+    /** v2 2026-11-21 (Q55): SS date spinners -- greyed in optimizer mode unless held (locked);
+     *  the spouse's always greyed for a single filer. */
+    private void refreshSsDateSpinners() {
+        if (spManSSStartYear == null || spWomanSSStartYear == null) return;
+        boolean single = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
+        boolean opt = chkOptimize != null && chkOptimize.isSelected() && chkOptimize.isVisible();
+        boolean u = !opt || ssHeld(true), w = !single && (!opt || ssHeld(false));
+        spManSSStartYear.setEnabled(u);   spManSSStartMonth.setEnabled(u);
+        spWomanSSStartYear.setEnabled(w); spWomanSSStartMonth.setEnabled(w);
+    }
+
+    /** v2 2026-11-21 (Q55): status-line note for a date the user locked that has not started yet
+     *  (an already-started date has claimedNote). "" otherwise. */
+    private static String lockedNote(String who, boolean locked, int claimY, int claimM,
+                                     int todayY, int todayM, boolean otherHeld, String other) {
+        if (!locked || ssClaimed(claimY, claimM, todayY, todayM)) return "";
+        return String.format("   NOTE: %s start %02d/%d locked (Social Security card); %s", who, claimM, claimY,
+                otherHeld ? "that date is held." : "only the " + other + "'s date is scanned.");
     }
 
     /** v1 2026-10-20 (F2): status-line note for a person already past 70 -- scored at
@@ -7684,6 +7813,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         c.womanBY     = c.base.womanBirthYear; c.womanBM = c.base.womanBirthMonth;
         c.manPIA      = c.base.manPIA;         c.womanPIA = c.base.womanPIA;
         c.single      = (cmbFilingStatus != null && cmbFilingStatus.getSelectedIndex() == 1);
+        c.lockUser    = lockUserChosen;                    // v2 2026-11-21 (Q55)
+        c.lockSpouse  = !c.single && lockSpouseChosen;
         c.goGoFloor   = iv(spOptGoGoFloor);
         c.slowGoFloor = iv(spOptSlowGoFloor);
         c.greenBuf    = iv(spOptGreenBuffer);
@@ -7766,7 +7897,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         int[] manFrom = firstScanMonth(c.manBY, c.manBM, sy, sm);
         // v2 2026-11-14 (Q27): someone who has already claimed (SS start before this month) is
         // held at that date, as someone past 70 is below.
-        java.util.List<int[]> bobMonths = ssClaimed(c.base.manSSStartYear, c.base.manSSStartMonth, sy, sm)
+        // v2 2026-11-21 (Q55): or locked on the Social Security card.
+        java.util.List<int[]> bobMonths = (c.lockUser || ssClaimed(c.base.manSSStartYear, c.base.manSSStartMonth, sy, sm))
                 ? new java.util.ArrayList<>()
                 : buildSsRangeStep(c.manBY, c.manBM, manFrom[0], manFrom[1], c.gridStepMo);
         // v1 2026-10-20 (F2): someone already past 70 has no claim date left to choose
@@ -7777,7 +7909,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         if (c.single) { joMonths = new java.util.ArrayList<>(); joMonths.add(new int[]{0,0}); }
         else {
             int[] womFrom = firstScanMonth(c.womanBY, c.womanBM, sy, sm);
-            joMonths = ssClaimed(c.base.womanSSStartYear, c.base.womanSSStartMonth, sy, sm)   // Q27
+            joMonths = (c.lockSpouse || ssClaimed(c.base.womanSSStartYear, c.base.womanSSStartMonth, sy, sm))   // Q27, Q55
                     ? new java.util.ArrayList<>()
                     : buildSsRangeStep(c.womanBY, c.womanBM, womFrom[0], womFrom[1], c.gridStepMo);
             if (joMonths.isEmpty()) joMonths.add(new int[]{c.base.womanSSStartYear, c.base.womanSSStartMonth});
@@ -8247,10 +8379,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         // otherwise left out -- they are what the batch varies -- so this is appended only when
         // someone has claimed, and other plans keep their fingerprints.
         java.time.LocalDate fpToday = java.time.LocalDate.now();
-        if (ssClaimed(in.manSSStartYear, in.manSSStartMonth, fpToday.getYear(), fpToday.getMonthValue()))
+        // v2 2026-11-21 (Q55): a locked date is held the same way.
+        if (c.lockUser || ssClaimed(in.manSSStartYear, in.manSSStartMonth, fpToday.getYear(), fpToday.getMonthValue()))
             sb.append(";heldU=").append(in.manSSStartYear).append('-').append(in.manSSStartMonth);
-        if (!c.single && ssClaimed(in.womanSSStartYear, in.womanSSStartMonth,
-                fpToday.getYear(), fpToday.getMonthValue()))
+        if (!c.single && (c.lockSpouse || ssClaimed(in.womanSSStartYear, in.womanSSStartMonth,
+                fpToday.getYear(), fpToday.getMonthValue())))
             sb.append(";heldS=").append(in.womanSSStartYear).append('-').append(in.womanSSStartMonth);
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
@@ -10409,6 +10542,7 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         for (JSpinner s : spouseFields) {
             if (s != null) s.setEnabled(on);
         }
+        refreshSsLocks();   // v2 2026-11-21 (Q55): the spouse's lock box, and the SS date spinners
         // Account-total label reflects filing status (spouse excluded in Single).
         updateAccountTotal();
         refreshOptRunButton();   // v2 2026-11-14 (Q27): Single counts only the user's claim
@@ -10920,6 +11054,8 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         props.setProperty("woman.trad401K",         String.valueOf(iv(spWomanTrad401K)));
         props.setProperty("mm.prior",               String.valueOf(iv(spMmPrior)));
         props.setProperty("mm.coversEarly",         String.valueOf(chkMmCoversEarly.isSelected()));  // v2 2026-11-01 (Q21)
+        props.setProperty("ss.lockUser",            String.valueOf(lockUserChosen));     // v2 2026-11-21 (Q55)
+        props.setProperty("ss.lockSpouse",          String.valueOf(lockSpouseChosen));
         props.setProperty("sale.proceeds",          String.valueOf(iv(spSaleProceeds)));   // v2 2026-11-02 (Q22)
         props.setProperty("sale.basis",             String.valueOf(iv(spSaleBasis)));
         props.setProperty("mmb.prior",              String.valueOf(iv(spMmbPrior)));                   // v2 2026-11-14 (Q26)
@@ -11146,6 +11282,11 @@ public class RiskBased_OptSocSec_v2 extends JFrame {
         setSpinnerI(spMmPrior,            props, "mm.prior",                warnings);
         // v2 2026-11-01 (Q21): absent in older files -> off, which is how they always behaved.
         chkMmCoversEarly.setSelected(Boolean.parseBoolean(props.getProperty("mm.coversEarly", "false")));
+        // v2 2026-11-21 (Q55): absent (older files) -> unlocked, as those builds scanned the date.
+        lockUserChosen   = Boolean.parseBoolean(props.getProperty("ss.lockUser", "false"));
+        lockSpouseChosen = Boolean.parseBoolean(props.getProperty("ss.lockSpouse", "false"));
+        refreshSsLocks();
+        refreshOptRunButton();
         // v2 2026-11-02 (Q22): absent in older files -> 0 (no sale), with no warning.
         if (props.getProperty("sale.proceeds") != null) setSpinnerI(spSaleProceeds, props, "sale.proceeds", warnings);
         else spSaleProceeds.setValue(0);
